@@ -44,7 +44,7 @@ export class ReportClientErrorDto {
 
   @ApiPropertyOptional({
     description: 'URL en la que estaba el usuario cuando ocurrió el error',
-    example: 'https://crmhighsolutions.com/orders/33d01330-7efb-455e-95f1',
+    example: 'https://crm.example.com/orders/33d01330-7efb-455e-95f1',
   })
   @IsOptional()
   @IsString()

@@ -618,7 +618,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose, collapsed = fal
           <Box
             component="img"
             src={logo}
-            alt="High Solutions Logo"
+            alt="Zoom Publicidad Logo"
             sx={{
               width: '100%',
               maxWidth: 130,

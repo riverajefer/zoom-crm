@@ -2638,12 +2638,15 @@ async function main() {
       update: {},
       create: {
         id: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
-        name: 'High Solutions S.A.S',
-        description: 'Empresa especializada en soluciones de software y tecnología empresarial.',
-        email: 'contacto@highsolutions.com',
+        // TODO(zoom): datos reales de Zoom Publicidad. Solo se siembran con
+        // SEED_DEMO=true; en producción la empresa se llena desde la pantalla
+        // de Empresa.
+        name: 'Zoom Publicidad S.A.S',
+        description: 'Empresa de publicidad y comunicación visual.',
+        email: 'contacto@example.com',
         phone: '6012345678',
         mobilePhone: '3001234567',
-        website: 'https://www.highsolutions.com',
+        website: 'https://www.example.com',
         address: 'Bogotá, Colombia',
         nit: '900000000-0',
         legalRepresentative: 'Representante Legal',

@@ -63,7 +63,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSubmit, isLoading = fals
           <Box
             component="img"
             src={logo}
-            alt="High Solutions"
+            alt="Zoom Publicidad"
             sx={{
               width: { xs: '180px', sm: '200px' },
               height: 'auto',
@@ -78,7 +78,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSubmit, isLoading = fals
           Iniciar Sesión
         </Typography>
         <Typography color="textSecondary" sx={{ mb: 4, textAlign: 'center' }}>
-          Bienvenido a High Solutions CRM
+          Bienvenido a Zoom Publicidad CRM
         </Typography>
 
         {error && (

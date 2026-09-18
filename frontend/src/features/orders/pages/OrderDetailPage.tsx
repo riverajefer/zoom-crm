@@ -600,7 +600,7 @@ export const OrderDetailPage: React.FC = () => {
       const message = [
         `Hola ${order.client.name},`,
         ``,
-        `Adjunto encontrará la Orden de Pedido *${order.orderNumber}* de High Solutions.`,
+        `Adjunto encontrará la Orden de Pedido *${order.orderNumber}* de Zoom Publicidad.`,
         ``,
         `*Resumen:*`,
         `• Total: ${totalFormatted}`,

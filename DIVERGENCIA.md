@@ -64,9 +64,35 @@ Formato: fecha · qué cambió · por qué. Los cherry-pick traídos de High se 
 | Fecha | Cambio | Detalle |
 |---|---|---|
 | 2026-09-18 | Fork creado | clon con historia desde `fork-zoom-2026-09`; `origin` → zoom-crm, `upstream` → High (push deshabilitado) |
+| 2026-09-18 | Etiqueta de Loki `app` | `backoffice-backend` → **`zoom-backend`** en `backend/src/common/logger/logger.config.ts` (2 sitios). Sin esto, los logs de Zoom y los de High caen en el mismo stream de Grafana y no hay forma de separarlos |
+| 2026-09-18 | Rebranding — **solo el nombre** | «High Solutions» → **«Zoom Publicidad CRM»** (nombre comercial confirmado por el cliente) en 14 archivos: título del navegador, Topbar, LoginForm, Sidebar, fallback de `VITE_APP_NAME`, página de mantenimiento, `pdfConstants.ts`, los **4 generadores de PDF**, los 2 mensajes de WhatsApp de OP y cotización, el ejemplo de `create-company.dto`, el ejemplo de `report-client-error.dto` y la empresa demo del seed |
+
+### Pendientes de branding (marcados en el código con `TODO(zoom)`)
+
+| Qué | Dónde | Estado |
+|---|---|---|
+| Dirección, ciudad, teléfonos, email | `frontend/src/utils/pdfConstants.ts` | valores `PENDIENTE: …` — **salen impresos en todos los PDF** |
+| Sitios web del pie de página | los 4 `generate*Pdf.ts` | `PENDIENTE: sitio web` |
+| Logos claro y oscuro | `frontend/src/assets/logo.png`, `logo-dark.webp` | siguen siendo los de High |
+| Favicon | `frontend/public/favicon.png` | sigue siendo el de High |
+| Dominio en comentarios | `cors-origins.util.ts`, `whatsapp.service.ts:419` | citan `crmhighsolutions.com`; se corrigen cuando exista el dominio |
+
+Los marcadores `PENDIENTE` son deliberados: se ven en QA y evitan que un PDF de Zoom salga con la dirección de otra empresa. **Ninguno puede llegar a producción.**
+
+> Hallazgo: el pie de los PDF **duplica** los datos de `pdfConstants.ts` con literales propios en cada uno de los 4 generadores. Al cargar los datos reales hay que tocar los cinco archivos, no solo el de constantes.
 
 ---
 
-## 5. Punto de no retorno
+## 5. Hallazgos del arranque local (2026-09-18, verificados)
+
+Base nueva en Postgres 17 (Docker, puerto 55432), sin datos de demo:
+
+- **Las 124 migraciones aplican limpio** sobre base vacía; `prisma:drift` en 0 después.
+- **Seed con `SEED_DEMO=false`**: 190 permisos, 4 roles, 1 usuario (`adminsistema`), 152 ciudades, 18 áreas de producción, 10 cargos, 14 unidades, 7 canales, 8 consecutivos. Cero clientes, productos, órdenes o cotizaciones.
+- **El CLI de Prisma necesita `backend/.env`**, no `.env.development`: `prisma.config.ts` hace `import "dotenv/config"`, que solo carga `.env`. La aplicación NestJS sí lee `.env.<NODE_ENV>`. Hay que mantener el mismo `DATABASE_URL` en los dos.
+- ⚠️ **Las variables de S3 son obligatorias para arrancar.** `StorageS3Service` lanza en el constructor si falta cualquiera, y el backend no levanta. En Railway, **el bucket tiene que existir y estar configurado antes del primer deploy del backend**, o el healthcheck falla y el despliegue se cae. WhatsApp, en cambio, degrada con un warning.
+- Login verificado de punta a punta: `/health` 200, `POST /auth/login` 200 con rol `admin` y 190 permisos, y el panel carga en el navegador.
+
+## 6. Punto de no retorno
 
 El **primer commit que introduzca `locationId`** en las entidades del núcleo cierra la puerta a reconverger con High. A partir de ahí, traer un fix del núcleo deja de ser un cherry-pick limpio. Antes de ese commit, revisa que no quede nada del núcleo por arreglar en High: cada fix pendiente se va a pagar dos veces.

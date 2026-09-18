@@ -115,13 +115,14 @@ async function drawHeader(doc: jsPDF): Promise<number> {
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(12);
   setTextColor(doc, [0, 0, 0]);
-  doc.text('High Solutions', PDF_LAYOUT.pageWidth / 2, y, { align: 'center' });
+  doc.text('Zoom Publicidad', PDF_LAYOUT.pageWidth / 2, y, { align: 'center' });
   y += 5;
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
   setTextColor(doc, [41, 171, 226]);
-  doc.text('www.HS-group.com.co  |  www.highsolutions.com.co', PDF_LAYOUT.pageWidth / 2, y, { align: 'center' });
+  // TODO(zoom): sitios web reales de Zoom Publicidad
+  doc.text('PENDIENTE: sitio web', PDF_LAYOUT.pageWidth / 2, y, { align: 'center' });
   y += 5;
 
   doc.setFontSize(8);

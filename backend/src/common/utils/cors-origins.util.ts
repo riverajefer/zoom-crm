@@ -5,9 +5,10 @@ const DEV_FRONTEND_ORIGIN = 'http://localhost:5173';
  * Deja una URL como la manda el navegador en `Origin`: con esquema y sin barra
  * final.
  *
- * `FRONTEND_URL` está guardada en Railway sin esquema (`crmhighsolutions.com`),
- * pero el navegador manda `Origin: https://crmhighsolutions.com`. Compararlas
- * tal cual rechazaría al propio frontend y tumbaría el login.
+ * `FRONTEND_URL` puede quedar guardada en Railway sin esquema
+ * (`zoompublicidadcrm.com`), pero el navegador manda
+ * `Origin: https://zoompublicidadcrm.com`. Compararlas tal cual rechazaría al
+ * propio frontend y tumbaría el login.
  */
 export function normalizeOrigin(value: string | null | undefined): string | undefined {
   const trimmed = value?.trim().replace(/\/+$/, '');

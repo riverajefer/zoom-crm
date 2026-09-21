@@ -50,7 +50,7 @@ git cherry-pick <sha>
 
 ## 3. Decisiones abiertas
 
-- [ ] **Dominio definitivo.** Bloquea Railway y, sobre todo, las plantillas de Meta.
+- [x] ~~Dominio definitivo~~ → **`zoompublicidadcrm.com`** (confirmado 2026-09-20, registrado en Name.com). Hosts: apex y `www` al frontend, `api.` al backend, `pruebas.` y `api.pruebas.` a staging. Pendiente: quitar el comodín `*` de parking de la zona y decidir si el DNS se mueve a Cloudflare (el apex no puede ser CNAME y Railway entrega targets CNAME).
 - [ ] **WhatsApp en staging**: app y número de prueba propios, o sin webhook en QA (aprobaciones desde la UI). El webhook se configura por app de Meta y un WABA se suscribe a una sola app, así que un mismo número no puede servir a producción y a pruebas a la vez.
 - [ ] **Workspace de Railway**: se construye dentro del workspace actual y se transfiere ("Transfer Project") cuando entre en producción.
 - [ ] **Alcance del inventario entre sedes.** Hay que definirlo antes de escribir la primera migración con `locationId`, porque arrastra pedidos y producción.

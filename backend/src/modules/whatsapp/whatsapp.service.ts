@@ -416,7 +416,10 @@ export class WhatsappService {
    *        Por favor, revisa la solicitud y selecciona una opción para continuar."
    *
    * Botones (en orden de índice Meta):
-   *   0 → URL "Ver detalle" (base: https://api.pruebas.crmhighsolutions.com/api/v1/approvals/ + {{1}} requestId)
+   *   0 → URL "Ver detalle". El prefijo vive DENTRO de la plantilla en Meta y
+   *       no se cambia sin volver a aprobarla:
+   *         producción → https://api.zoompublicidadcrm.com/api/v1/approvals/ + {{1}}
+   *         pruebas    → https://api.pruebas.zoompublicidadcrm.com/api/v1/approvals/ + {{1}}
    *   1 → Quick Reply "Autorizar" (payload: APPROVE)
    *   2 → Quick Reply "Rechazar"  (payload: REJECT)
    *

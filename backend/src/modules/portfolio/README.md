@@ -1,6 +1,6 @@
 # Módulo Portfolio
 
-Este directorio contiene todos los módulos relacionados con el **portafolio de servicios e insumos** de High Solutions.
+Este directorio contiene todos los módulos relacionados con el **portafolio de servicios e insumos** de Zoom Publicidad.
 
 ## Estructura
 
@@ -36,7 +36,7 @@ Gestiona las unidades de medida utilizadas en el sistema para compra y consumo d
 ### ✅ Service Categories (Categorías de Servicios)
 **Ruta:** `/api/v1/service-categories`
 
-Gestiona las categorías para organizar los servicios ofrecidos por High Solutions.
+Gestiona las categorías para organizar los servicios ofrecidos por Zoom Publicidad.
 
 **Endpoints:**
 - `GET /service-categories` - Listar todas
@@ -61,7 +61,7 @@ Gestiona las categorías para organizar los servicios ofrecidos por High Solutio
 ### ✅ Services (Servicios)
 **Ruta:** `/api/v1/services`
 
-Gestiona los servicios ofrecidos por High Solutions (impresiones, promocionales, papelería, etc.).
+Gestiona los servicios ofrecidos por Zoom Publicidad (impresiones, promocionales, papelería, etc.).
 
 **Endpoints:**
 - `GET /services` - Listar todos (con filtros por categoría)

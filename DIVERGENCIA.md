@@ -64,6 +64,8 @@ Formato: fecha · qué cambió · por qué. Los cherry-pick traídos de High se 
 | Fecha | Cambio | Detalle |
 |---|---|---|
 | 2026-09-18 | Fork creado | clon con historia desde `fork-zoom-2026-09`; `origin` → zoom-crm, `upstream` → High (push deshabilitado) |
+| 2026-09-20 | Guardián de `master` en el pre-push | GitHub solo protege ramas en repos privados con plan Pro, y `zoom-crm` es privado en Free: la protección del servidor quedó inactiva al volverlo privado. `frontend/.husky/pre-push` rechaza ahora el push directo a `master`. **Limitación**: el hook es un archivo versionado, así que vale el de la rama activa — estando en `master` no protege hasta que el guardián llegue allá con el primer merge. Salida de emergencia: `git push --no-verify` |
+| 2026-09-20 | Repo pasado a **privado** | se creó público por error; 0 forks y 0 stars mientras lo estuvo. No hubo `.env` reales en la historia (solo `.env.example`), ni volcados de base rastreados |
 | 2026-09-18 | Etiqueta de Loki `app` | `backoffice-backend` → **`zoom-backend`** en `backend/src/common/logger/logger.config.ts` (2 sitios). Sin esto, los logs de Zoom y los de High caen en el mismo stream de Grafana y no hay forma de separarlos |
 | 2026-09-18 | Rebranding — **solo el nombre** | «High Solutions» → **«Zoom Publicidad CRM»** (nombre comercial confirmado por el cliente) en 14 archivos: título del navegador, Topbar, LoginForm, Sidebar, fallback de `VITE_APP_NAME`, página de mantenimiento, `pdfConstants.ts`, los **4 generadores de PDF**, los 2 mensajes de WhatsApp de OP y cotización, el ejemplo de `create-company.dto`, el ejemplo de `report-client-error.dto` y la empresa demo del seed |
 

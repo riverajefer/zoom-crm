@@ -3,7 +3,7 @@ import { BadRequestException } from '@nestjs/common';
 import { CreditBalanceService } from './credit-balance.service';
 import { PrismaService } from '../../database/prisma.service';
 import { createMockPrismaService } from '../../database/prisma.service.mock';
-import { OrderStatus, Prisma } from '../../generated/prisma';
+import { Prisma } from '../../generated/prisma';
 
 /**
  * Orden con excedente: total 80.000 pagados 100.000 → 20.000 de saldo a favor.
@@ -66,7 +66,7 @@ describe('CreditBalanceService', () => {
       expect(Number(sources[0].available)).toBe(5000);
     });
 
-    it('excluye las órdenes anuladas y la orden destino', async () => {
+    it('excluye la orden destino', async () => {
       prisma.order.findMany.mockResolvedValue([]);
 
       await service.listCreditSources('client-1', { excludeOrderId: 'order-dst' });
@@ -75,11 +75,21 @@ describe('CreditBalanceService', () => {
         expect.objectContaining({
           where: expect.objectContaining({
             clientId: 'client-1',
-            status: { not: OrderStatus.ANULADO },
             id: { not: 'order-dst' },
           }),
         }),
       );
+    });
+
+    // Anular no toca los pagos y una OP anulada no admite devolución: si su
+    // excedente no contara aquí, el cliente lo perdería.
+    it('incluye las órdenes anuladas como origen del saldo', async () => {
+      prisma.order.findMany.mockResolvedValue([]);
+
+      await service.listCreditSources('client-1');
+
+      const { where } = prisma.order.findMany.mock.calls[0][0];
+      expect(where).not.toHaveProperty('status');
     });
   });
 

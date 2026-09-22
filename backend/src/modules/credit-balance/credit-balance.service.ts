@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
-import { OrderStatus, Prisma } from '../../generated/prisma';
+import { Prisma } from '../../generated/prisma';
 import {
   computeAvailableOverpayment,
   computeOrderBalance,
@@ -31,7 +31,12 @@ export class CreditBalanceService {
 
   /**
    * OPs del cliente con saldo a favor disponible, de la más antigua a la más reciente
-   * (se consume FIFO). Excluye las anuladas y, opcionalmente, la OP destino.
+   * (se consume FIFO). Excluye, opcionalmente, la OP destino.
+   *
+   * Las anuladas SÍ cuentan: anular no toca los pagos, y si el excedente de una OP
+   * anulada no se pudiera usar, el cliente lo perdería — una OP anulada tampoco
+   * admite devolución ni puede salir de ese estado. Además la ficha del cliente ya
+   * mostraba ese saldo; el pago lo rechazaba.
    */
   async listCreditSources(
     clientId: string,
@@ -42,7 +47,6 @@ export class CreditBalanceService {
     const orders = await db.order.findMany({
       where: {
         clientId,
-        status: { not: OrderStatus.ANULADO },
         ...(options.excludeOrderId && { id: { not: options.excludeOrderId } }),
       },
       select: {

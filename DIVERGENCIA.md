@@ -64,6 +64,7 @@ Formato: fecha · qué cambió · por qué. Los cherry-pick traídos de High se 
 | Fecha | Cambio | Detalle |
 |---|---|---|
 | 2026-09-18 | Fork creado | clon con historia desde `fork-zoom-2026-09`; `origin` → zoom-crm, `upstream` → High (push deshabilitado) |
+| 2026-09-22 | Logos y favicon de Zoom | `logo-dark.webp` es el logo original (texto negro) y lo usan **7 generadores de PDF**, que van sobre papel blanco. `logo.png` es el de la interfaz oscura (login y sidebar): se generó invirtiendo los píxeles acromáticos del original para que el texto quede blanco, protegiendo el interior del camaleón con un relleno de huecos para no perderle el ojo ni la boca. El favicon es el camaleón recortado a 256×256 con fondo transparente |
 | 2026-09-20 | Guardián de `master` en el pre-push | GitHub solo protege ramas en repos privados con plan Pro, y `zoom-crm` es privado en Free: la protección del servidor quedó inactiva al volverlo privado. `frontend/.husky/pre-push` rechaza ahora el push directo a `master`. **Limitación**: el hook es un archivo versionado, así que vale el de la rama activa — estando en `master` no protege hasta que el guardián llegue allá con el primer merge. Salida de emergencia: `git push --no-verify` |
 | 2026-09-20 | Repo pasado a **privado** | se creó público por error; 0 forks y 0 stars mientras lo estuvo. No hubo `.env` reales en la historia (solo `.env.example`), ni volcados de base rastreados |
 | 2026-09-18 | Etiqueta de Loki `app` | `backoffice-backend` → **`zoom-backend`** en `backend/src/common/logger/logger.config.ts` (2 sitios). Sin esto, los logs de Zoom y los de High caen en el mismo stream de Grafana y no hay forma de separarlos |
@@ -75,8 +76,8 @@ Formato: fecha · qué cambió · por qué. Los cherry-pick traídos de High se 
 |---|---|---|
 | Dirección, ciudad, teléfonos, email | `frontend/src/utils/pdfConstants.ts` | valores `PENDIENTE: …` — **salen impresos en todos los PDF** |
 | Sitios web del pie de página | los 4 `generate*Pdf.ts` | `PENDIENTE: sitio web` |
-| Logos claro y oscuro | `frontend/src/assets/logo.png`, `logo-dark.webp` | siguen siendo los de High |
-| Favicon | `frontend/public/favicon.png` | sigue siendo el de High |
+| ~~Logos claro y oscuro~~ | `frontend/src/assets/logo.png`, `logo-dark.webp` | ✅ 2026-09-22 |
+| ~~Favicon~~ | `frontend/public/favicon.png` | ✅ 2026-09-22 (el camaleón) |
 | Dominio en comentarios | `cors-origins.util.ts`, `whatsapp.service.ts:419` | citan `crmhighsolutions.com`; se corrigen cuando exista el dominio |
 
 Los marcadores `PENDIENTE` son deliberados: se ven en QA y evitan que un PDF de Zoom salga con la dirección de otra empresa. **Ninguno puede llegar a producción.**

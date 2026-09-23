@@ -104,7 +104,7 @@ async function drawHeader(doc: jsPDF): Promise<number> {
 
   doc.addImage(logoData, 'PNG', logoX, logoY, logoW, logoH);
 
-  setFillColor(doc, [41, 171, 226]);
+  setFillColor(doc, PDF_COLORS.brandBar);
   doc.rect(0, barY, logoX - 5, barHeight, 'F');
 
   setFillColor(doc, [0, 0, 0]);
@@ -120,17 +120,17 @@ async function drawHeader(doc: jsPDF): Promise<number> {
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
-  setTextColor(doc, [41, 171, 226]);
+  setTextColor(doc, PDF_COLORS.linkText);
   // TODO(zoom): sitios web reales de Zoom Publicidad
   doc.text('PENDIENTE: sitio web', PDF_LAYOUT.pageWidth / 2, y, { align: 'center' });
   y += 5;
 
   doc.setFontSize(8);
   setTextColor(doc, [100, 100, 100]);
-  doc.text('Cra 28 #10-18, Bogotá D.C - Barrio Ricaurte', PDF_LAYOUT.pageWidth / 2, y, { align: 'center' });
+  doc.text(`${COMPANY_INFO.address}, ${COMPANY_INFO.city}`, PDF_LAYOUT.pageWidth / 2, y, { align: 'center' });
   y += 4;
   doc.text(
-    'Tel: 305 451 8018 / 304 484 8835 / 305 4525079 | hsolutionssas@gmail.com',
+    `Tel: ${COMPANY_INFO.phones.join(' / ')} | ${COMPANY_INFO.email}`,
     PDF_LAYOUT.pageWidth / 2,
     y,
     { align: 'center' },
@@ -349,7 +349,7 @@ function drawProductsTable(doc: jsPDF, y: number, workOrder: WorkOrder): number 
     }
 
     // Row background
-    const bgColor = idx % 2 === 0 ? [255, 255, 255] : [232, 244, 246];
+    const bgColor = idx % 2 === 0 ? PDF_COLORS.tableRowEven : PDF_COLORS.tableRowOdd;
     setFillColor(doc, bgColor);
     doc.rect(x0, y, PDF_LAYOUT.contentWidth, dynamicRowHeight, 'F');
 

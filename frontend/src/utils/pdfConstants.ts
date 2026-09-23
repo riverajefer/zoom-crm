@@ -11,17 +11,21 @@ export const COMPANY_INFO = {
 } as const;
 
 export const PDF_COLORS = {
-  headerBg: [26, 31, 61],       // dark navy
+  // Paleta Camaleón adaptada a papel blanco: el lima va en barras y rellenos,
+  // nunca como texto (sobre blanco no se lee).
+  headerBg: [22, 24, 22],          // gris carbón
   headerText: [255, 255, 255],
-  tableHeaderBg: [26, 107, 122], // teal
+  tableHeaderBg: [29, 32, 28],     // gris carbón
   tableHeaderText: [255, 255, 255],
   tableRowEven: [255, 255, 255],
-  tableRowOdd: [232, 244, 246],  // light teal
-  sectionTitleText: [26, 107, 122],
+  tableRowOdd: [246, 248, 243],    // gris muy claro
+  sectionTitleText: [74, 110, 12], // verde oscuro, legible sobre blanco
   borderGray: [224, 224, 224],
-  totalRowBg: [240, 247, 248],
+  totalRowBg: [240, 246, 230],     // lima muy claro
   bodyText: [40, 40, 40],
   footerText: [140, 140, 140],
+  brandBar: [163, 211, 60],        // lima camaleón (barra del encabezado)
+  linkText: [27, 127, 176],        // azul camaleón oscuro
 } as const;
 
 export const PDF_FONTS = {

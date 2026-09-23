@@ -4,7 +4,7 @@
 
 Backoffice de **Zoom Publicidad** (3 sedes), con autenticación JWT y control de acceso basado en roles (RBAC).
 
-> **Este repo es un fork independiente del backoffice de High Solutions**, no un multi-tenant. Comparte historia de git y casi todo el código con High, pero evoluciona por separado. Antes de tocar nada que tenga que ver con ramas, ambientes, despliegue o datos, lee **[DIVERGENCIA.md](./DIVERGENCIA.md)**: ahí están las decisiones tomadas, las restricciones heredadas y la bitácora de lo que cambió respecto a High.
+> **Este repo es un fork independiente del backoffice de High Solutions**, no un multi-tenant. Comparte historia de git y casi todo el código con High, pero evoluciona por separado. Antes de tocar nada que tenga que ver con ramas, ambientes, despliegue o datos, lee **[DIVERGENCIA.md](./DIVERGENCIA.md)**: ahí están las decisiones tomadas, las restricciones heredadas y la bitácora de lo que cambió respecto a High. El plan de montaje por fases (Railway, dominios, producción, Meta) está en **[docs/PLAN_FORK_ZOOM.md](./docs/PLAN_FORK_ZOOM.md)**.
 
 ---
 

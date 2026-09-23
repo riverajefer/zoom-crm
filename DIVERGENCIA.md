@@ -17,9 +17,11 @@ Este repositorio es un **fork independiente** del backoffice de High Solutions, 
 
 ```bash
 git fetch upstream
-git log --oneline eee96a9..upstream/develop     # qué hay nuevo en High
+git cherry -v develop upstream/develop          # "-" ya aplicado, "+" pendiente
 git cherry-pick <sha>
 ```
+
+⚠️ **No uses `git log eee96a9..upstream/develop` para esto.** El cherry-pick crea un commit nuevo con otro `sha`, así que git nunca da por alcanzado el original de High: ese comando lista como pendiente todo lo que ya trajiste. `git cherry` compara el contenido de cada cambio y sí los reconoce. Su límite: un cherry-pick que hubo que ajustar a mano por un conflicto deja de ser idéntico y sigue saliendo con `+`; para esos está la bitácora de la sección 4.
 
 - `upstream` está en **solo lectura**: su URL de push es `DISABLED`, así que `git push upstream` falla a propósito. Si algún día hay que revertirlo: `git remote set-url --push upstream <url>`.
 - Lo específico de Zoom (branding, sedes, cualquier regla de negocio propia) **no vuelve** a High.

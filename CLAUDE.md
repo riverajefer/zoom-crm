@@ -1,8 +1,78 @@
 # CLAUDE.md - Guía para IA
 
-## Proyecto: High Solutions Backoffice
+## Proyecto: Zoom Publicidad CRM
 
-Sistema completo de backoffice con autenticación JWT y control de acceso basado en roles (RBAC).
+Backoffice de **Zoom Publicidad** (3 sedes), con autenticación JWT y control de acceso basado en roles (RBAC).
+
+> **Este repo es un fork independiente del backoffice de High Solutions**, no un multi-tenant. Comparte historia de git y casi todo el código con High, pero evoluciona por separado. Antes de tocar nada que tenga que ver con ramas, ambientes, despliegue o datos, lee **[DIVERGENCIA.md](./DIVERGENCIA.md)**: ahí están las decisiones tomadas, las restricciones heredadas y la bitácora de lo que cambió respecto a High.
+
+---
+
+## Zoom: lo que NO es igual a High
+
+La mayor parte de esta guía describe código que Zoom heredó tal cual. Esta sección recoge lo que es distinto; **si algo de abajo contradice el resto del documento, manda esta sección**.
+
+### Identidad
+
+| | |
+|---|---|
+| Nombre comercial | **Zoom Publicidad CRM** |
+| Repo | `riverajefer/zoom-crm` (privado) |
+| Origen del fork | `riverajefer/hight-solutions-backoffice`, tag `fork-zoom-2026-09`, commit `eee96a9` |
+| Dominio | `zoompublicidadcrm.com` (comprado y gestionado en Railway) |
+
+### Ambientes — tres bases de datos separadas
+
+| Ambiente | Frontend | API | Rama | Base de datos |
+|---|---|---|---|---|
+| local | `http://localhost:5173` (o 5174) | `http://localhost:3000/api/v1` | `develop` | Postgres 17 en Docker (`zoom-pg`, puerto 55432) |
+| staging | `https://pruebas.zoompublicidadcrm.com` | `https://api.pruebas.zoompublicidadcrm.com/api/v1` | `staging` | Postgres propia en Railway |
+| production | `https://zoompublicidadcrm.com` | `https://api.zoompublicidadcrm.com/api/v1` | `master` | Postgres propia en Railway (**aún no creada**) |
+
+- **En High, dev y staging comparten base; en Zoom no.** Las migraciones nuevas de Zoom no necesitan ser idempotentes por esa razón (las que vienen de High lo son, y se dejan igual).
+- El backend necesita **dos** archivos locales con el mismo `DATABASE_URL`: `backend/.env` lo lee el CLI de Prisma (`prisma.config.ts` importa `dotenv/config`) y `backend/.env.development` lo lee la app NestJS.
+- Base local desde cero: `docker run -d --name zoom-pg -e POSTGRES_PASSWORD=zoomdev -e POSTGRES_DB=zoom_dev -p 55432:5432 postgres:17`, luego `npx prisma migrate deploy` y `npm run prisma:seed`.
+
+### Flujo de ramas
+
+| Salto | Cómo |
+|---|---|
+| trabajo → `develop` | push directo |
+| `develop` → `staging` | `git checkout staging && git merge --ff-only develop && git push && git checkout develop` |
+| `staging` → `master` | **siempre por PR** (`gh pr create --base master --head staging`). El hook de pre-push rechaza el push directo a `master` |
+
+GitHub no protege ramas en repos privados del plan Free: la protección de `master` es el hook `frontend/.husky/pre-push`. Vale el de la rama activa, así que estando en `master` no protege hasta que el guardián llegue allá.
+
+### Traer cambios de High
+
+Los arreglos del núcleo nacen en High y se traen con cherry-pick; lo propio de Zoom nunca vuelve a High. El remoto `upstream` apunta a High con **push deshabilitado**.
+
+```bash
+git fetch upstream
+git cherry -v develop upstream/develop   # "-" ya aplicado, "+" pendiente
+git cherry-pick <sha>
+```
+
+**No uses `git log <sha>..upstream/develop`** para ver qué falta: el cherry-pick crea commits con otro `sha` y ese comando lista como pendiente todo lo ya traído. Cada cherry-pick se anota en la bitácora de `DIVERGENCIA.md` con el `sha` de origen.
+
+### Restricciones que no se pueden tocar
+
+- **El rol admin debe llamarse exactamente `admin`**: se busca por nombre en 24 archivos.
+- **El ambiente de Railway debe llamarse literalmente `staging`**: `backend/railway.toml` usa `[environments.staging.deploy]`. Con otro nombre el backend arranca como producción.
+- **Una sola réplica del backend**: 9 crons se duplicarían y socket.io no tiene adapter compartido.
+- **Las variables `AWS_*` (S3) son obligatorias para arrancar**: `StorageS3Service` lanza en el constructor si falta alguna. WhatsApp, en cambio, degrada con un warning.
+- **No correr `npm audit fix` en el backend**: deja dos copias de `cron` y Prisma inconsistente.
+- La etiqueta de Loki es `app: 'zoom-backend'` (`logger.config.ts`), distinta de la de High, para que los logs de las dos empresas no se mezclen en Grafana.
+
+### Login
+
+Es por **username, no por email**: el administrador inicial es `adminsistema`, con la contraseña de `SEED_ADMIN_PASSWORD`. Mandar el email da 401. La tabla de usuarios de prueba de más abajo es de la plantilla original y no aplica.
+
+### Pendientes conocidos
+
+- **Datos de contacto** (dirección, ciudad, teléfonos, email, sitio web): marcados `PENDIENTE` con `TODO(zoom)` en `frontend/src/utils/pdfConstants.ts` y en los 4 `generate*Pdf.ts`, que duplican esos datos con literales propios. Salen impresos en todos los PDF.
+- **WhatsApp / Meta**: aplazado. Los nombres de las plantillas están quemados en `backend/src/modules/whatsapp/whatsapp.service.ts` y el prefijo de la URL del botón "Ver detalle" vive dentro de la plantilla en Meta.
+- **Sedes**: el modelo no tiene concepto de sede. Se agregará `locationId` solo en Zoom, con scoping centralizado en los guards. `findActiveCashSession()` ya acepta `cashRegisterId` para cuando exista. El primer commit con `locationId` es el punto de no retorno para reconverger con High.
 
 ---
 
@@ -23,14 +93,14 @@ Sistema completo de backoffice con autenticación JWT y control de acceso basado
 
 ## Descripción General
 
-**High Solutions Backoffice** es un sistema fullstack profesional que proporciona:
+**Zoom Publicidad CRM** es un sistema fullstack que proporciona:
 
 - **Backend**: API REST con NestJS + Prisma + PostgreSQL
 - **Frontend**: Aplicación React con Material UI + Zustand + React Query
 - **Autenticación**: JWT con access y refresh tokens
 - **Autorización**: Sistema RBAC dinámico basado en permisos
 - **Seguridad**: Hashing de contraseñas, validación de datos, guards
-- **Ambientes**: Desarrollo (Supabase), Staging y Producción (Railway)
+- **Ambientes**: Desarrollo (Postgres en Docker), Staging y Producción (Railway), cada uno con su propia base
 
 ### Módulos Implementados
 
@@ -50,7 +120,7 @@ Sistema completo de backoffice con autenticación JWT y control de acceso basado
 | Framework | NestJS | 11.x |
 | Language | TypeScript | 5.9.x |
 | ORM | Prisma | 7.2.x |
-| Database | PostgreSQL | Supabase (dev) / Railway (staging/prod) |
+| Database | PostgreSQL 17 | Docker (dev) / Railway (staging/prod), bases separadas |
 | Authentication | Passport + JWT | - |
 | Password Hashing | bcrypt | 12 rounds |
 | Validation | class-validator | - |
@@ -80,16 +150,18 @@ El proyecto soporta tres ambientes diferentes con configuración independiente:
 
 | Ambiente | Base de Datos | Propósito | Demo Credentials |
 |----------|---------------|-----------|------------------|
-| **development** | Supabase PostgreSQL | Desarrollo local | ✅ Visible |
-| **staging** | Railway PostgreSQL | QA y pruebas | ❌ Oculto |
-| **production** | Railway PostgreSQL | Producción | ❌ Oculto |
+| **development** | Postgres 17 en Docker (`zoom-pg`) | Desarrollo local | ❌ Oculto (`SEED_DEMO=false`) |
+| **staging** | Railway PostgreSQL propia | QA y pruebas | ❌ Oculto |
+| **production** | Railway PostgreSQL propia | Producción | ❌ Oculto |
+
+Ver la tabla de dominios y ramas en [Zoom: lo que NO es igual a High](#zoom-lo-que-no-es-igual-a-high).
 
 ### Archivos de Configuración
 
 #### Backend (`backend/`)
-- `.env.development` - Desarrollo local con Supabase
-- `.env.staging` - Staging en Railway (no committed)
-- `.env.production` - Producción en Railway (no committed)
+- `.env` - **Lo lee el CLI de Prisma** (migraciones, seed, drift). Mismo `DATABASE_URL` que `.env.development`
+- `.env.development` - Lo lee la app NestJS en local
+- `.env.staging` / `.env.production` - Solo locales; **Railway no los usa**, allá mandan las variables del dashboard
 - `.env.example` - Template sin credenciales
 
 #### Frontend (`frontend/`)
@@ -128,7 +200,10 @@ npm run build:prod      # Usa .env.production
 
 **Backend:**
 - `NODE_ENV` - Nombre del ambiente (development/staging/production)
-- `DATABASE_URL` - URL de PostgreSQL (Supabase o Railway)
+- `DATABASE_URL` - URL de PostgreSQL (Docker en local, Railway en staging/prod)
+- `CORS_ORIGINS` - Orígenes permitidos separados por coma; tiene prioridad sobre `FRONTEND_URL`
+- `AWS_*` - Bucket S3 (Tigris en Railway). **Obligatorias**: sin ellas el backend no arranca
+- `SEED_DEMO` / `SEED_ADMIN_PASSWORD` - Datos de demostración del seed y contraseña del admin inicial
 - `JWT_ACCESS_SECRET` - Secret para access tokens
 - `JWT_REFRESH_SECRET` - Secret para refresh tokens
 - `FRONTEND_URL` - URL del frontend para CORS
@@ -162,8 +237,8 @@ import { showDemoCredentials, isDevelopment } from '@/utils/environment';
 
 Ambos backend y frontend incluyen archivos `railway.toml` para configurar el deployment:
 
-- **Backend**: Usa `npm run start:prod`
-- **Frontend**: Usa `npm run preview`
+- **Backend**: `npx prisma migrate deploy && npm run start:prod` (en el ambiente `staging`, `start:staging`). Healthcheck `/health`. **Las migraciones corren solas en cada deploy; el seed no.**
+- **Frontend**: `node server.js`. Healthcheck `/`. Las `VITE_*` se queman en el build: cambiar una exige redeploy, no reinicio.
 
 Configura las variables de ambiente en el dashboard de Railway para cada servicio.
 
@@ -306,7 +381,7 @@ hight-solutions-backoffice/
                       │
 ┌─────────────────────▼───────────────────────────────────┐
 │                     Database                            │
-│   SQLite (with better-sqlite3 adapter)                  │
+│   PostgreSQL 17 (with @prisma/adapter-pg)               │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -688,7 +763,7 @@ npm run lint                # Ejecutar ESLint
 ### Flujo de Autenticación
 
 ```
-1. Usuario ingresa credenciales
+1. Usuario ingresa credenciales (username + password; NO email)
    ↓
 2. Frontend → POST /api/v1/auth/login
    ↓
@@ -824,11 +899,15 @@ npm run lint                # Ejecutar ESLint
 
 ## Usuarios de Prueba
 
-| Email | Password | Rol | Permisos |
-|-------|----------|-----|----------|
-| admin@example.com | admin123 | admin | Todos los permisos |
-| manager@example.com | manager123 | manager | create_users, read_users, update_users, read_roles, read_permissions |
-| user@example.com | user123 | user | read_users, read_roles |
+El seed crea **un** administrador en todos los ambientes:
+
+| Username | Password | Rol |
+|----------|----------|-----|
+| `adminsistema` | la de `SEED_ADMIN_PASSWORD` | `admin` (todos los permisos) |
+
+- El login es por **username**; mandar el email da 401.
+- En producción `SEED_ADMIN_PASSWORD` es obligatoria: el seed se niega a correr sin ella. Fuera de producción, si falta, cae en `admin123`.
+- Con `SEED_DEMO=true` el seed agrega además clientes, productos, órdenes y cuentas de prueba. En local y producción de Zoom va en `false`; en staging, en `true`.
 
 ---
 
@@ -868,37 +947,34 @@ npm run lint                # Ejecutar ESLint
 ## Quick Start para Desarrollo
 
 ```bash
-# 1. Instalar dependencias del backend
+# 1. Base de datos local (una sola vez; después basta con `docker start zoom-pg`)
+docker run -d --name zoom-pg -e POSTGRES_PASSWORD=zoomdev -e POSTGRES_DB=zoom_dev -p 55432:5432 postgres:17
+
+# 2. Backend
 cd backend
 npm install
-
-# 2. Configurar ambiente de desarrollo
 cp .env.example .env.development
-# Editar .env.development con tu URL de Supabase PostgreSQL
+# DATABASE_URL="postgresql://postgres:zoomdev@localhost:55432/zoom_dev?schema=public"
+# + las AWS_* (obligatorias; en local basta con valores de relleno)
+# y crea backend/.env con el MISMO DATABASE_URL (lo lee el CLI de Prisma)
 
-# 3. Configurar base de datos
-npm run db:setup
+# 3. Migraciones y seed
+npx prisma migrate deploy
+SEED_DEMO=false SEED_ADMIN_PASSWORD='<la que quieras>' npm run prisma:seed
 
-# 4. Iniciar backend (usa .env.development automáticamente)
+# 4. Iniciar backend
 npm run start:dev
 
-# 5. En otra terminal, configurar frontend
+# 5. En otra terminal, frontend
 cd ../frontend
 npm install
-cp .env.example .env.development
-# .env.development ya viene configurado para localhost
-
-# 6. Iniciar frontend (usa .env.development automáticamente)
+cp .env.example .env.development   # VITE_API_URL=http://localhost:3000/api/v1
 npm run dev
 
-# 7. Abrir navegador en http://localhost:5173
-# 8. Las credenciales demo se muestran automáticamente en desarrollo:
-#    Admin: admin@example.com / admin123
-#    Manager: manager@example.com / manager123
-#    User: user@example.com / user123
+# 6. http://localhost:5173 — usuario `adminsistema`, contraseña la de SEED_ADMIN_PASSWORD
 ```
 
-**Nota**: En desarrollo verás las credenciales demo en la pantalla de login. Estas se ocultan automáticamente en staging y producción.
+**Nota**: no uses `npm run db:setup` ni `db:reset` contra una base de Railway: corren `prisma migrate dev`, que puede reescribir el historial de migraciones.
 
 ---
 
@@ -914,8 +990,6 @@ Para preguntas o problemas:
 
 ---
 
-**Última actualización**: 2026-01-21
+**Última actualización**: 2026-09-22 (adaptado a Zoom desde la guía de High Solutions)
 
-**Versión del proyecto**: 1.0.0
-
-**Mantenedor**: High Solutions Team
+**Mantenedor**: Jefferson Rivera

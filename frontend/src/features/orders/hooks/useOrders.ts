@@ -192,7 +192,15 @@ export const useOrder = (id: string) => {
 
   // Mutation: Cambiar estado
   const updateStatusMutation = useMutation({
-    mutationFn: (status: OrderStatus) => ordersApi.updateStatus(id, status),
+    // Al anular, `retainedAmount` es lo que se queda la empresa de lo pagado.
+    mutationFn: (
+      change: OrderStatus | { status: OrderStatus; retainedAmount?: number },
+    ) =>
+      typeof change === 'string'
+        ? ordersApi.updateStatus(id, change)
+        : ordersApi.updateStatus(id, change.status, {
+            retainedAmount: change.retainedAmount,
+          }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ordersKeys.detail(id) });
       queryClient.invalidateQueries({ queryKey: ordersKeys.lists() });

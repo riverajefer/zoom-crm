@@ -56,6 +56,11 @@ interface RefundRequestDialogProps {
    * devolver").
    */
   currentBalance: number;
+  /**
+   * La orden está anulada: su venta ya se anuló, así que solo se devuelve el
+   * saldo a favor y no se ofrece anular venta.
+   */
+  saleAlreadyAnnulled?: boolean;
 }
 
 /**
@@ -107,13 +112,22 @@ export const RefundRequestDialog: React.FC<RefundRequestDialogProps> = ({
   pendingSaleValue,
   paidAmount,
   currentBalance,
+  saleAlreadyAnnulled = false,
 }) => {
   const { enqueueSnackbar } = useSnackbar();
   const createMutation = useCreateRefundRequest();
 
-  const [mode, setMode] = useState<RefundMode>(
-    maxAmount > 0 ? 'CREDIT_BALANCE' : 'SALE_REVERSAL',
-  );
+  const defaultMode: RefundMode =
+    saleAlreadyAnnulled || maxAmount > 0 ? 'CREDIT_BALANCE' : 'SALE_REVERSAL';
+  const [mode, setMode] = useState<RefundMode>(defaultMode);
+
+  // El diálogo vive montado en la página, así que el estado inicial se calcula
+  // con la orden de ese momento. Si después cambia —se anula, entra un pago de
+  // más—, al abrir quedaba el modo viejo: una OP recién anulada abría en «anular
+  // venta», que el backend rechaza.
+  useEffect(() => {
+    if (open) setMode(defaultMode);
+  }, [open, defaultMode]);
   const [reversed, setReversed] = useState<string>('');
   const [amount, setAmount] = useState<string>('');
   const [reason, setReason] = useState<RefundReason>('QUALITY');
@@ -151,7 +165,7 @@ export const RefundRequestDialog: React.FC<RefundRequestDialogProps> = ({
   }, [mode, reversedAmount, availableToRefund]);
 
   const resetAndClose = () => {
-    setMode(maxAmount > 0 ? 'CREDIT_BALANCE' : 'SALE_REVERSAL');
+    setMode(defaultMode);
     setReversed('');
     setAmount('');
     setReason('QUALITY');
@@ -280,7 +294,14 @@ export const RefundRequestDialog: React.FC<RefundRequestDialogProps> = ({
             <strong>cuando Caja registre el pago</strong>, no al aprobarla.
           </Alert>
 
-          <Box>
+          {saleAlreadyAnnulled && (
+            <Alert severity='info'>
+              La orden está anulada: se devuelve el saldo a favor que le quedó
+              al cliente.
+            </Alert>
+          )}
+
+          <Box sx={{ display: saleAlreadyAnnulled ? 'none' : undefined }}>
             <Typography variant='subtitle2' sx={{ mb: 1 }}>
               ¿Por qué se devuelve?
             </Typography>

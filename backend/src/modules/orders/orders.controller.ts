@@ -238,7 +238,9 @@ export class OrdersController {
     @Body() updateStatusDto: UpdateOrderStatusDto,
     @CurrentUser('id') userId: string,
   ) {
-    return this.ordersService.updateStatus(id, updateStatusDto.status, userId);
+    return this.ordersService.updateStatus(id, updateStatusDto.status, userId, {
+      retainedAmount: updateStatusDto.retainedAmount,
+    });
   }
 
   @Delete(':id')

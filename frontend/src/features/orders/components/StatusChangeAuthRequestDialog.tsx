@@ -7,7 +7,6 @@ import {
   Button,
   TextField,
   Typography,
-  CircularProgress,
   Alert,
   Box,
 } from '@mui/material';
@@ -16,6 +15,13 @@ import { useSnackbar } from 'notistack';
 import { orderStatusChangeRequestsApi } from '../../../api/order-status-change-requests.api';
 import type { Order, OrderStatus } from '../../../types/order.types';
 import { ORDER_STATUS_CONFIG } from '../../../types/order.types';
+import { LoadingButton } from '../../../components/common/LoadingButton';
+import { getAnnulmentAmounts } from '../utils/annulment';
+import {
+  RetainedAmountField,
+  isRetainedAmountInvalid,
+  parseRetainedAmount,
+} from './RetainedAmountField';
 
 interface StatusChangeAuthRequestDialogProps {
   open: boolean;
@@ -31,7 +37,16 @@ export const StatusChangeAuthRequestDialog: React.FC<StatusChangeAuthRequestDial
   requestedStatus,
 }) => {
   const [reason, setReason] = useState('');
+  const [retained, setRetained] = useState('');
   const { enqueueSnackbar } = useSnackbar();
+
+  // Al anular una orden con pagos, lo que retiene la empresa viaja en la
+  // solicitud: el admin lo aprueba junto con la anulación.
+  const annulmentAmounts =
+    requestedStatus === 'ANULADO' ? getAnnulmentAmounts(order) : null;
+  const asksRetained = !!annulmentAmounts && annulmentAmounts.unusedPaid > 0;
+  const retainedInvalid =
+    asksRetained && isRetainedAmountInvalid(retained, annulmentAmounts);
 
   // `disabled={mutation.isPending}` solo surte efecto después de que React vuelve
   // a renderizar, así que dos clics en el mismo frame envían dos solicitudes. El
@@ -46,6 +61,7 @@ export const StatusChangeAuthRequestDialog: React.FC<StatusChangeAuthRequestDial
         { variant: 'success' }
       );
       setReason('');
+      setRetained('');
       onClose();
     },
     onError: (error: any) => {
@@ -67,18 +83,22 @@ export const StatusChangeAuthRequestDialog: React.FC<StatusChangeAuthRequestDial
       return;
     }
 
+    if (retainedInvalid) return;
+
     submitting.current = true;
     createRequestMutation.mutate({
       orderId: order.id,
       currentStatus: order.status,
       requestedStatus,
       reason: reason.trim(),
+      ...(asksRetained && { retainedAmount: parseRetainedAmount(retained) }),
     });
   };
 
   const handleClose = () => {
     if (!createRequestMutation.isPending) {
       setReason('');
+      setRetained('');
       onClose();
     }
   };
@@ -118,22 +138,30 @@ export const StatusChangeAuthRequestDialog: React.FC<StatusChangeAuthRequestDial
           helperText="Este campo es obligatorio"
           sx={{ mt: 2 }}
         />
+
+        {asksRetained && (
+          <Box sx={{ mt: 3 }}>
+            <RetainedAmountField
+              amounts={annulmentAmounts}
+              value={retained}
+              onChange={setRetained}
+              disabled={createRequestMutation.isPending}
+            />
+          </Box>
+        )}
       </DialogContent>
       <DialogActions>
         <Button onClick={handleClose} disabled={createRequestMutation.isPending}>
           Cancelar
         </Button>
-        <Button
+        <LoadingButton
           onClick={handleSubmit}
           variant="contained"
-          disabled={createRequestMutation.isPending || !reason.trim()}
+          loading={createRequestMutation.isPending}
+          disabled={!reason.trim() || retainedInvalid}
         >
-          {createRequestMutation.isPending ? (
-            <CircularProgress size={24} />
-          ) : (
-            'Enviar Solicitud'
-          )}
-        </Button>
+          Enviar Solicitud
+        </LoadingButton>
       </DialogActions>
     </Dialog>
   );

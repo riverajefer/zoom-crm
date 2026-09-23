@@ -13,7 +13,7 @@ import {
   createMockPrismaService,
   MockPrismaService,
 } from '../../database/prisma.service.mock';
-import { EditRequestStatus, OrderStatus } from '../../generated/prisma';
+import { EditRequestStatus, OrderStatus, Prisma } from '../../generated/prisma';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Colaboradores mock
@@ -189,6 +189,60 @@ describe('OrderStatusChangeRequestsService', () => {
       const result = await service.create('user-1', createDto);
 
       expect(result).toMatchObject({ id: 'req-new', status: EditRequestStatus.PENDING });
+    });
+
+    // Lo que retiene la empresa al anular viaja en la solicitud: el admin lo
+    // aprueba junto con la anulación.
+    describe('anulación con dinero', () => {
+      const annulDto = {
+        ...createDto,
+        requestedStatus: OrderStatus.ANULADO,
+        reason: 'El trabajo ya estaba en producción',
+      };
+
+      beforeEach(() => {
+        // OP de 500.000 pagada completa.
+        (prisma.order.findUnique as jest.Mock).mockResolvedValue({
+          ...mockOrder,
+          total: new Prisma.Decimal(500000),
+          paidAmount: new Prisma.Decimal(500000),
+          appliedCreditAmount: new Prisma.Decimal(0),
+          reversedAmount: new Prisma.Decimal(0),
+        });
+      });
+
+      it('guarda lo que retiene la empresa', async () => {
+        await service.create('user-1', { ...annulDto, retainedAmount: 150000 });
+
+        const { data } = (prisma.orderStatusChangeRequest.create as jest.Mock).mock
+          .calls[0][0];
+        expect(Number(data.retainedAmount)).toBe(150000);
+      });
+
+      it('le muestra al admin cuánto retiene la empresa y cuánto queda de saldo', async () => {
+        await service.create('user-1', { ...annulDto, retainedAmount: 150000 });
+
+        expect(mockNotificationsService.notifyAllAdmins).toHaveBeenCalledWith(
+          expect.objectContaining({
+            message: expect.stringMatching(/retiene \$150\.000 y quedan \$350\.000/),
+          }),
+        );
+      });
+
+      it('rechaza retener más de lo que el cliente pagó', async () => {
+        await expect(
+          service.create('user-1', { ...annulDto, retainedAmount: 600000 }),
+        ).rejects.toThrow(BadRequestException);
+        expect(prisma.orderStatusChangeRequest.create).not.toHaveBeenCalled();
+      });
+
+      it('en otros cambios de estado no guarda valor retenido', async () => {
+        await service.create('user-1', { ...createDto, retainedAmount: 150000 });
+
+        const { data } = (prisma.orderStatusChangeRequest.create as jest.Mock).mock
+          .calls[0][0];
+        expect(data.retainedAmount).toBeNull();
+      });
     });
   });
 

@@ -94,9 +94,14 @@ export const ordersApi = {
   /**
    * Cambiar estado de la orden
    */
-  updateStatus: async (id: string, status: OrderStatus): Promise<Order> => {
+  updateStatus: async (
+    id: string,
+    status: OrderStatus,
+    options: { retainedAmount?: number } = {},
+  ): Promise<Order> => {
     const { data } = await axiosInstance.put<Order>(`${BASE_URL}/${id}/status`, {
       status,
+      ...options,
     });
     return data;
   },

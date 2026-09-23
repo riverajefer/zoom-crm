@@ -9,6 +9,8 @@ export interface OrderStatusChangeRequest {
   currentStatus: OrderStatus;
   requestedStatus: OrderStatus;
   reason?: string | null;
+  /** Solo en anulaciones: lo que retiene la empresa de lo pagado (COP). */
+  retainedAmount?: string | null;
   status: EditRequestStatus;
   reviewedById?: string | null;
   reviewedAt?: string | null;
@@ -41,6 +43,8 @@ export interface CreateStatusChangeRequestDto {
   currentStatus: OrderStatus;
   requestedStatus: OrderStatus;
   reason?: string;
+  /** Solo al pedir ANULADO: lo que retiene la empresa de lo pagado (COP). */
+  retainedAmount?: number;
 }
 
 export interface ApproveStatusChangeRequestDto {

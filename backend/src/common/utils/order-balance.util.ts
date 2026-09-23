@@ -110,6 +110,29 @@ export function computeAvailableOverpayment(
 }
 
 /**
+ * Lo máximo que la empresa puede retener al anular una orden.
+ *
+ * Anular marca como anulada toda la venta menos lo retenido
+ * (`reversedAmount = total - retenido`), así que lo pagado que no se retiene
+ * queda como saldo a favor. El tope es lo que el cliente pagó y todavía no usó
+ * como saldo en otras órdenes —retener más dejaría una deuda en una OP que ya no
+ * existe— sin pasar de lo que la venta aún vale tras devoluciones anteriores.
+ *
+ * El frontend repite esta fórmula en el diálogo de anulación
+ * (`features/orders/utils/annulment.ts`): si cambias una, cambia la otra.
+ */
+export function computeMaxRetainableOnAnnul(
+  input: Required<OrderBalanceInput>,
+): Prisma.Decimal {
+  const liveSale = toDecimal(input.total).sub(toDecimal(input.reversedAmount));
+  const unusedPaid = toDecimal(input.paidAmount).sub(
+    toDecimal(input.appliedCreditAmount),
+  );
+  const max = Prisma.Decimal.min(liveSale, unusedPaid);
+  return max.greaterThan(0) ? max : new Prisma.Decimal(0);
+}
+
+/**
  * Porción de venta anulada llevada a la base comisionable (`subtotal - descuento`).
  *
  * `reversedAmount` está en pesos con IVA y con el redondeo comercial del total,

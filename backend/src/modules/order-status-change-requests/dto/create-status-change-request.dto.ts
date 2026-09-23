@@ -1,5 +1,12 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsEnum, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import {
+  IsEnum,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Min,
+} from 'class-validator';
 import { OrderStatus } from '../../../generated/prisma';
 
 export class CreateStatusChangeRequestDto {
@@ -37,4 +44,15 @@ export class CreateStatusChangeRequestDto {
   @IsOptional()
   @IsString()
   reason?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Solo al solicitar ANULADO: valor de lo pagado que retiene la empresa ' +
+      '(COP). El resto queda como saldo a favor del cliente. Ausente = 0.',
+    example: 150000,
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  retainedAmount?: number;
 }

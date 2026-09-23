@@ -51,7 +51,10 @@ export function buildLoggerConfig(): Params {
           username: process.env.LOKI_USER,
           password: process.env.LOKI_API_KEY,
         },
-        labels: { app: 'backoffice-backend', env },
+        // Etiqueta propia del fork: High Solutions usa 'backoffice-backend'.
+        // Si las dos empresas empujan al mismo Grafana con la misma etiqueta,
+        // sus logs caen en el mismo stream y no hay forma de separarlos.
+        labels: { app: 'zoom-backend', env },
         batching: true,
         interval: 5,
       },
@@ -81,7 +84,7 @@ export function buildLoggerConfig(): Params {
       genReqId: (req: IncomingMessage) =>
         (req.headers['x-request-id'] as string) || randomUUID(),
       // Etiqueta base para todos los logs
-      base: { app: 'backoffice-backend', env },
+      base: { app: 'zoom-backend', env },
       // Enriquecer cada log con el contexto de auditoría del request
       customProps: () => {
         const { userId, ipAddress, userAgent } = getAuditContext();

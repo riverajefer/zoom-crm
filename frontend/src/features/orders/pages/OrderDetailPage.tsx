@@ -110,6 +110,8 @@ import { EditRequestsList } from '../components/EditRequestsList';
 import VoidPaymentDialog from '../components/VoidPaymentDialog';
 import { AdvancePaymentApprovalBadge } from '../components/AdvancePaymentApprovalBadge';
 import { StatusChangeAuthRequestDialog } from '../components/StatusChangeAuthRequestDialog';
+import { AnnulOrderDialog } from '../components/AnnulOrderDialog';
+import { getAnnulmentAmounts } from '../utils/annulment';
 import { OrderChangeHistoryTab } from '../components/OrderChangeHistoryTab';
 import { OrderAuthHistory } from '../components/OrderAuthHistory';
 import { ordersApi } from '../../../api/orders.api';
@@ -309,6 +311,7 @@ export const OrderDetailPage: React.FC = () => {
   const [invoiceLoading, setInvoiceLoading] = useState(false);
   const [statusAuthDialogOpen, setStatusAuthDialogOpen] = useState(false);
   const [pendingStatus, setPendingStatus] = useState<OrderStatus | null>(null);
+  const [annulDialogOpen, setAnnulDialogOpen] = useState(false);
 
   // ── Cola de aprobación ("revisar y siguiente") ────────────────────────────
   // Las bandejas de Edición de Orden y Propiedad Cliente no tienen botón de
@@ -484,6 +487,7 @@ export const OrderDetailPage: React.FC = () => {
   }
 
   const isAnulado = order.status === 'ANULADO';
+  const annulmentAmounts = getAnnulmentAmounts(order);
   const canEdit =
     !isAnulado &&
     [
@@ -555,6 +559,19 @@ export const OrderDetailPage: React.FC = () => {
   };
 
   const handleChangeStatus = async (newStatus: OrderStatus) => {
+    // Con pagos, el admin decide antes de anular cuánto retiene la empresa. Quien
+    // necesita autorización lo decide en la solicitud: su intento cae en el 403
+    // de abajo, o anula con el valor que ya le aprobaron.
+    if (
+      newStatus === 'ANULADO' &&
+      isAdmin &&
+      annulmentAmounts.unusedPaid > 0
+    ) {
+      handleMenuClose();
+      setAnnulDialogOpen(true);
+      return;
+    }
+
     try {
       await updateStatusMutation.mutateAsync(newStatus);
       handleMenuClose();
@@ -600,7 +617,7 @@ export const OrderDetailPage: React.FC = () => {
       const message = [
         `Hola ${order.client.name},`,
         ``,
-        `Adjunto encontrará la Orden de Pedido *${order.orderNumber}* de High Solutions.`,
+        `Adjunto encontrará la Orden de Pedido *${order.orderNumber}* de Zoom Publicidad.`,
         ``,
         `*Resumen:*`,
         `• Total: ${totalFormatted}`,
@@ -962,10 +979,12 @@ export const OrderDetailPage: React.FC = () => {
   // devolverse anulando parte de la venta (el trabajo no cumplió, no se
   // entregó, se fue la luz). Lo único que la impide es que no haya nada que
   // devolver —ni excedente ni abono— o que la orden ya esté cerrada.
+  // Una OP anulada solo devuelve su saldo a favor: su venta ya se anuló.
   const canCreateRefund =
-    !isAnulado &&
     !isReturned &&
-    (hasOverpayment || (netPaidAmount > 0 && pendingSaleValue > 0)) &&
+    (isAnulado
+      ? hasOverpayment
+      : hasOverpayment || (netPaidAmount > 0 && pendingSaleValue > 0)) &&
     !hasPendingRefund &&
     permissions.includes('create_refund_requests');
 
@@ -1029,6 +1048,8 @@ export const OrderDetailPage: React.FC = () => {
           <strong>Orden Anulada.</strong> Esta orden ha sido anulada
           definitivamente. No se pueden realizar modificaciones, pagos ni
           cambios de estado.
+          {hasOverpayment &&
+            ' Lo que pagó el cliente quedó como saldo a favor: puede usarlo en otras órdenes o pedir su devolución.'}
         </Alert>
       )}
 
@@ -1121,7 +1142,7 @@ export const OrderDetailPage: React.FC = () => {
           esta orden y el dinero fue devuelto al cliente. No admite más cambios.
         </Alert>
       )}
-      {reversedAmount > 0 && !isReturned && (
+      {reversedAmount > 0 && !isReturned && !isAnulado && (
         <Alert severity='warning' sx={{ mt: 2 }}>
           <strong>Devolución parcial.</strong> Se anularon{' '}
           {formatCurrency(reversedAmount.toString())} de esta orden. Su valor
@@ -3478,6 +3499,7 @@ export const OrderDetailPage: React.FC = () => {
         orderNumber={order.orderNumber}
         maxAmount={overpayment}
         pendingSaleValue={pendingSaleValue}
+        saleAlreadyAnnulled={isAnulado}
         paidAmount={netPaidAmount}
         currentBalance={pendingAdvance.effectiveBalance}
       />
@@ -3645,6 +3667,18 @@ export const OrderDetailPage: React.FC = () => {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Dialog: Anular con pagos (admin) */}
+      <AnnulOrderDialog
+        open={annulDialogOpen}
+        onClose={() => setAnnulDialogOpen(false)}
+        orderNumber={order.orderNumber}
+        amounts={annulmentAmounts}
+        loading={updateStatusMutation.isPending}
+        onConfirm={(retainedAmount) =>
+          updateStatusMutation.mutateAsync({ status: 'ANULADO', retainedAmount })
+        }
+      />
 
       {/* Dialog: Solicitar Autorización de Cambio de Estado */}
       {statusAuthDialogOpen && pendingStatus && order && (

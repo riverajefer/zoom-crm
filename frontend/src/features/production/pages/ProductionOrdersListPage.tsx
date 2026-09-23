@@ -50,10 +50,14 @@ const ProductionOrdersListPage: React.FC = () => {
 
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [search, setSearch] = useState('');
+  // El backend pagina esta lista (20 por defecto), así que la paginación tiene
+  // que viajar en la petición: si no, la grilla solo pagina la primera página.
+  const [pagination, setPagination] = useState({ page: 1, limit: 20 });
 
   const ordersQuery = useProductionOrders({
     ...(statusFilter ? { status: statusFilter as ProductionOrderStatus } : {}),
     ...(search ? { search } : {}),
+    ...pagination,
   });
 
   const orders: ProductionOrderSummary[] = (ordersQuery.data as any)?.data ?? ordersQuery.data ?? [];
@@ -138,7 +142,10 @@ const ProductionOrdersListPage: React.FC = () => {
           select
           label="Estado"
           value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
+          onChange={(e) => {
+            setStatusFilter(e.target.value);
+            setPagination((prev) => ({ ...prev, page: 1 }));
+          }}
           size="small"
           sx={{ width: 200 }}
         >
@@ -151,7 +158,10 @@ const ProductionOrdersListPage: React.FC = () => {
         <TextField
           label="Buscar por código o plantilla"
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => {
+            setSearch(e.target.value);
+            setPagination((prev) => ({ ...prev, page: 1 }));
+          }}
           size="small"
           sx={{ width: 280 }}
         />
@@ -161,7 +171,7 @@ const ProductionOrdersListPage: React.FC = () => {
 
       <DataTable
         density="compact"
-        pageSize={20}
+        pageSize={pagination.limit}
         pageSizeOptions={[20, 50, 100]}
         rows={orders}
         columns={columns}
@@ -170,6 +180,11 @@ const ProductionOrdersListPage: React.FC = () => {
           navigate(ROUTES.PRODUCTION_ORDERS_DETAIL.replace(':id', params.row.id))
         }
         getRowId={(row) => row.id}
+        rowCount={(ordersQuery.data as any)?.meta?.total ?? 0}
+        currentPage={pagination.page - 1}
+        onPaginationModelChange={(model) =>
+          setPagination({ page: model.page + 1, limit: model.pageSize })
+        }
       />
     </Box>
   );

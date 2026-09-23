@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { quotesApi } from '../../../api/quotes.api';
 import { FilterQuotesDto, CreateQuoteDto, UpdateQuoteDto } from '../../../types/quote.types';
 import { enqueueSnackbar } from 'notistack';
@@ -9,6 +9,9 @@ export const useQuotes = (filters?: FilterQuotesDto) => {
   const quotesQuery = useQuery({
     queryKey: ['quotes', filters],
     queryFn: () => quotesApi.findAll(filters),
+    // Sin esto `data` queda undefined al cambiar de página, `rowCount` cae a 0
+    // y la grilla rebota a la página 1.
+    placeholderData: keepPreviousData,
   });
 
   const quoteQuery = (id: string) =>

@@ -170,9 +170,14 @@ export class RefundRequestsService
       throw new NotFoundException(`Orden con id ${dto.orderId} no encontrada`);
     }
 
-    if (order.status === OrderStatus.ANULADO) {
+    // Una OP anulada sí admite devolución de su saldo a favor (lo que la empresa
+    // no retuvo al anular), pero no anular más venta: la venta ya se anuló.
+    if (
+      order.status === OrderStatus.ANULADO &&
+      new Prisma.Decimal(dto.reversedAmount ?? 0).greaterThan(0)
+    ) {
       throw new BadRequestException(
-        'La orden está anulada: no admite devoluciones',
+        'La orden está anulada: su venta ya se anuló y solo se puede devolver el saldo a favor',
       );
     }
 
@@ -539,7 +544,10 @@ export class RefundRequestsService
       // La OP solo cambia de estado cuando ya no queda nada de venta en pie.
       // Una devolución parcial de un trabajo entregado a medias conserva su
       // estado: marcarla como devuelta borraría que la entrega sí ocurrió.
+      // Una OP anulada ya tiene la venta anulada entera (salvo lo retenido):
+      // devolverle su saldo a favor no la convierte en «Devuelta».
       const isTotalReversal =
+        order.status !== OrderStatus.ANULADO &&
         newReversedAmount.greaterThanOrEqualTo(order.total) &&
         new Prisma.Decimal(order.total).greaterThan(0);
 
@@ -633,9 +641,15 @@ export class RefundRequestsService
   }): void {
     const { order } = request;
 
-    if (order.status === OrderStatus.ANULADO) {
+    // Si la OP se anuló después de pedir la devolución, el dinero sigue
+    // disponible como saldo a favor, pero la parte de venta que la solicitud
+    // pensaba anular ya se anuló con la orden.
+    if (
+      order.status === OrderStatus.ANULADO &&
+      new Prisma.Decimal(request.reversedAmount ?? 0).greaterThan(0)
+    ) {
       throw new BadRequestException(
-        'La orden fue anulada: la devolución ya no aplica',
+        'La orden fue anulada después de pedir la devolución: crea una nueva solicitud solo por el saldo a favor',
       );
     }
 

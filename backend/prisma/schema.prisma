@@ -1070,6 +1070,11 @@ model OrderStatusChangeRequest {
   reason          String?
   status          EditRequestStatus @default(PENDING)
 
+  // Solo en anulaciones: lo que la empresa se queda de lo pagado. El resto queda
+  // como saldo a favor del cliente. Viaja en la solicitud para que el admin lo
+  // vea antes de aprobar; null en solicitudes anteriores = se reconoce todo.
+  retainedAmount Decimal? @map("retained_amount")
+
   // Aprobación/rechazo
   reviewedById String?   @map("reviewed_by_id")
   reviewedAt   DateTime? @map("reviewed_at")

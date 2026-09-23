@@ -11,7 +11,7 @@ import {
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateCompanyDto {
-  @ApiProperty({ example: 'High Solutions S.A.S', description: 'Nombre de la compañía' })
+  @ApiProperty({ example: 'Zoom Publicidad S.A.S', description: 'Nombre de la compañía' })
   @IsString()
   @IsNotEmpty()
   name: string;

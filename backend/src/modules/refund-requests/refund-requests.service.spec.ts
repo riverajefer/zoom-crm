@@ -210,6 +210,46 @@ describe('RefundRequestsService', () => {
       ).rejects.toThrow(BadRequestException);
     });
 
+    // Anular deja lo pagado (menos lo retenido) como saldo a favor; el cliente
+    // puede pedir que se lo devuelvan.
+    describe('orden anulada', () => {
+      // OP de 500 pagada completa y anulada sin retención: toda la venta anulada.
+      const anulada = () => ({
+        id: orderId,
+        orderNumber: 'OP-1',
+        status: OrderStatus.ANULADO,
+        total: '500',
+        paidAmount: '500',
+        appliedCreditAmount: '0',
+        reversedAmount: '500',
+        balance: '-500',
+      });
+
+      it('admite devolver su saldo a favor', async () => {
+        prisma.order.findUnique.mockResolvedValue(anulada());
+        prisma.refundRequest.findFirst.mockResolvedValue(null);
+        prisma.refundRequest.create.mockResolvedValue({
+          id: 'req-1',
+          orderId,
+          status: EditRequestStatus.PENDING,
+          order: { orderNumber: 'OP-1' },
+        });
+
+        await service.create(userId, { ...baseDto, refundAmount: 500 });
+
+        expect(prisma.refundRequest.create).toHaveBeenCalled();
+      });
+
+      it('no admite anular más venta: ya se anuló con la orden', async () => {
+        prisma.order.findUnique.mockResolvedValue(anulada());
+
+        await expect(
+          service.create(userId, { ...baseDto, reversedAmount: 100 }),
+        ).rejects.toThrow(/solo se puede devolver el saldo a favor/);
+        expect(prisma.refundRequest.create).not.toHaveBeenCalled();
+      });
+    });
+
     it('creates PENDING request and notifies reviewers', async () => {
       prisma.order.findUnique.mockResolvedValue({
         id: orderId,
@@ -543,8 +583,11 @@ describe('RefundRequestsService', () => {
       });
 
       it('vuelve a validar contra la OP releída', async () => {
-        prisma.refundRequest.findFirst.mockResolvedValue(aprobada());
-        // Mientras tanto la anularon.
+        // La solicitud anulaba parte de la venta y mientras tanto anularon la
+        // OP: esa parte ya se anuló con la orden.
+        prisma.refundRequest.findFirst.mockResolvedValue(
+          aprobada({ reversedAmount: '200' }),
+        );
         prisma.order.findUnique.mockResolvedValue(
           orden({ status: OrderStatus.ANULADO }),
         );
@@ -655,6 +698,28 @@ describe('RefundRequestsService', () => {
 
       const { data } = prisma.order.update.mock.calls[0][0];
       expect(data.status).toBe(OrderStatus.RETURNED);
+      expect(Number(data.balance.toString())).toBe(0);
+    });
+
+    // Su venta ya figura anulada entera: sin este cuidado, pagarle el saldo a
+    // favor la sacaba de «Anulada» y la pasaba a «Devolución de dinero».
+    it('devolver el saldo de una OP anulada no le cambia el estado', async () => {
+      const ordenAnulada = orden({
+        status: OrderStatus.ANULADO,
+        paidAmount: '500',
+        reversedAmount: '500',
+        balance: '-500',
+      });
+      prisma.refundRequest.findFirst.mockResolvedValue(
+        aprobada({ refundAmount: '500', order: ordenAnulada }),
+      );
+      prisma.order.findUnique.mockResolvedValue(ordenAnulada);
+
+      await service.execute(requestId, executorId);
+
+      const { data } = prisma.order.update.mock.calls[0][0];
+      expect(data.status).toBeUndefined();
+      expect(Number(data.paidAmount.toString())).toBe(0);
       expect(Number(data.balance.toString())).toBe(0);
     });
 

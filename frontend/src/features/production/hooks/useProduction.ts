@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, keepPreviousData, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSnackbar } from 'notistack';
 import { productionApi } from '../../../api/production.api';
 import type { ProductionOrderStatus, UpdateFieldSchemaPayload, CreateStepDefinitionDto } from '../../../types/production.types';
@@ -95,6 +95,9 @@ export function useProductionOrders(filters?: {
   return useQuery({
     queryKey: QUERY_KEYS.ORDERS(filters),
     queryFn: () => productionApi.getOrders(filters),
+    // Sin esto `data` queda undefined al cambiar de página, `rowCount` cae a 0
+    // y la grilla rebota a la página 1.
+    placeholderData: keepPreviousData,
   });
 }
 

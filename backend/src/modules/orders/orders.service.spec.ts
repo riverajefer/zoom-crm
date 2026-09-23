@@ -69,6 +69,7 @@ const mockStorageService = {
 const mockStatusChangeRequestsService = {
   requiresAuthorization: jest.fn(),
   hasApprovedRequest: jest.fn(),
+  findApprovedRequest: jest.fn(),
   consumeApprovedRequest: jest.fn(),
   closePendingRequestsForReachedStatus: jest.fn().mockResolvedValue(0),
 };
@@ -221,6 +222,20 @@ const mockConfirmedOrder = buildOrder({ status: OrderStatus.CONFIRMED });
 // ─────────────────────────────────────────────────────────────────────────────
 // Test Suite
 // ─────────────────────────────────────────────────────────────────────────────
+
+/** Lo que `annulOrder` lee de la OP bloqueada. */
+const annulMoney = (overrides: Record<string, string> = {}) => {
+  const money = {
+    total: '119',
+    paidAmount: '0',
+    appliedCreditAmount: '0',
+    reversedAmount: '0',
+    ...overrides,
+  };
+  return Object.fromEntries(
+    Object.entries(money).map(([k, v]) => [k, new Prisma.Decimal(v)]),
+  );
+};
 
 describe('OrdersService', () => {
   let service: OrdersService;
@@ -1908,14 +1923,19 @@ describe('OrdersService', () => {
       mockOrdersRepository.findById
         .mockResolvedValueOnce(draftOrder)
         .mockResolvedValueOnce(anuladoOrder);
-      mockOrdersRepository.updateStatus.mockResolvedValue(anuladoOrder);
+      mockPrisma.order.findUnique.mockResolvedValue(annulMoney());
       // Admin → requiresAuthorization retorna { required: false }
       mockStatusChangeRequestsService.requiresAuthorization.mockResolvedValue({ required: false });
 
       const result = await service.updateStatus('order-1', OrderStatus.ANULADO, 'user-1');
 
       expect(result.status).toBe(OrderStatus.ANULADO);
-      expect(mockOrdersRepository.updateStatus).toHaveBeenCalledWith('order-1', OrderStatus.ANULADO);
+      expect(mockPrisma.order.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'order-1' },
+          data: expect.objectContaining({ status: OrderStatus.ANULADO }),
+        }),
+      );
       expect(mockStatusChangeRequestsService.requiresAuthorization).toHaveBeenCalledWith(
         'order-1', OrderStatus.ANULADO, 'user-1',
       );
@@ -1937,7 +1957,7 @@ describe('OrdersService', () => {
         service.updateStatus('order-1', OrderStatus.ANULADO, 'user-1'),
       ).rejects.toThrow(BadRequestException);
       expect(mockStatusChangeRequestsService.requiresAuthorization).not.toHaveBeenCalled();
-      expect(mockOrdersRepository.updateStatus).not.toHaveBeenCalled();
+      expect(mockPrisma.order.update).not.toHaveBeenCalled();
     });
 
     it('al anular cancela el descuento por nómina que seguía sin aplicar', async () => {
@@ -1946,7 +1966,7 @@ describe('OrdersService', () => {
       mockOrdersRepository.findById
         .mockResolvedValueOnce(draftOrder)
         .mockResolvedValueOnce(anuladoOrder);
-      mockOrdersRepository.updateStatus.mockResolvedValue(anuladoOrder);
+      mockPrisma.order.findUnique.mockResolvedValue(annulMoney());
       mockStatusChangeRequestsService.requiresAuthorization.mockResolvedValue({ required: false });
 
       await service.updateStatus('order-1', OrderStatus.ANULADO, 'user-1');
@@ -1964,12 +1984,12 @@ describe('OrdersService', () => {
         required: true,
         reason: 'Anular una orden requiere aprobación administrativa',
       });
-      mockStatusChangeRequestsService.hasApprovedRequest.mockResolvedValue(false);
+      mockStatusChangeRequestsService.findApprovedRequest.mockResolvedValue(null);
 
       await expect(
         service.updateStatus('order-1', OrderStatus.ANULADO, 'user-1'),
       ).rejects.toThrow(ForbiddenException);
-      expect(mockOrdersRepository.updateStatus).not.toHaveBeenCalled();
+      expect(mockPrisma.order.update).not.toHaveBeenCalled();
     });
 
     it('should allow non-admin ANULADO when approved request exists', async () => {
@@ -1978,12 +1998,15 @@ describe('OrdersService', () => {
       mockOrdersRepository.findById
         .mockResolvedValueOnce(draftOrder)
         .mockResolvedValueOnce(anuladoOrder);
-      mockOrdersRepository.updateStatus.mockResolvedValue(anuladoOrder);
+      mockPrisma.order.findUnique.mockResolvedValue(annulMoney());
       mockStatusChangeRequestsService.requiresAuthorization.mockResolvedValue({
         required: true,
         reason: 'Anular una orden requiere aprobación administrativa',
       });
-      mockStatusChangeRequestsService.hasApprovedRequest.mockResolvedValue(true);
+      mockStatusChangeRequestsService.findApprovedRequest.mockResolvedValue({
+        id: 'req-1',
+        retainedAmount: null,
+      });
       mockStatusChangeRequestsService.consumeApprovedRequest.mockResolvedValue(undefined);
 
       const result = await service.updateStatus('order-1', OrderStatus.ANULADO, 'user-1');
@@ -2000,12 +2023,109 @@ describe('OrdersService', () => {
       mockOrdersRepository.findById
         .mockResolvedValueOnce(confirmedOrder)
         .mockResolvedValueOnce(anuladoOrder);
-      mockOrdersRepository.updateStatus.mockResolvedValue(anuladoOrder);
+      mockPrisma.order.findUnique.mockResolvedValue(annulMoney());
       mockStatusChangeRequestsService.requiresAuthorization.mockResolvedValue({ required: false });
 
       const result = await service.updateStatus('order-1', OrderStatus.ANULADO, 'user-1');
 
       expect(result.status).toBe(OrderStatus.ANULADO);
+    });
+
+    describe('dinero al anular', () => {
+      // OP de 500.000 pagada completa y en producción.
+      const paidMoney = () =>
+        annulMoney({ total: '500000', paidAmount: '500000' });
+
+      const annulWith = async (
+        options: { retainedAmount?: number } = {},
+      ) => {
+        mockOrdersRepository.findById
+          .mockResolvedValueOnce(buildOrder({ status: OrderStatus.IN_PRODUCTION }))
+          .mockResolvedValueOnce(buildOrder({ status: OrderStatus.ANULADO }));
+        return service.updateStatus('order-1', OrderStatus.ANULADO, 'admin-1', options);
+      };
+
+      const writtenData = () => mockPrisma.order.update.mock.calls[0][0].data;
+
+      beforeEach(() => {
+        mockStatusChangeRequestsService.requiresAuthorization.mockResolvedValue({
+          required: false,
+        });
+      });
+
+      // Un caso que falla antes de releer la OP deja sin consumir el segundo
+      // `findById`, y `clearAllMocks` no vacía esa cola: contaminaría el siguiente.
+      afterEach(() => mockOrdersRepository.findById.mockReset());
+
+      it('sin retención, todo lo pagado queda como saldo a favor', async () => {
+        mockPrisma.order.findUnique.mockResolvedValue(paidMoney());
+
+        await annulWith();
+
+        expect(Number(writtenData().reversedAmount)).toBe(500000);
+        expect(Number(writtenData().balance)).toBe(-500000);
+      });
+
+      it('lo retenido se descuenta del saldo a favor', async () => {
+        mockPrisma.order.findUnique.mockResolvedValue(paidMoney());
+
+        await annulWith({ retainedAmount: 150000 });
+
+        expect(Number(writtenData().reversedAmount)).toBe(350000);
+        expect(Number(writtenData().balance)).toBe(-350000);
+      });
+
+      // El caso de OP-2026-1053: sobrepagada y con parte del excedente ya usado.
+      it('no devuelve dos veces lo que ya se usó en otras órdenes', async () => {
+        mockPrisma.order.findUnique.mockResolvedValue(
+          annulMoney({
+            total: '3855000',
+            paidAmount: '4306700',
+            appliedCreditAmount: '345400',
+          }),
+        );
+
+        await annulWith();
+
+        expect(Number(writtenData().balance)).toBe(-3961300);
+      });
+
+      it('rechaza retener más de lo pagado y no anula', async () => {
+        mockPrisma.order.findUnique.mockResolvedValue(
+          annulMoney({ total: '500000', paidAmount: '200000' }),
+        );
+
+        await expect(annulWith({ retainedAmount: 250000 })).rejects.toThrow(
+          BadRequestException,
+        );
+        expect(mockPrisma.order.update).not.toHaveBeenCalled();
+      });
+
+      it('con autorización usa lo aprobado, no lo que llegue en la petición', async () => {
+        mockPrisma.order.findUnique.mockResolvedValue(paidMoney());
+        mockStatusChangeRequestsService.requiresAuthorization.mockResolvedValue({
+          required: true,
+          reason: 'Anular una orden requiere aprobación administrativa',
+        });
+        mockStatusChangeRequestsService.findApprovedRequest.mockResolvedValue({
+          id: 'req-1',
+          retainedAmount: new Prisma.Decimal(100000),
+        });
+
+        await annulWith({ retainedAmount: 400000 });
+
+        expect(Number(writtenData().balance)).toBe(-400000);
+      });
+
+      it('bloquea la OP antes de leer lo pagado', async () => {
+        mockPrisma.order.findUnique.mockResolvedValue(paidMoney());
+
+        await annulWith();
+
+        const lock = mockPrisma.$queryRaw.mock.invocationCallOrder[0];
+        const read = mockPrisma.order.findUnique.mock.invocationCallOrder[0];
+        expect(lock).toBeLessThan(read);
+      });
     });
 
     it('should throw BadRequestException when trying to ANULAR from DELIVERED', async () => {

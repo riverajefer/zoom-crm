@@ -84,7 +84,7 @@ export function getApiUrl(): string {
  * Get the app name from environment variables
  */
 export function getAppName(): string {
-  return import.meta.env.VITE_APP_NAME || 'High Solutions Backoffice';
+  return import.meta.env.VITE_APP_NAME || 'Zoom Publicidad CRM';
 }
 
 /**

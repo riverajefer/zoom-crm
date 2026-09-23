@@ -25,7 +25,9 @@ import {
   EditRequestStatus,
   NotificationType,
   OrderStatus,
+  Prisma,
 } from '../../generated/prisma';
+import { computeMaxRetainableOnAnnul } from '../../common/utils/order-balance.util';
 
 const ORDER_STATUS_LABELS: Record<string, string> = {
   DRAFT: 'Borrador',
@@ -39,6 +41,9 @@ const ORDER_STATUS_LABELS: Record<string, string> = {
   RETURNED: 'Devuelta',
   ANULADO: 'Anulada',
 };
+
+const formatCop = (amount: Prisma.Decimal): string =>
+  `$${Number(amount).toLocaleString('es-CO')}`;
 
 @Injectable()
 export class OrderStatusChangeRequestsService implements OnModuleInit, ApprovalRequestHandler {
@@ -149,6 +154,13 @@ export class OrderStatusChangeRequestsService implements OnModuleInit, ApprovalR
       );
     }
 
+    // 3b. En una anulación con dinero, lo que retiene la empresa se decide al
+    // pedirla, para que el admin lo apruebe junto con la anulación.
+    const annulment =
+      dto.requestedStatus === OrderStatus.ANULADO
+        ? this.resolveAnnulmentAmounts(order, dto.retainedAmount)
+        : null;
+
     // 4. Validar que no hay solicitud PENDING del mismo usuario para el mismo cambio
     const existingRequest =
       await this.prisma.orderStatusChangeRequest.findFirst({
@@ -198,6 +210,7 @@ export class OrderStatusChangeRequestsService implements OnModuleInit, ApprovalR
             currentStatus: dto.currentStatus,
             requestedStatus: dto.requestedStatus,
             reason: dto.reason,
+            retainedAmount: annulment?.retained ?? null,
             status: EditRequestStatus.PENDING,
           },
           include,
@@ -225,7 +238,7 @@ export class OrderStatusChangeRequestsService implements OnModuleInit, ApprovalR
     await this.notificationsService.notifyAllAdmins({
       type: NotificationType.STATUS_CHANGE_REQUEST_PENDING,
       title: 'Nueva solicitud de cambio de estado',
-      message: `${request.requestedBy.firstName || request.requestedBy.email} solicita cambiar la orden ${request.order.orderNumber} de ${dto.currentStatus} a ${dto.requestedStatus}`,
+      message: `${request.requestedBy.firstName || request.requestedBy.email} solicita cambiar la orden ${request.order.orderNumber} de ${dto.currentStatus} a ${dto.requestedStatus}${annulment?.summary ? `. ${annulment.summary}` : ''}`,
       relatedId: request.id,
       relatedType: 'OrderStatusChangeRequest',
     });
@@ -241,11 +254,47 @@ export class OrderStatusChangeRequestsService implements OnModuleInit, ApprovalR
       request.id,
       requesterName,
       requesterRole,
-      `cambiar el estado de la Orden ${request.order.orderNumber} de ${ORDER_STATUS_LABELS[dto.currentStatus] || dto.currentStatus} a ${ORDER_STATUS_LABELS[dto.requestedStatus] || dto.requestedStatus}`,
+      `cambiar el estado de la Orden ${request.order.orderNumber} de ${ORDER_STATUS_LABELS[dto.currentStatus] || dto.currentStatus} a ${ORDER_STATUS_LABELS[dto.requestedStatus] || dto.requestedStatus}${annulment?.summary ? ` (${annulment.summary})` : ''}`,
       dto.reason || 'Sin motivo especificado',
     );
 
     return request;
+  }
+
+  /**
+   * Valida lo que retiene la empresa al anular y arma el resumen que ve el admin.
+   *
+   * Sin dinero en la orden no hay nada que decidir: se guarda 0 y no se muestra
+   * resumen. El tope se vuelve a validar al ejecutar la anulación, con la OP
+   * bloqueada, porque entre pedir y ejecutar pueden entrar pagos o devoluciones.
+   */
+  private resolveAnnulmentAmounts(
+    order: {
+      total: Prisma.Decimal;
+      paidAmount: Prisma.Decimal;
+      appliedCreditAmount: Prisma.Decimal;
+      reversedAmount: Prisma.Decimal;
+    },
+    retainedAmount: number | undefined,
+  ): { retained: Prisma.Decimal; summary: string | null } {
+    const max = computeMaxRetainableOnAnnul(order);
+    const retained = new Prisma.Decimal(retainedAmount ?? 0);
+
+    if (retained.greaterThan(max)) {
+      throw new BadRequestException(
+        `La empresa no puede retener ${formatCop(retained)}: el máximo es ${formatCop(max)}, lo que el cliente pagó y no ha usado en otras órdenes`,
+      );
+    }
+
+    const unusedPaid = new Prisma.Decimal(order.paidAmount).sub(
+      order.appliedCreditAmount,
+    );
+    if (unusedPaid.lessThanOrEqualTo(0)) return { retained, summary: null };
+
+    return {
+      retained,
+      summary: `La empresa retiene ${formatCop(retained)} y quedan ${formatCop(unusedPaid.sub(retained))} como saldo a favor del cliente`,
+    };
   }
 
   /**
@@ -463,17 +512,29 @@ export class OrderStatusChangeRequestsService implements OnModuleInit, ApprovalR
     userId: string,
     newStatus: OrderStatus,
   ): Promise<boolean> {
-    const approvedRequest =
-      await this.prisma.orderStatusChangeRequest.findFirst({
-        where: {
-          orderId,
-          requestedById: userId,
-          requestedStatus: newStatus,
-          status: EditRequestStatus.APPROVED,
-        },
-      });
+    return !!(await this.findApprovedRequest(orderId, userId, newStatus));
+  }
 
-    return !!approvedRequest;
+  /**
+   * La solicitud aprobada más reciente del usuario para ese cambio. Al anular,
+   * de aquí sale lo que retiene la empresa: vale lo que aprobó el admin, no lo
+   * que mande el frontend al ejecutar.
+   */
+  async findApprovedRequest(
+    orderId: string,
+    userId: string,
+    newStatus: OrderStatus,
+  ) {
+    return this.prisma.orderStatusChangeRequest.findFirst({
+      where: {
+        orderId,
+        requestedById: userId,
+        requestedStatus: newStatus,
+        status: EditRequestStatus.APPROVED,
+      },
+      orderBy: { reviewedAt: 'desc' },
+      select: { id: true, retainedAmount: true },
+    });
   }
 
   /**

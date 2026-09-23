@@ -58,6 +58,7 @@ import {
   computeNetPaidAmount,
   sumActivePayments,
   computeOrderBalance,
+  computeMaxRetainableOnAnnul,
 } from '../../common/utils/order-balance.util';
 import {
   paymentMovesCash,
@@ -1678,7 +1679,12 @@ export class OrdersService {
     return updatedOrder;
   }
 
-  async updateStatus(id: string, status: OrderStatus, userId: string) {
+  async updateStatus(
+    id: string,
+    status: OrderStatus,
+    userId: string,
+    options: { retainedAmount?: number } = {},
+  ) {
     const order = await this.findOne(id);
 
     // No-op si el estado es el mismo
@@ -1705,14 +1711,19 @@ export class OrdersService {
         userId,
       );
 
+      // Lo que retiene la empresa de lo pagado. Quien anula con autorización usa
+      // el valor que aprobó el admin en su solicitud; el que llegue en la
+      // petición solo lo decide quien anula sin pedir permiso (admin).
+      let retainedAmount = new Prisma.Decimal(options.retainedAmount ?? 0);
+
       if (authCheck.required) {
-        const hasApproval = await this.statusChangeRequestsService.hasApprovedRequest(
+        const approvedRequest = await this.statusChangeRequestsService.findApprovedRequest(
           id,
           userId,
           status,
         );
 
-        if (!hasApproval) {
+        if (!approvedRequest) {
           throw new ForbiddenException(
             `Este cambio de estado requiere autorización de un administrador. ` +
             `Razón: ${authCheck.reason}. ` +
@@ -1720,10 +1731,11 @@ export class OrdersService {
           );
         }
 
+        retainedAmount = new Prisma.Decimal(approvedRequest.retainedAmount ?? 0);
         await this.statusChangeRequestsService.consumeApprovedRequest(id, userId, status);
       }
 
-      await this.ordersRepository.updateStatus(id, status);
+      await this.annulOrder(id, retainedAmount);
 
       // La orden ya llegó al estado que se pedía, así que cualquier solicitud
       // pendiente que apuntara ahí dejó de tener algo que decidir. Sin esto se
@@ -3586,6 +3598,61 @@ export class OrdersService {
     });
 
     return { data, total, page, limit };
+  }
+
+  /**
+   * Anula la orden y deja como saldo a favor lo pagado que la empresa no retiene.
+   *
+   * Anular no toca pagos ni caja: marca como anulada toda la venta menos lo
+   * retenido (`reversedAmount = total - retenido`). Con eso el balance queda en
+   * `retenido - pagado + aplicado`, o sea el saldo a favor del cliente, y lo
+   * pueden usar el pago con saldo a favor y la devolución, que ya leen esa cifra.
+   * Lo pagado con saldo a favor también vuelve, como saldo en esta misma OP.
+   *
+   * Las OPs anuladas no entran en ventas, dashboard ni comisiones, así que
+   * `reversedAmount` no mueve ningún reporte. Lo retenido tampoco cuenta como
+   * venta (decisión del cliente, 2026-09-22).
+   */
+  private async annulOrder(id: string, retainedAmount: Prisma.Decimal) {
+    await this.prisma.$transaction(async (tx) => {
+      // El tope se valida con la OP bloqueada: entre la solicitud y la ejecución
+      // pudieron entrar pagos, devoluciones o usos del saldo. Ver `lockOrderForUpdate`.
+      await lockOrderForUpdate(tx, id);
+      const order = await tx.order.findUnique({
+        where: { id },
+        select: {
+          total: true,
+          paidAmount: true,
+          appliedCreditAmount: true,
+          reversedAmount: true,
+        },
+      });
+
+      if (!order) {
+        throw new NotFoundException(`Order with id ${id} not found`);
+      }
+
+      const maxRetainable = computeMaxRetainableOnAnnul(order);
+      if (retainedAmount.greaterThan(maxRetainable)) {
+        throw new BadRequestException(
+          `La empresa no puede retener $${Number(retainedAmount).toLocaleString('es-CO')}: ` +
+            `hoy el máximo es $${Number(maxRetainable).toLocaleString('es-CO')}, ` +
+            `lo que el cliente pagó y no ha usado en otras órdenes. ` +
+            `Si la solicitud ya fue aprobada, crea una nueva con el valor correcto.`,
+        );
+      }
+
+      const reversedAmount = new Prisma.Decimal(order.total).sub(retainedAmount);
+
+      await tx.order.update({
+        where: { id },
+        data: {
+          status: OrderStatus.ANULADO,
+          reversedAmount,
+          balance: computeOrderBalance({ ...order, reversedAmount }),
+        },
+      });
+    });
   }
 
   private assertNotAnulado(order: { status: string }, operation: string): void {

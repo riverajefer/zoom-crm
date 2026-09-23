@@ -83,10 +83,15 @@ describe('OrdersController', () => {
 
   describe('updateStatus', () => {
     it('should delegate to ordersService.updateStatus', async () => {
-      const dto = { status: 'APPROVED' } as any;
+      const dto = { status: 'ANULADO', retainedAmount: 150000 } as any;
       mockOrdersService.updateStatus.mockResolvedValue({ id: 'order-1' });
       await controller.updateStatus('order-1', dto, 'user-1');
-      expect(mockOrdersService.updateStatus).toHaveBeenCalledWith('order-1', 'APPROVED', 'user-1');
+      expect(mockOrdersService.updateStatus).toHaveBeenCalledWith(
+        'order-1',
+        'ANULADO',
+        'user-1',
+        { retainedAmount: 150000 },
+      );
     });
   });
 

@@ -1628,6 +1628,19 @@ export const StatusChangeRequestsPage: React.FC = () => {
       ),
     },
     {
+      // Solo en anulaciones con pagos: el resto de lo pagado queda como saldo a
+      // favor del cliente, así que el admin aprueba también esta cifra.
+      field: 'retainedAmount',
+      headerName: 'Retiene la empresa',
+      width: 160,
+      align: 'right',
+      headerAlign: 'right',
+      renderCell: (params) =>
+        params.row.requestedStatus === 'ANULADO' && params.value != null
+          ? new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(Number(params.value))
+          : '-',
+    },
+    {
       field: 'status',
       headerName: 'Estado Solicitud',
       width: 130,

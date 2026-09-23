@@ -1,9 +1,13 @@
+// TODO(zoom): faltan los datos de contacto reales de Zoom Publicidad.
+// Estos valores se imprimen en TODOS los PDF (OP, OT, cotizaciones y OG).
+// Los marcadores "PENDIENTE" son deliberados: se ven en QA y no dejan pasar
+// a producción los datos de otra empresa.
 export const COMPANY_INFO = {
-  name: 'High Solutions',
-  address: 'Cra 28 #10-18',
-  city: 'Bogotá D.C. / Colombia',
-  phones: ['305 451 8018', '304 484 8835'],
-  email: 'hsolutionssas@gmail.com',
+  name: 'Zoom Publicidad',
+  address: 'PENDIENTE: dirección',
+  city: 'PENDIENTE: ciudad',
+  phones: ['PENDIENTE: teléfono'],
+  email: 'PENDIENTE: email',
 } as const;
 
 export const PDF_COLORS = {

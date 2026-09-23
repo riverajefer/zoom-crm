@@ -130,7 +130,7 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuClick }) => {
               : 'none',
           }}
         >
-          High Solutions CRM
+          Zoom Publicidad CRM
         </Typography>
 
         <Box display="flex" alignItems="center" gap={2}>

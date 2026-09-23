@@ -1,2 +1,31 @@
+# Guardián de master.
+#
+# GitHub solo ofrece protección de ramas en repos privados con plan Pro, y
+# zoom-crm es privado en plan Free. Este hook hace el papel de esa protección:
+# rechaza el push directo a master para que los cambios entren por PR desde
+# develop. Producción despliega desde master, así que un push distraído aquí
+# va directo a los usuarios.
+#
+# Git entrega por stdin una línea por referencia empujada:
+#   <ref local> <sha local> <ref remota> <sha remoto>
+#
+# Emergencia real: git push --no-verify. Es deliberado que sea explícito.
+while read -r _local_ref _local_sha remote_ref _remote_sha; do
+  case "$remote_ref" in
+    refs/heads/master)
+      echo ""
+      echo "⛔ Push directo a master bloqueado."
+      echo ""
+      echo "   master despliega a PRODUCCIÓN. Los cambios entran por PR:"
+      echo "     git push origin develop"
+      echo "     gh pr create --base master --head develop"
+      echo ""
+      echo "   Si esto es una emergencia: git push --no-verify"
+      echo ""
+      exit 1
+      ;;
+  esac
+done
+
 echo "Validando build:staging antes de hacer push..."
 cd frontend && npm run build:staging

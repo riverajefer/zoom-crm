@@ -28,6 +28,24 @@ git cherry-pick <sha>
 - Cada cherry-pick traído se anota en la bitácora de la sección 4 con su `sha` de origen.
 - Un fix del núcleo descubierto **aquí** primero: arréglalo en High, y de allá lo traes. Así no se bifurca la lógica común.
 
+### Flujo de ramas (decidido 2026-09-22)
+
+| Salto | Cómo | Por qué |
+|---|---|---|
+| trabajo → `develop` | push directo | es la rama del día a día |
+| `develop` → `staging` | **fast-forward directo**, sin PR | es QA: cada cambio se despliega en pruebas al instante |
+| `staging` → `master` | **siempre por PR** | `master` despliega a producción; el hook de pre-push rechaza el push directo |
+
+```bash
+# develop → staging
+git checkout staging && git merge --ff-only develop && git push && git checkout develop
+
+# staging → master
+gh pr create --base master --head staging
+```
+
+El `--ff-only` es la red de seguridad del salto directo: si `staging` tuviera algo propio que `develop` no tiene (un hotfix hecho directo ahí), el comando **falla** en vez de crear un merge en silencio. Si falla, hay que traer ese cambio a `develop` primero y volver a intentarlo.
+
 ---
 
 ## 2. Decisiones tomadas

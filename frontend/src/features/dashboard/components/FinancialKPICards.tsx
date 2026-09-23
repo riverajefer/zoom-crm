@@ -35,10 +35,10 @@ const KPICard: React.FC<KPICardProps> = ({ title, value, prevValue, icon, color 
         height: '100%',
         borderRadius: '20px',
         border: '2px solid',
-        borderColor: (theme) => theme.palette.mode === 'dark' ? 'rgba(139,92,246,0.1)' : 'rgba(0,0,0,0.06)',
+        borderColor: (theme) => theme.palette.mode === 'dark' ? 'rgba(46, 167, 224,0.1)' : 'rgba(0,0,0,0.06)',
         background: (theme) =>
           theme.palette.mode === 'dark'
-            ? 'linear-gradient(145deg, rgba(26,26,46,0.6) 0%, rgba(22,33,62,1) 100%)'
+            ? 'linear-gradient(145deg, rgba(22, 24, 22,0.6) 0%, rgba(26, 28, 25,1) 100%)'
             : 'linear-gradient(145deg, rgba(255,255,255,0.9) 0%, rgba(241,245,249,0.8) 100%)',
         backdropFilter: 'blur(10px)',
         transition: 'all 0.3s ease',

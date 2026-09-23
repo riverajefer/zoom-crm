@@ -344,7 +344,7 @@ const ACTION_CONFIG: Record<string, {
     color: 'info',
     label: 'Actualización',
     icon: <EditIcon fontSize="small" />,
-    dotBg: '#2EB0C4',       // primary.main del tema
+    dotBg: '#A3D33C',       // primary.main del tema
   },
   DELETE: {
     color: 'error',

@@ -76,7 +76,7 @@ export const ComponentCard: React.FC<ComponentCardProps> = ({
           border: '1px solid',
           borderColor: isDragging
             ? primaryColor
-            : (isDark ? 'rgba(139, 92, 246, 0.2)' : 'divider'),
+            : (isDark ? 'rgba(46, 167, 224, 0.2)' : 'divider'),
           bgcolor: 'background.paper',
           opacity: isDragging ? 0.4 : 1,
           overflow: 'hidden',
@@ -127,7 +127,7 @@ export const ComponentCard: React.FC<ComponentCardProps> = ({
             gap: 2,
             bgcolor: isDark ? 'rgba(255, 255, 255, 0.04)' : 'grey.50',
             borderBottom: '1px solid',
-            borderColor: isDark ? 'rgba(139, 92, 246, 0.15)' : 'divider',
+            borderColor: isDark ? 'rgba(46, 167, 224, 0.15)' : 'divider',
             position: 'relative',
             // Subtle gradient accent line under header in dark mode
             ...(isDark && {
@@ -138,7 +138,7 @@ export const ComponentCard: React.FC<ComponentCardProps> = ({
                 left: 0,
                 right: 0,
                 height: '1px',
-                background: 'linear-gradient(90deg, transparent 0%, rgba(46, 176, 196, 0.4) 30%, rgba(139, 92, 246, 0.4) 70%, transparent 100%)',
+                background: 'linear-gradient(90deg, transparent 0%, rgba(163, 211, 60, 0.4) 30%, rgba(46, 167, 224, 0.4) 70%, transparent 100%)',
               },
             }),
           };
@@ -218,11 +218,11 @@ export const ComponentCard: React.FC<ComponentCardProps> = ({
             p: 2,
             minHeight: 100,
             bgcolor: isOver
-              ? (isDark ? `rgba(46, 176, 196, 0.06)` : 'action.hover')
+              ? (isDark ? `rgba(163, 211, 60, 0.06)` : 'action.hover')
               : 'transparent',
             transition: 'all 0.3s ease',
             ...(isOver && isDark && {
-              boxShadow: `inset 0 0 20px rgba(46, 176, 196, 0.08)`,
+              boxShadow: `inset 0 0 20px rgba(163, 211, 60, 0.08)`,
             }),
           };
         }}
@@ -246,14 +246,14 @@ export const ComponentCard: React.FC<ComponentCardProps> = ({
               mt: component.steps.length > 0 ? 2 : 0,
               p: 2,
               border: '2px dashed',
-              borderColor: isOver ? primaryColor : (isDark ? 'rgba(139, 92, 246, 0.2)' : 'divider'),
+              borderColor: isOver ? primaryColor : (isDark ? 'rgba(46, 167, 224, 0.2)' : 'divider'),
               borderRadius: 1.5,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               color: isOver ? (isDark ? primaryColor : 'primary.main') : 'text.secondary',
               bgcolor: isOver
-                ? (isDark ? 'rgba(46, 176, 196, 0.12)' : 'primary.50')
+                ? (isDark ? 'rgba(163, 211, 60, 0.12)' : 'primary.50')
                 : 'transparent',
               transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
               // Neon pulse on active drop target (dark mode)

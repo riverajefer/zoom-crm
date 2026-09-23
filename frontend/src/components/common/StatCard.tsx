@@ -38,7 +38,7 @@ export const StatCard: React.FC<StatCardProps> = ({
         theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
       background: (theme) =>
         theme.palette.mode === 'dark'
-          ? 'linear-gradient(145deg, rgba(26,26,46,0.8) 0%, rgba(22,33,62,0.9) 100%)'
+          ? 'linear-gradient(145deg, rgba(22, 24, 22,0.8) 0%, rgba(26, 28, 25,0.9) 100%)'
           : 'linear-gradient(145deg, rgba(255,255,255,0.95) 0%, rgba(241,245,249,0.9) 100%)',
       transition: 'all 0.3s ease',
       cursor: onClick ? 'pointer' : 'default',

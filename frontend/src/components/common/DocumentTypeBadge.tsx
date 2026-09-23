@@ -5,10 +5,10 @@ import { alpha } from '@mui/material/styles';
 export type DocumentType = 'COT' | 'OP' | 'OT' | 'OG';
 
 const DOCUMENT_TYPE_CONFIG: Record<DocumentType, { label: string; color: string }> = {
-  COT: { label: 'COT', color: '#2EB0C4' },
-  OP:  { label: 'OP',  color: '#8B5CF6' },
-  OT:  { label: 'OT',  color: '#F97316' },
-  OG:  { label: 'OG',  color: '#FF2D95' },
+  COT: { label: 'COT', color: '#2EA7E0' },
+  OP:  { label: 'OP',  color: '#A3D33C' },
+  OT:  { label: 'OT',  color: '#F39200' },
+  OG:  { label: 'OG',  color: '#E8465A' },
 };
 
 interface DocumentTypeBadgeProps {

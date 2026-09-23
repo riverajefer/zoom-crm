@@ -23,7 +23,7 @@ export const QuoteStatusChip: React.FC<QuoteStatusChipProps> = ({
         fontWeight: 500,
         minWidth: size === 'small' ? 80 : 100,
         ...(isGradient && {
-          background: 'linear-gradient(135deg, #2EB0C4 0%, #8B5CF6 50%, #FF2D95 100%)',
+          background: 'linear-gradient(135deg, #7FAE1F 0%, #1B7FB0 100%)',
           color: 'white',
           border: 'none'
         })

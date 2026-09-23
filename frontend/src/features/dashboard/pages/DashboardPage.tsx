@@ -86,7 +86,7 @@ interface StatCardProps {
 
 // Colores neón para cada categoría
 const NEON_COLORS = {
-  general: '#00FFFF',      // Cyan neón
+  general: '#C8E68A',      // Lima camaleón
   commercial: '#FFD700',   // Dorado/Amarillo comercial
   logistics: '#0FFF50',    // Verde neón
   organization: '#00D9FF', // Azul neón
@@ -109,14 +109,14 @@ const StatCard: React.FC<StatCardProps> = ({ title, value, icon, color, neonColo
         transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
         background: (theme) =>
           theme.palette.mode === 'dark'
-            ? 'linear-gradient(145deg, rgba(26, 26, 46, 0.6) 0%, rgba(22, 33, 62, 1) 100%)'
+            ? 'linear-gradient(145deg, rgba(22, 24, 22, 0.6) 0%, rgba(26, 28, 25, 1) 100%)'
             : 'linear-gradient(145deg, rgba(255, 255, 255, 0.9) 0%, rgba(241, 245, 249, 0.8) 100%)',
         backdropFilter: 'blur(10px)',
         border: '2px solid',
         borderColor: (theme) =>
           theme.palette.mode === 'dark'
-            ? 'rgba(139, 92, 246, 0.1)'
-            : 'rgba(46, 176, 196, 0.1)',
+            ? 'rgba(46, 167, 224, 0.1)'
+            : 'rgba(163, 211, 60, 0.1)',
         borderRadius: '20px',
         boxShadow: (theme) =>
           theme.palette.mode === 'dark'
@@ -730,7 +730,7 @@ const DashboardPage: React.FC = () => {
                 title="Órdenes de Trabajo"
                 value={workOrdersCount}
                 icon={<BuildIcon />}
-                color="#8B5CF6"
+                color="#2EA7E0"
                 neonColor={NEON_COLORS.general}
                 action={{ label: 'Ver órdenes de trabajo', onClick: () => navigate(ROUTES.WORK_ORDERS) }}
               />
@@ -778,7 +778,7 @@ const DashboardPage: React.FC = () => {
                 title="DTF"
                 value={dtfCount}
                 icon={<DescriptionIcon />}
-                color="#7C3AED"
+                color="#1B7FB0"
                 neonColor={NEON_COLORS.general}
                 action={{ label: 'Ver DTF', onClick: () => navigate(ROUTES.DTF) }}
               />
@@ -815,7 +815,7 @@ const DashboardPage: React.FC = () => {
                 title="Proveedores"
                 value={suppliersCount}
                 icon={<LocalShippingIcon />}
-                color="#A78BFA"
+                color="#7CC8EE"
                 neonColor={NEON_COLORS.general}
                 action={{ label: 'Ver proveedores', onClick: () => navigate(ROUTES.SUPPLIERS) }}
               />
@@ -876,7 +876,7 @@ const DashboardPage: React.FC = () => {
                 title="Categorías Insumos"
                 value={supplyCatsCount}
                 icon={<FolderSpecialOutlinedIcon />}
-                color="#8B5CF6"
+                color="#2EA7E0"
                 neonColor={NEON_COLORS.general}
                 action={{ label: 'Ver categorías', onClick: () => navigate(ROUTES.SUPPLY_CATEGORIES) }}
               />
@@ -999,7 +999,7 @@ const DashboardPage: React.FC = () => {
                 title="Períodos de Nómina"
                 value={payrollPeriodsCount}
                 icon={<PendingActionsIcon />}
-                color="#8B5CF6"
+                color="#2EA7E0"
                 neonColor={NEON_COLORS.general}
                 action={{ label: 'Ver periodos', onClick: () => navigate(ROUTES.PAYROLL_PERIODS) }}
               />
@@ -1036,7 +1036,7 @@ const DashboardPage: React.FC = () => {
                 title="Cuentas por Pagar"
                 value={accountsPayableCount}
                 icon={<AccountBalanceIcon />}
-                color="#6366F1"
+                color="#1B7FB0"
                 neonColor={NEON_COLORS.general}
                 action={{ label: 'Ver cuentas', onClick: () => navigate(ROUTES.ACCOUNTS_PAYABLE) }}
               />
@@ -1084,7 +1084,7 @@ const DashboardPage: React.FC = () => {
                 title="Órdenes de Trabajo"
                 value={workOrdersCount}
                 icon={<BuildIcon />}
-                color="#8B5CF6"
+                color="#2EA7E0"
                 neonColor={NEON_COLORS.commercial}
                 action={{
                   label: 'Ver órdenes de trabajo',
@@ -1189,7 +1189,7 @@ const DashboardPage: React.FC = () => {
                 title="DTF"
                 value={dtfCount}
                 icon={<DescriptionIcon />}
-                color="#7C3AED"
+                color="#1B7FB0"
                 neonColor={NEON_COLORS.commercial}
                 action={{
                   label: 'Ver DTF',
@@ -1317,11 +1317,11 @@ const DashboardPage: React.FC = () => {
                     borderColor: 'divider',
                     color: 'text.secondary',
                     '&:hover': {
-                      borderColor: '#8B5CF6',
-                      color: '#8B5CF6',
+                      borderColor: '#2EA7E0',
+                      color: '#2EA7E0',
                       transform: 'translateY(-2px)',
-                      boxShadow: '0 4px 12px rgba(139, 92, 246, 0.15)',
-                      background: 'rgba(139, 92, 246, 0.05)',
+                      boxShadow: '0 4px 12px rgba(46, 167, 224, 0.15)',
+                      background: 'rgba(46, 167, 224, 0.05)',
                     },
                   }}
                 >
@@ -1369,7 +1369,7 @@ const DashboardPage: React.FC = () => {
                 title="Proveedores"
                 value={suppliersCount}
                 icon={<LocalShippingIcon />}
-                color="#A78BFA"
+                color="#7CC8EE"
                 neonColor={NEON_COLORS.logistics}
                 action={{
                   label: 'Ver proveedores',
@@ -1444,7 +1444,7 @@ const DashboardPage: React.FC = () => {
                 title="Categorías Ins."
                 value={supplyCatsCount}
                 icon={<FolderSpecialOutlinedIcon />}
-                color="#8B5CF6"
+                color="#2EA7E0"
                 neonColor={NEON_COLORS.logistics}
                 action={{
                   label: 'Ver categorías',
@@ -1663,7 +1663,7 @@ const DashboardPage: React.FC = () => {
                 title="Periodos"
                 value={payrollPeriodsCount}
                 icon={<PendingActionsIcon />}
-                color="#8B5CF6"
+                color="#2EA7E0"
                 neonColor={NEON_COLORS.payroll}
                 action={{
                   label: 'Ver periodos',
@@ -1744,7 +1744,7 @@ const DashboardPage: React.FC = () => {
                 title="Cuentas por Pagar"
                 value={accountsPayableCount}
                 icon={<AccountBalanceIcon />}
-                color="#6366F1"
+                color="#1B7FB0"
                 neonColor={NEON_COLORS.caja}
                 action={{
                   label: 'Ver cuentas',

@@ -392,7 +392,7 @@ const AttendancePage: React.FC = () => {
           sx: {
             borderRadius: '16px',
             background: isDark
-              ? 'linear-gradient(135deg, #0d1b2a 0%, #1a1040 100%)'
+              ? 'linear-gradient(135deg, #161816 0%, #1F221E 100%)'
               : undefined,
           },
         }}
@@ -477,7 +477,7 @@ const AttendancePage: React.FC = () => {
           sx: {
             borderRadius: '16px',
             background: isDark
-              ? 'linear-gradient(135deg, #0d1b2a 0%, #1a1040 100%)'
+              ? 'linear-gradient(135deg, #161816 0%, #1F221E 100%)'
               : undefined,
           },
         }}

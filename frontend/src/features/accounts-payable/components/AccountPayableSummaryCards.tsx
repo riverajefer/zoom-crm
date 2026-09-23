@@ -42,7 +42,7 @@ export const AccountPayableSummaryCards: React.FC<AccountPayableSummaryCardsProp
       title: 'Total Vencido',
       value: summary ? formatCurrency(summary.totalAmountOverdue) : '$0',
       icon: <WarningAmberIcon fontSize="small" />,
-      color: '#FF2D95',
+      color: '#E8465A',
       filterParams: { status: 'OVERDUE' as any },
     },
     {
@@ -56,7 +56,7 @@ export const AccountPayableSummaryCards: React.FC<AccountPayableSummaryCardsProp
       title: 'Cuentas Pagadas',
       value: summary ? `${summary.totalPaid} cuenta(s)` : '0',
       icon: <CheckCircleOutlineIcon fontSize="small" />,
-      color: '#22D3EE',
+      color: '#34C38F',
       filterParams: { status: 'PAID' as any },
     },
   ];

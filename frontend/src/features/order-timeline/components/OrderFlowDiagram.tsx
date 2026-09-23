@@ -84,12 +84,12 @@ export default function OrderFlowDiagram({ data }: OrderFlowDiagramProps) {
       type: 'smoothstep',
       animated: true,
       style: {
-        stroke: isDark ? alpha('#8B5CF6', 0.5) : alpha('#363A72', 0.4),
+        stroke: isDark ? alpha('#2EA7E0', 0.5) : alpha('#3E4A38', 0.4),
         strokeWidth: 2,
       },
       markerEnd: {
         type: MarkerType.ArrowClosed,
-        color: isDark ? '#8B5CF6' : '#363A72',
+        color: isDark ? '#2EA7E0' : '#3E4A38',
         width: 16,
         height: 16,
       },
@@ -273,7 +273,7 @@ export default function OrderFlowDiagram({ data }: OrderFlowDiagramProps) {
           variant={BackgroundVariant.Dots}
           gap={20}
           size={1}
-          color={isDark ? alpha('#8B5CF6', 0.15) : alpha('#363A72', 0.1)}
+          color={isDark ? alpha('#2EA7E0', 0.15) : alpha('#3E4A38', 0.1)}
         />
         <Controls showInteractive={false} />
         <MiniMap
@@ -283,10 +283,10 @@ export default function OrderFlowDiagram({ data }: OrderFlowDiagramProps) {
               return nodeData._utilityColor as string;
             }
             const typeColors: Record<string, string> = {
-              COT: '#8B5CF6',
-              OP: '#2EB0C4',
-              OT: '#F97316',
-              OG: '#22D3EE',
+              COT: '#2EA7E0',
+              OP: '#A3D33C',
+              OT: '#F39200',
+              OG: '#E8465A',
             };
             return typeColors[nodeData?.type] || '#9CA3AF';
           }}

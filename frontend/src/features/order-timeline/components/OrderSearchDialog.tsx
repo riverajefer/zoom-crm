@@ -32,10 +32,10 @@ const TYPE_ICONS: Record<string, React.ElementType> = {
 };
 
 const TYPE_COLORS: Record<string, string> = {
-  COT: '#8B5CF6',
-  OP: '#2EB0C4',
-  OT: '#F97316',
-  OG: '#22D3EE',
+  COT: '#2EA7E0',
+  OP: '#A3D33C',
+  OT: '#F39200',
+  OG: '#E8465A',
 };
 
 const TYPE_LABELS: Record<string, string> = {

@@ -18,7 +18,13 @@ import {
 export const lightTheme = createTheme({
   palette: {
     mode: 'light',
-    primary: neonColors.primary,
+    // En claro el lima no se lee sobre blanco: se usa un verde más oscuro
+    primary: {
+      ...neonColors.primary,
+      main: '#5E8A12',
+      dark: '#4A6E0C',
+      contrastText: '#FFFFFF',
+    },
     secondary: {
       ...neonColors.secondary,
       light: neonAccents.vividPurple,

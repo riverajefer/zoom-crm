@@ -176,7 +176,7 @@ export const StepPill: React.FC<StepPillProps> = ({ step, componentId, onRemove 
           '&:hover': {
             opacity: 1,
             transform: 'scale(1.2) rotate(90deg)',
-            ...(isDark && { filter: 'drop-shadow(0 0 8px rgba(255, 45, 149, 0.8))' }),
+            ...(isDark && { filter: 'drop-shadow(0 0 8px rgba(232, 70, 90, 0.8))' }),
           },
         }}
       >

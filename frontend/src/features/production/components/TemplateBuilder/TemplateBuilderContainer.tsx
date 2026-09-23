@@ -148,7 +148,7 @@ export const TemplateBuilderContainer: React.FC<TemplateBuilderContainerProps> =
             gap: 1.5,
             p: 1.5,
             borderRadius: 2,
-            bgcolor: theme ? 'rgba(26, 26, 46, 0.95)' : bgColors,
+            bgcolor: theme ? 'rgba(22, 24, 22, 0.95)' : bgColors,
             color: textColors,
             border: `1.5px solid ${textColors}`,
             borderLeft: `3px solid ${textColors}`,
@@ -238,14 +238,14 @@ export const TemplateBuilderContainer: React.FC<TemplateBuilderContainerProps> =
           display: 'flex',
           height: 'calc(100vh - 200px)',
           border: '1px solid',
-          borderColor: isDarkMode ? 'rgba(139, 92, 246, 0.2)' : 'divider',
+          borderColor: isDarkMode ? 'rgba(46, 167, 224, 0.2)' : 'divider',
           borderRadius: 2.5,
           overflow: 'hidden',
           position: 'relative',
           // Mesh gradient background + subtle neon border glow in dark mode
           ...(isDarkMode && {
             background: gradients.darkMesh,
-            boxShadow: '0 0 1px rgba(139, 92, 246, 0.3), 0 4px 24px rgba(0, 0, 0, 0.4)',
+            boxShadow: '0 0 1px rgba(46, 167, 224, 0.3), 0 4px 24px rgba(0, 0, 0, 0.4)',
           }),
         }}
       >

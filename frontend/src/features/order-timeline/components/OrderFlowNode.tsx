@@ -46,10 +46,10 @@ const TYPE_CONFIG: Record<
   string,
   { label: string; color: string; icon: React.ElementType }
 > = {
-  COT: { label: 'Cotización', color: '#8B5CF6', icon: DescriptionIcon },
-  OP: { label: 'Orden de Pedido', color: '#2EB0C4', icon: ShoppingCartIcon },
-  OT: { label: 'Orden de Trabajo', color: '#F97316', icon: BuildIcon },
-  OG: { label: 'Orden de Gasto', color: '#22D3EE', icon: RequestQuoteIcon },
+  COT: { label: 'Cotización', color: '#2EA7E0', icon: DescriptionIcon },
+  OP: { label: 'Orden de Pedido', color: '#A3D33C', icon: ShoppingCartIcon },
+  OT: { label: 'Orden de Trabajo', color: '#F39200', icon: BuildIcon },
+  OG: { label: 'Orden de Gasto', color: '#E8465A', icon: RequestQuoteIcon },
   UTIL: { label: 'Utilidad', color: '#10B981', icon: TrendingUpIcon },
 };
 
@@ -60,14 +60,14 @@ const STATUS_COLORS: Record<string, string> = {
   FOLLOW_UP_1: '#0EA5E9',
   FOLLOW_UP_2: '#6366F1',
   FOLLOW_UP_3: '#A855F7',
-  ACCEPTED: '#22D3EE',
+  ACCEPTED: '#34C38F',
   NO_RESPONSE: '#9CA3AF',
   REJECTED: '#EF4444',
-  CONVERTED: '#8B5CF6',
+  CONVERTED: '#2EA7E0',
   // Order statuses
-  CONFIRMED: '#22D3EE',
+  CONFIRMED: '#34C38F',
   IN_PRODUCTION: '#F97316',
-  READY: '#22D3EE',
+  READY: '#34C38F',
   DELIVERED: '#10B981',
   DELIVERED_ON_CREDIT: '#FBBF24',
   WARRANTY: '#F97316',
@@ -76,7 +76,7 @@ const STATUS_COLORS: Record<string, string> = {
   COMPLETED: '#10B981',
   // ExpenseOrder statuses
   CREATED: '#FBBF24',
-  AUTHORIZED: '#22D3EE',
+  AUTHORIZED: '#34C38F',
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -485,11 +485,11 @@ function OrderFlowNode({ data }: NodeProps) {
 
               {nodeData.authorizedByName && (
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                  <AdminPanelSettingsOutlinedIcon sx={{ fontSize: 11, color: '#22D3EE', flexShrink: 0 }} />
+                  <AdminPanelSettingsOutlinedIcon sx={{ fontSize: 11, color: '#34C38F', flexShrink: 0 }} />
                   <Typography
                     noWrap
                     variant="caption"
-                    sx={{ fontSize: '0.68rem', color: '#22D3EE', fontWeight: 600, lineHeight: 1.3 }}
+                    sx={{ fontSize: '0.68rem', color: '#34C38F', fontWeight: 600, lineHeight: 1.3 }}
                   >
                     Auth: {nodeData.authorizedByName}
                   </Typography>

@@ -23,7 +23,7 @@ const CountCard: React.FC<CountCardProps> = ({ label, value, icon, color }) => (
       borderColor: (theme) => theme.palette.mode === 'dark' ? alpha(color, 0.2) : alpha(color, 0.15),
       background: (theme) =>
         theme.palette.mode === 'dark'
-          ? `linear-gradient(135deg, ${alpha(color, 0.08)} 0%, rgba(22,33,62,0.8) 100%)`
+          ? `linear-gradient(135deg, ${alpha(color, 0.08)} 0%, rgba(26, 28, 25,0.8) 100%)`
           : `linear-gradient(135deg, ${alpha(color, 0.04)} 0%, rgba(248,250,252,0.9) 100%)`,
       transition: 'all 0.2s ease',
       '&:hover': { transform: 'translateY(-3px)', boxShadow: `0 4px 16px ${alpha(color, 0.2)}` },
@@ -48,7 +48,7 @@ interface Props {
 export const FinancialSystemCounts: React.FC<Props> = ({ indicators }) => {
   const items: CountCardProps[] = [
     { label: 'Clientes', value: indicators.totalClients, icon: <PeopleIcon fontSize="small" />, color: '#3b82f6' },
-    { label: 'Productos activos', value: indicators.totalProducts, icon: <Inventory2Icon fontSize="small" />, color: '#8b5cf6' },
+    { label: 'Productos activos', value: indicators.totalProducts, icon: <Inventory2Icon fontSize="small" />, color: '#2EA7E0' },
     { label: 'Proveedores', value: indicators.totalSuppliers, icon: <BusinessIcon fontSize="small" />, color: '#06b6d4' },
     { label: 'Órdenes de Pedido', value: indicators.totalOP, icon: <ShoppingCartIcon fontSize="small" />, color: '#22c55e' },
     { label: 'Órdenes de Trabajo', value: indicators.totalOT, icon: <BuildIcon fontSize="small" />, color: '#f59e0b' },

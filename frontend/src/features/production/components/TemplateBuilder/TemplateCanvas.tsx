@@ -30,9 +30,9 @@ export const TemplateCanvas: React.FC = () => {
           '&::-webkit-scrollbar': { width: 6 },
           '&::-webkit-scrollbar-track': { background: 'transparent' },
           '&::-webkit-scrollbar-thumb': {
-            background: 'rgba(139, 92, 246, 0.25)',
+            background: 'rgba(46, 167, 224, 0.25)',
             borderRadius: 3,
-            '&:hover': { background: 'rgba(139, 92, 246, 0.4)' },
+            '&:hover': { background: 'rgba(46, 167, 224, 0.4)' },
           },
         }),
       }}
@@ -59,7 +59,7 @@ export const TemplateCanvas: React.FC = () => {
           mt: components.length > 0 ? 0 : 4,
           borderStyle: 'dashed',
           borderWidth: 2,
-          borderColor: isDark ? 'rgba(139, 92, 246, 0.25)' : 'divider',
+          borderColor: isDark ? 'rgba(46, 167, 224, 0.25)' : 'divider',
           color: 'text.secondary',
           textTransform: 'none',
           fontSize: '1rem',
@@ -84,7 +84,7 @@ export const TemplateCanvas: React.FC = () => {
             borderStyle: 'dashed',
             borderWidth: 2,
             borderColor: isDark ? `${primaryColor}80` : 'primary.main',
-            bgcolor: isDark ? 'rgba(46, 176, 196, 0.04)' : 'action.hover',
+            bgcolor: isDark ? 'rgba(163, 211, 60, 0.04)' : 'action.hover',
             color: 'primary.main',
             ...(isDark && {
               boxShadow: `0 0 20px ${primaryColor}25, inset 0 0 20px ${primaryColor}08`,

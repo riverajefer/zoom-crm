@@ -104,7 +104,7 @@ export const OrdersDashboardCards: React.FC<OrdersDashboardCardsProps> = ({
       value: formatCurrency(summary?.salesAmount ?? 0),
       subtitle: `${summary?.salesCount ?? 0} orden(es)`,
       icon: <PointOfSaleIcon fontSize="small" />,
-      color: '#22D3EE',
+      color: '#34C38F',
       filterParams: {
         orderDateFrom: isoRange.from,
         orderDateTo: isoRange.to,
@@ -134,7 +134,7 @@ export const OrdersDashboardCards: React.FC<OrdersDashboardCardsProps> = ({
       value: `${summary?.pendingAdvancesCount ?? 0} orden(es)`,
       subtitle: 'esperando autorización de Caja',
       icon: <PendingActionsIcon fontSize="small" />,
-      color: '#FF2D95',
+      color: '#E8465A',
       filterParams: {
         orderDateFrom: isoRange.from,
         orderDateTo: isoRange.to,

@@ -21,9 +21,7 @@ export const AuthLayout: FC<AuthLayoutProps> = ({ children }) => {
         alignItems: 'center',
         justifyContent: 'center',
         minHeight: '100vh',
-        background: `radial-gradient(ellipse at 15% 0%, rgba(46, 176, 196, 0.20) 0%, transparent 50%),
-                    radial-gradient(ellipse at 85% 100%, rgba(139, 92, 246, 0.20) 0%, transparent 50%),
-                    linear-gradient(135deg, #010100 0%, #08081a 100%)`,
+        background: `#0E0F0E`,
       }}
     >
       <Container maxWidth="sm">

@@ -120,7 +120,7 @@ export const ChangeQuoteStatusDialog: React.FC<ChangeQuoteStatusDialogProps> = (
                       mr: 1, 
                       height: 20,
                       ...(isGradient && {
-                        background: 'linear-gradient(135deg, #2EB0C4 0%, #8B5CF6 50%, #FF2D95 100%)',
+                        background: 'linear-gradient(135deg, #7FAE1F 0%, #1B7FB0 100%)',
                         color: 'white',
                         border: 'none'
                       })

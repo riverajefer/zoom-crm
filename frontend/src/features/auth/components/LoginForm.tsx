@@ -68,7 +68,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSubmit, isLoading = fals
               width: { xs: '180px', sm: '200px' },
               height: 'auto',
               filter: isDark
-                ? 'drop-shadow(0 4px 12px rgba(46, 176, 196, 0.3))'
+                ? 'drop-shadow(0 4px 12px rgba(163, 211, 60, 0.3))'
                 : 'drop-shadow(0 4px 12px rgba(102, 126, 234, 0.3))',
             }}
           />

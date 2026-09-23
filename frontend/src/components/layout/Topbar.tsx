@@ -28,7 +28,7 @@ import { formatFullName } from '../../utils/helpers';
 import { NotificationBell } from './NotificationBell';
 import { PendingApprovalsBell } from './PendingApprovalsBell';
 import { AttendanceButton } from './AttendanceButton';
-import { gradients, neonColors, neonAccents, darkSurfaces } from '../../theme';
+import { gradients, neonColors, neonAccents, darkSurfaces, darkModeColors } from '../../theme';
 import { PERMISSIONS } from '../../utils/constants';
 
 interface TopbarProps {
@@ -84,12 +84,12 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuClick }) => {
       sx={{
         background: isDark
           ? `linear-gradient(90deg, ${darkSurfaces.midnightBlue} 0%, ${darkSurfaces.cosmicPurple} 100%)`
-          : `linear-gradient(90deg, #1e293b 0%, #363A72 100%)`,
+          : `linear-gradient(90deg, #161816 0%, #1F221E 100%)`,
         borderBottom: isDark
-          ? `1px solid ${alpha(neonAccents.vividPurple, 0.3)}`
+          ? `1px solid ${darkModeColors.border}`
           : `1px solid ${alpha(neonColors.primary.main, 0.2)}`,
         boxShadow: isDark
-          ? `0 4px 20px ${alpha(neonColors.primary.main, 0.15)}, 0 0 30px ${alpha(neonAccents.vividPurple, 0.1)}`
+          ? 'none'
           : '0 4px 20px rgba(0, 0, 0, 0.1)',
       }}
     >
@@ -120,13 +120,13 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuClick }) => {
             fontWeight: 700,
             background: isDark
               ? gradients.neonPrimary
-              : 'linear-gradient(90deg, #FFFFFF 0%, #C1E3EE 100%)',
+              : 'linear-gradient(90deg, #FFFFFF 0%, #C8E68A 100%)',
             backgroundClip: 'text',
             WebkitBackgroundClip: 'text',
             WebkitTextFillColor: 'transparent',
             textShadow: isDark ? 'none' : 'none',
             filter: isDark
-              ? `drop-shadow(0 0 8px ${alpha(neonColors.primary.main, 0.5)})`
+              ? 'none'
               : 'none',
           }}
         >
@@ -149,8 +149,8 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuClick }) => {
               background: isDark
                 ? `linear-gradient(135deg, ${alpha(neonColors.primary.main, 0.12)} 0%, ${alpha(neonAccents.vividPurple, 0.1)} 100%)`
                 : alpha(theme.palette.common.white, 0.15),
-              border: `1px solid ${isDark ? alpha(neonColors.primary.main, 0.35) : alpha(theme.palette.common.white, 0.35)}`,
-              boxShadow: isDark ? `0 0 12px ${alpha(neonColors.primary.main, 0.12)}` : 'none',
+              border: `1px solid ${isDark ? darkModeColors.border : alpha(theme.palette.common.white, 0.35)}`,
+              boxShadow: isDark ? 'none' : 'none',
               transition: 'all 0.25s ease',
               '&:hover': {
                 background: isDark
@@ -159,7 +159,7 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuClick }) => {
                 borderColor: isDark ? neonColors.primary.main : alpha(theme.palette.common.white, 0.6),
                 transform: 'translateY(-2px)',
                 boxShadow: isDark
-                  ? `0 4px 20px ${alpha(neonColors.primary.main, 0.35)}, 0 0 20px ${alpha(neonColors.primary.main, 0.15)}`
+                  ? '0 2px 6px rgba(0, 0, 0, 0.35)'
                   : '0 4px 16px rgba(0,0,0,0.2)',
               },
             }}
@@ -168,7 +168,7 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuClick }) => {
               sx={{
                 fontSize: 17,
                 color: isDark ? neonColors.primary.main : alpha(theme.palette.common.white, 0.95),
-                filter: isDark ? `drop-shadow(0 0 4px ${alpha(neonColors.primary.main, 0.7)})` : 'none',
+                filter: isDark ? 'none' : 'none',
               }}
             />
             {!isMobile && (
@@ -190,7 +190,7 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuClick }) => {
                     py: 0.2,
                     borderRadius: '5px',
                     background: isDark ? alpha(neonAccents.vividPurple, 0.25) : alpha(theme.palette.common.white, 0.15),
-                    border: `1px solid ${isDark ? alpha(neonAccents.vividPurple, 0.4) : alpha(theme.palette.common.white, 0.3)}`,
+                    border: `1px solid ${isDark ? darkModeColors.border : alpha(theme.palette.common.white, 0.3)}`,
                     ml: 0.5,
                   }}
                 >
@@ -246,7 +246,7 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuClick }) => {
                   : alpha(theme.palette.common.white, 0.4),
                 transform: 'translateY(-2px)',
                 boxShadow: isDark
-                  ? `0 4px 15px ${alpha(neonColors.primary.main, 0.3)}`
+                  ? '0 2px 6px rgba(0, 0, 0, 0.35)'
                   : '0 4px 15px rgba(0, 0, 0, 0.2)',
               },
             }}
@@ -263,7 +263,7 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuClick }) => {
                 fontSize: '0.9rem',
                 fontWeight: 600,
                 boxShadow: isDark
-                  ? `0 0 15px ${alpha(neonColors.primary.main, 0.5)}`
+                  ? 'none'
                   : '0 2px 8px rgba(0, 0, 0, 0.2)',
                 border: `2px solid ${isDark
                   ? alpha(neonColors.primary.main, 0.5)
@@ -332,10 +332,10 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuClick }) => {
                 : 'linear-gradient(135deg, #FFFFFF 0%, #F8FAFC 100%)',
               backdropFilter: 'blur(16px)',
               border: isDark
-                ? `1px solid ${alpha(neonAccents.vividPurple, 0.3)}`
+                ? `1px solid ${darkModeColors.border}`
                 : `1px solid ${alpha(neonColors.primary.main, 0.15)}`,
               boxShadow: isDark
-                ? `0 10px 40px ${alpha(neonColors.primary.main, 0.2)}, 0 0 20px ${alpha(neonAccents.vividPurple, 0.15)}`
+                ? '0 2px 6px rgba(0, 0, 0, 0.35)'
                 : '0 10px 40px rgba(0, 0, 0, 0.15)',
               overflow: 'hidden',
             },

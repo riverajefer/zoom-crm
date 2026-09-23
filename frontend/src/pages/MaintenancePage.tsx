@@ -25,7 +25,7 @@ const MaintenancePage: FC<MaintenancePageProps> = ({ message }) => {
         alignItems: 'center',
         justifyContent: 'center',
         background:
-          'linear-gradient(135deg, #0A0A1A 0%, #1A1A2E 50%, #2D1B4E 100%)',
+          'linear-gradient(135deg, #0B0F0A 0%, #161816 50%, #1F221E 100%)',
         padding: 3,
       }}
     >
@@ -39,9 +39,9 @@ const MaintenancePage: FC<MaintenancePageProps> = ({ message }) => {
           padding: { xs: 4, sm: 6 },
           maxWidth: 480,
           width: '100%',
-          background: 'rgba(22, 33, 62, 0.85)',
+          background: 'rgba(26, 28, 25, 0.85)',
           backdropFilter: 'blur(16px)',
-          border: '1px solid rgba(46, 176, 196, 0.25)',
+          border: '1px solid rgba(163, 211, 60, 0.25)',
           borderRadius: 4,
         }}
       >
@@ -54,17 +54,17 @@ const MaintenancePage: FC<MaintenancePageProps> = ({ message }) => {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            background: 'rgba(46, 176, 196, 0.15)',
-            border: '2px solid rgba(46, 176, 196, 0.4)',
+            background: 'rgba(163, 211, 60, 0.15)',
+            border: '2px solid rgba(163, 211, 60, 0.4)',
             marginBottom: 3,
-            boxShadow: '0 0 24px rgba(46, 176, 196, 0.3)',
+            boxShadow: '0 0 24px rgba(163, 211, 60, 0.3)',
           }}
         >
           <BuildIcon
             sx={{
               fontSize: 40,
-              color: '#2EB0C4',
-              filter: 'drop-shadow(0 0 8px rgba(46, 176, 196, 0.6))',
+              color: '#A3D33C',
+              filter: 'drop-shadow(0 0 8px rgba(163, 211, 60, 0.6))',
             }}
           />
         </Box>
@@ -75,9 +75,9 @@ const MaintenancePage: FC<MaintenancePageProps> = ({ message }) => {
           component="h1"
           sx={{
             fontWeight: 700,
-            color: '#2EB0C4',
+            color: '#A3D33C',
             marginBottom: 2,
-            textShadow: '0 0 20px rgba(46, 176, 196, 0.4)',
+            textShadow: '0 0 20px rgba(163, 211, 60, 0.4)',
           }}
         >
           En Mantenimiento
@@ -102,9 +102,9 @@ const MaintenancePage: FC<MaintenancePageProps> = ({ message }) => {
             display: 'inline-block',
             padding: '6px 18px',
             borderRadius: '9999px',
-            background: 'rgba(46, 176, 196, 0.1)',
-            border: '1px solid rgba(46, 176, 196, 0.35)',
-            color: '#2EB0C4',
+            background: 'rgba(163, 211, 60, 0.1)',
+            border: '1px solid rgba(163, 211, 60, 0.35)',
+            color: '#A3D33C',
             fontSize: '0.75rem',
             fontWeight: 600,
             letterSpacing: '0.08em',

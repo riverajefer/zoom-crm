@@ -13,25 +13,26 @@ export const dataGridStyles: SxProps<Theme> = {
     backgroundColor: (theme) =>
       theme.palette.mode === 'light'
         ? alpha(theme.palette.primary.main, 0.08)
-        : alpha(theme.palette.primary.main, 0.15),
+        : '#1D201C',
     color: (theme) =>
       theme.palette.mode === 'light'
         ? theme.palette.text.primary
-        : theme.palette.primary.light,
+        : theme.palette.text.secondary,
     fontWeight: 800,
     fontSize: '0.9rem',
     textTransform: 'uppercase',
     letterSpacing: '0.05em',
-    borderBottom: '2px solid',
+    borderBottom: (theme) =>
+      theme.palette.mode === 'light' ? '2px solid' : '1px solid',
     borderColor: (theme) =>
       theme.palette.mode === 'light'
         ? theme.palette.primary.main
-        : theme.palette.primary.dark,
+        : theme.palette.divider,
     minHeight: { xs: '44px !important', sm: '56px !important' },
     boxShadow: (theme) =>
       theme.palette.mode === 'light'
         ? '0 2px 4px rgba(0, 0, 0, 0.05)'
-        : `0 2px 8px ${alpha(theme.palette.primary.main, 0.2)}`,
+        : 'none',
   },
 
   '& .MuiDataGrid-columnHeaderTitle': {
@@ -44,7 +45,7 @@ export const dataGridStyles: SxProps<Theme> = {
     color: (theme) =>
       theme.palette.mode === 'light'
         ? alpha(theme.palette.secondary.main, 0.2)
-        : alpha(theme.palette.primary.main, 0.2),
+        : theme.palette.divider,
   },
 
   // Celdas con transiciones suaves y padding responsive
@@ -80,12 +81,12 @@ export const dataGridStyles: SxProps<Theme> = {
       backgroundColor: (theme) =>
         theme.palette.mode === 'light'
           ? alpha(theme.palette.primary.main, 0.12)
-          : alpha(theme.palette.primary.main, 0.25),
+          : alpha(theme.palette.primary.main, 0.14),
       '&:hover': {
         backgroundColor: (theme) =>
           theme.palette.mode === 'light'
             ? alpha(theme.palette.primary.main, 0.16)
-            : alpha(theme.palette.primary.main, 0.3),
+            : alpha(theme.palette.primary.main, 0.18),
       },
     },
   },
@@ -100,7 +101,7 @@ export const dataGridStyles: SxProps<Theme> = {
       backgroundColor: (theme) =>
         theme.palette.mode === 'light'
           ? alpha(theme.palette.primary.main, 0.1)
-          : alpha(theme.palette.primary.main, 0.22),
+          : alpha('#FFFFFF', 0.05),
     },
   },
 
@@ -108,12 +109,12 @@ export const dataGridStyles: SxProps<Theme> = {
     backgroundColor: (theme) =>
       theme.palette.mode === 'light'
         ? alpha(theme.palette.grey[100], 0.5)
-        : alpha(theme.palette.primary.dark, 0.15),
+        : alpha('#FFFFFF', 0.025),
     '&:hover': {
       backgroundColor: (theme) =>
         theme.palette.mode === 'light'
           ? alpha(theme.palette.primary.main, 0.1)
-          : alpha(theme.palette.primary.main, 0.22),
+          : alpha('#FFFFFF', 0.05),
     },
   },
 
@@ -285,8 +286,8 @@ export const dataGridStyles: SxProps<Theme> = {
     zIndex: '10 !important',
     backgroundColor: (theme) =>
       theme.palette.mode === 'light'
-        ? '#e8eaf6'
-        : '#1e1e3a',
+        ? '#EEF6DD'
+        : '#1D201C',
   },
 
   '& .sticky-column-order-number': {
@@ -295,8 +296,8 @@ export const dataGridStyles: SxProps<Theme> = {
     zIndex: '4 !important',
     backgroundColor: (theme) =>
       theme.palette.mode === 'light'
-        ? '#e8eaf6'
-        : '#1e1e3a',
+        ? '#EEF6DD'
+        : '#1D201C',
     boxShadow: '2px 0 4px rgba(0,0,0,0.08)',
   },
 
@@ -306,8 +307,8 @@ export const dataGridStyles: SxProps<Theme> = {
     zIndex: '10 !important',
     backgroundColor: (theme) =>
       theme.palette.mode === 'light'
-        ? '#e8eaf6'
-        : '#1e1e3a',
+        ? '#EEF6DD'
+        : '#1D201C',
     boxShadow: '2px 0 4px rgba(0,0,0,0.08)',
   },
 
@@ -316,14 +317,14 @@ export const dataGridStyles: SxProps<Theme> = {
     backgroundColor: (theme) =>
       theme.palette.mode === 'light'
         ? theme.palette.background.paper
-        : '#1a1a2e',
+        : '#161816',
   },
 
   '& .MuiDataGrid-row:nth-of-type(even) .sticky-column-row-number, & .MuiDataGrid-row:nth-of-type(even) .sticky-column-order-number': {
     backgroundColor: (theme) =>
       theme.palette.mode === 'light'
         ? '#f5f5f5'
-        : '#1e1e3a',
+        : '#1B1D1B',
   },
 
   // Fondos opacos para filas con estados especiales
@@ -366,8 +367,8 @@ export const dataGridStyles: SxProps<Theme> = {
   '& .MuiDataGrid-row:hover .sticky-column-row-number, & .MuiDataGrid-row:hover .sticky-column-order-number': {
     backgroundColor: (theme) =>
       theme.palette.mode === 'light'
-        ? '#e8eaf6'
-        : '#262650',
+        ? '#EEF6DD'
+        : '#242623',
   },
 
   // Menu de columnas
@@ -404,17 +405,17 @@ export const paperStyles: SxProps<Theme> = {
   borderColor: (theme) =>
     theme.palette.mode === 'light'
       ? alpha(theme.palette.secondary.main, 0.1)
-      : alpha(theme.palette.primary.main, 0.2),
+      : theme.palette.divider,
   boxShadow: (theme) =>
     theme.palette.mode === 'light'
       ? '0 4px 20px rgba(0, 0, 0, 0.08)'
-      : `0 4px 20px rgba(0, 0, 0, 0.3), 0 0 15px ${alpha(theme.palette.primary.main, 0.1)}`,
+      : `0 4px 20px rgba(0, 0, 0, 0.3)`,
   transition: 'all 0.3s ease',
   '&:hover': {
     boxShadow: (theme) =>
       theme.palette.mode === 'light'
         ? '0 6px 24px rgba(0, 0, 0, 0.1)'
-        : `0 6px 24px rgba(0, 0, 0, 0.4), 0 0 20px ${alpha(theme.palette.primary.main, 0.15)}`,
+        : `0 6px 24px rgba(0, 0, 0, 0.4)`,
   },
 };
 

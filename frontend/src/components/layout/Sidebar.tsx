@@ -562,7 +562,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose, collapsed = fal
         display: 'flex',
         flexDirection: 'column',
         height: '100%',
-        bgcolor: isDark ? '#0F0F0F' : '#FFFFFF',
+        bgcolor: isDark ? '#161816' : '#FFFFFF',
       }}
     >
       {/* Hamburger Button - Only on Desktop */}
@@ -857,7 +857,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose, collapsed = fal
           sx: {
             width: DRAWER_WIDTH,
             borderRight: 'none',
-            bgcolor: isDark ? '#0F0F0F' : '#FFFFFF',
+            bgcolor: isDark ? '#161816' : '#FFFFFF',
           }
         }}
       >
@@ -877,7 +877,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose, collapsed = fal
         height: '100vh',
         position: 'sticky',
         top: 0,
-        bgcolor: isDark ? '#0F0F0F' : '#FFFFFF',
+        bgcolor: isDark ? '#161816' : '#FFFFFF',
         transition: 'width 0.3s ease',
       }}
     >

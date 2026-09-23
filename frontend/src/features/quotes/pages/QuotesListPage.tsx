@@ -175,7 +175,7 @@ export const QuotesListPage: React.FC = () => {
       headerName: 'Nº Cotización',
       width: 150,
       renderCell: (params: GridRenderCellParams<Quote>) => (
-        <Box sx={{ fontWeight: 600, color: 'primary.main' }}>{params.value}</Box>
+        <Box sx={{ fontWeight: 600, color: 'secondary.main' }}>{params.value}</Box>
       ),
     },
     {

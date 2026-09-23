@@ -140,7 +140,7 @@ export const StepLibrary: React.FC<StepLibraryProps> = ({ stepDefinitions }) => 
         height: '100%',
         overflowY: 'auto',
         borderRight: 1,
-        borderColor: isDark ? 'rgba(139, 92, 246, 0.15)' : 'divider',
+        borderColor: isDark ? 'rgba(46, 167, 224, 0.15)' : 'divider',
         bgcolor: 'background.paper',
         p: 2,
         position: 'relative',
@@ -155,7 +155,7 @@ export const StepLibrary: React.FC<StepLibraryProps> = ({ stepDefinitions }) => 
             left: 0,
             right: 0,
             height: '120px',
-            background: 'radial-gradient(ellipse at 50% 0%, rgba(46, 176, 196, 0.12) 0%, transparent 70%)',
+            background: 'radial-gradient(ellipse at 50% 0%, rgba(163, 211, 60, 0.12) 0%, transparent 70%)',
             pointerEvents: 'none',
           },
         }),
@@ -164,7 +164,7 @@ export const StepLibrary: React.FC<StepLibraryProps> = ({ stepDefinitions }) => 
           '&::-webkit-scrollbar': { width: 4 },
           '&::-webkit-scrollbar-track': { background: 'transparent' },
           '&::-webkit-scrollbar-thumb': {
-            background: 'rgba(46, 176, 196, 0.3)',
+            background: 'rgba(163, 211, 60, 0.3)',
             borderRadius: 2,
           },
         }),
@@ -207,7 +207,7 @@ export const StepLibrary: React.FC<StepLibraryProps> = ({ stepDefinitions }) => 
                 letterSpacing: '0.08em',
                 color: isDark ? 'rgba(193, 227, 238, 0.7)' : 'text.secondary',
                 ...(isDark && {
-                  textShadow: '0 0 8px rgba(46, 176, 196, 0.3)',
+                  textShadow: '0 0 8px rgba(163, 211, 60, 0.3)',
                 }),
               }}
             >
@@ -256,7 +256,7 @@ export const StepLibrary: React.FC<StepLibraryProps> = ({ stepDefinitions }) => 
                 letterSpacing: '0.08em',
                 color: isDark ? 'rgba(193, 227, 238, 0.7)' : 'text.secondary',
                 ...(isDark && {
-                  textShadow: '0 0 8px rgba(46, 176, 196, 0.3)',
+                  textShadow: '0 0 8px rgba(163, 211, 60, 0.3)',
                 }),
               }}
             >

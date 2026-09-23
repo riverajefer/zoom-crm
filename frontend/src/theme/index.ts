@@ -1,5 +1,5 @@
 /**
- * Sistema de Theming - Estilo Neón Elegante con Degradados
+ * Sistema de Theming - paleta Camaleón de Zoom
  *
  * Este archivo exporta:
  * - lightTheme: Tema claro con efectos neón sutiles y elegantes
@@ -18,6 +18,7 @@ export {
   neonColors,
   neonAccents,
   stateColors,
+  brandRing,
 
   // Superficies por modo
   darkSurfaces,

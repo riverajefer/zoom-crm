@@ -174,7 +174,7 @@ export default function ProductionOrderDetailsNode({ data }: NodeProps) {
           overflow: 'hidden',
           boxShadow: isDark
             ? `0 4px 20px ${alpha('#000', 0.5)}`
-            : `0 4px 20px ${alpha('#363A72', 0.1)}`,
+            : `0 4px 20px ${alpha('#3E4A38', 0.1)}`,
         }}
       >
         <Box

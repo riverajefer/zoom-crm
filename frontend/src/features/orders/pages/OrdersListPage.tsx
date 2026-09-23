@@ -283,7 +283,7 @@ export const OrdersListPage: React.FC = () => {
       headerClassName: 'sticky-column-order-number',
       cellClassName: 'sticky-column-order-number',
       renderCell: (params: any) => (
-        <Box sx={{ fontWeight: 600, color: 'primary.main' }}>
+        <Box sx={{ fontWeight: 600, color: 'secondary.main' }}>
           {params.value}
         </Box>
       ),
@@ -723,7 +723,6 @@ export const OrdersListPage: React.FC = () => {
             {canExport && (
               <Button
                 variant='outlined'
-                color='success'
                 startIcon={<FileDownloadIcon />}
                 onClick={() => setExportOpen(true)}
               >
@@ -731,7 +730,7 @@ export const OrdersListPage: React.FC = () => {
               </Button>
             )}
             <Button
-              variant='outlined'
+              variant='contained'
               startIcon={<ShoppingCartIcon />}
               onClick={() => navigate('/orders/new')}
             >

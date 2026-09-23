@@ -178,7 +178,7 @@ export const SalesByAdvisorPage: React.FC = () => {
       headerName: 'N° Orden',
       width: 130,
       renderCell: (params: any) => (
-        <Box sx={{ fontWeight: 600, color: 'primary.main' }}>{params.value}</Box>
+        <Box sx={{ fontWeight: 600, color: 'secondary.main' }}>{params.value}</Box>
       ),
     },
     {

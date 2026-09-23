@@ -1,6 +1,15 @@
 /**
- * Tokens de colores para el tema Neón Elegante con Degradados
- * Paleta vibrante con efectos neón pronunciados para ambos modos
+ * Tokens de colores de Zoom Publicidad — paleta "Camaleón"
+ *
+ * Sale del logo: verde lima del camaleón (primario) y azul de sus brazos
+ * (secundario). Variante "sobria" (1b): superficies y bordes casi neutros, y
+ * el lima reservado para acciones, estado activo y foco. Nada de brillos.
+ * El aro de colores del logo queda en `brandRing`, solo para detalles.
+ *
+ * Los nombres de las exportaciones y de las llaves (neonColors, glow.cyan,
+ * vividPurple…) vienen de High y se conservan a propósito: así los
+ * componentes y los cherry-picks de High siguen compilando sin tocarlos.
+ * Lo que cambió es el valor, no el nombre.
  */
 
 // =============================================================================
@@ -8,55 +17,59 @@
 // =============================================================================
 
 export const neonColors = {
-  // Primary - Neón Cyan
+  // Primary - Verde camaleón
   primary: {
-    main: '#2EB0C4',
-    light: '#C1E3EE',
-    dark: '#1A8A9A',
-    contrastText: '#FFFFFF',
+    main: '#A3D33C',
+    light: '#C8E68A',
+    dark: '#7FAE1F',
+    contrastText: '#0B0F0A',
   },
 
-  // Secondary - Deep Indigo
+  // Secondary - Azul camaleón
   secondary: {
-    main: '#363A72',
-    light: '#5A5F9E',
-    dark: '#252850',
-    contrastText: '#FFFFFF',
+    main: '#2EA7E0',
+    light: '#7CC8EE',
+    dark: '#1B7FB0',
+    contrastText: '#06121A',
   },
 
   // Base colors
   base: {
-    voidBlack: '#010100',
-    charcoal: '#2D2D2D',
+    voidBlack: '#0A0B0A',
+    charcoal: '#272A26',
     black: '#000000',
     white: '#FFFFFF',
   },
 } as const;
 
 // =============================================================================
-// COLORES NEÓN ADICIONALES (ACENTOS VIBRANTES)
+// ACENTOS (llaves heredadas de High, valores de Zoom)
 // =============================================================================
 
 export const neonAccents = {
-  electricCyan: '#00FFFF',
-  neonMagenta: '#FF2D95',
-  vividPurple: '#8B5CF6',
-  electricViolet: '#7C3AED',
-  hotPink: '#EC4899',
-  neonGreen: '#22D3EE',
-  sunsetOrange: '#F97316',
+  electricCyan: '#C8E68A', // lima claro
+  neonMagenta: '#F39200', // naranja del aro
+  vividPurple: '#2EA7E0', // azul camaleón
+  electricViolet: '#1B7FB0', // azul profundo
+  hotPink: '#E8465A', // rojo del aro, suavizado
+  neonGreen: '#34C38F', // verde menta
+  sunsetOrange: '#F39200', // naranja del aro
 } as const;
+
+/** Aro de colores del logo. Solo para detalles, nunca detrás de texto. */
+export const brandRing =
+  'conic-gradient(from 200deg, #0AA0E0, #7B3F8C, #E30613, #F39200, #FFE500, #9BC31C, #009A44, #0AA0E0)';
 
 // =============================================================================
 // COLORES PARA SUPERFICIES Y PROFUNDIDAD (DARK MODE)
 // =============================================================================
 
 export const darkSurfaces = {
-  deepSpace: '#0A0A1A',
-  midnightBlue: '#1A1A2E',
-  navyMist: '#16213E',
-  twilight: '#1E2A4A',
-  cosmicPurple: '#2D1B4E',
+  deepSpace: '#0E0F0E',
+  midnightBlue: '#161816',
+  navyMist: '#1A1C19',
+  twilight: '#1D201C',
+  cosmicPurple: '#1F221E',
 } as const;
 
 // =============================================================================
@@ -64,11 +77,11 @@ export const darkSurfaces = {
 // =============================================================================
 
 export const lightSurfaces = {
-  snow: '#FAFBFC',
-  cloud: '#F1F5F9',
-  mist: '#E2E8F0',
-  lavenderTint: '#EDE9FE',
-  cyanTint: '#ECFEFF',
+  snow: '#FAFBF8',
+  cloud: '#F2F5EE',
+  mist: '#E3E9DC',
+  lavenderTint: '#EEF6DD',
+  cyanTint: '#E6F4FB',
 } as const;
 
 // =============================================================================
@@ -77,28 +90,28 @@ export const lightSurfaces = {
 
 export const stateColors = {
   success: {
-    main: '#22D3EE',
-    light: '#67E8F9',
-    dark: '#10B981',
-    contrastText: '#000000',
+    main: '#34C38F',
+    light: '#6FDDB3',
+    dark: '#1E9A6C',
+    contrastText: '#04140D',
   },
   warning: {
-    main: '#F97316',
-    light: '#FBBF24',
-    dark: '#EA580C',
-    contrastText: '#000000',
+    main: '#F2B705',
+    light: '#F8D264',
+    dark: '#C99400',
+    contrastText: '#140E00',
   },
   error: {
-    main: '#FF2D95',
-    light: '#FF8A80',
-    dark: '#EF4444',
+    main: '#EF4B4B',
+    light: '#F58A8A',
+    dark: '#C92F2F',
     contrastText: '#FFFFFF',
   },
   info: {
-    main: '#2EB0C4',
-    light: '#C1E3EE',
-    dark: '#1A8A9A',
-    contrastText: '#FFFFFF',
+    main: '#2EA7E0',
+    light: '#7CC8EE',
+    dark: '#1B7FB0',
+    contrastText: '#06121A',
   },
 } as const;
 
@@ -108,47 +121,47 @@ export const stateColors = {
 
 export const darkModeColors = {
   background: {
-    default: '#0C1020',
-    paper: '#1A1A2E',
-    surface: '#16213E',
-    elevated: '#1E2A4A',
+    default: '#0E0F0E',
+    paper: '#161816',
+    surface: '#1A1C19',
+    elevated: '#1D201C',
   },
   text: {
-    primary: '#FFFFFF',
-    secondary: '#C1E3EE',
-    disabled: 'rgba(255, 255, 255, 0.5)',
-    muted: 'rgba(193, 227, 238, 0.6)',
+    primary: '#EEF0EC',
+    secondary: '#9EA39A',
+    disabled: 'rgba(238, 240, 236, 0.5)',
+    muted: 'rgba(158, 163, 154, 0.7)',
   },
-  divider: 'rgba(139, 92, 246, 0.2)',
-  border: 'rgba(139, 92, 246, 0.2)',
+  divider: 'rgba(255, 255, 255, 0.07)',
+  border: 'rgba(255, 255, 255, 0.08)',
   action: {
-    active: '#2EB0C4',
-    hover: 'rgba(46, 176, 196, 0.12)',
-    selected: 'rgba(46, 176, 196, 0.2)',
-    disabled: 'rgba(255, 255, 255, 0.3)',
-    disabledBackground: 'rgba(255, 255, 255, 0.12)',
+    active: '#C8E68A',
+    hover: 'rgba(255, 255, 255, 0.05)',
+    selected: 'rgba(163, 211, 60, 0.12)',
+    disabled: 'rgba(238, 240, 236, 0.3)',
+    disabledBackground: 'rgba(238, 240, 236, 0.12)',
   },
 } as const;
 
 export const lightModeColors = {
   background: {
     default: '#FFFFFF',
-    paper: '#FAFBFC',
-    surface: '#F1F5F9',
+    paper: '#FAFBF8',
+    surface: '#F2F5EE',
     elevated: '#FFFFFF',
   },
   text: {
-    primary: '#010100',
-    secondary: '#363A72',
+    primary: '#0B0F0A',
+    secondary: '#3E4A38',
     disabled: 'rgba(0, 0, 0, 0.38)',
-    muted: 'rgba(54, 58, 114, 0.6)',
+    muted: 'rgba(62, 74, 56, 0.6)',
   },
-  divider: 'rgba(54, 58, 114, 0.15)',
-  border: '#E2E8F0',
+  divider: 'rgba(11, 15, 10, 0.12)',
+  border: '#E3E9DC',
   action: {
-    active: '#2EB0C4',
-    hover: 'rgba(46, 176, 196, 0.08)',
-    selected: 'rgba(46, 176, 196, 0.12)',
+    active: '#5E8A12',
+    hover: 'rgba(127, 174, 31, 0.08)',
+    selected: 'rgba(127, 174, 31, 0.14)',
     disabled: 'rgba(0, 0, 0, 0.26)',
     disabledBackground: 'rgba(0, 0, 0, 0.12)',
   },
@@ -159,124 +172,81 @@ export const lightModeColors = {
 // =============================================================================
 
 export const gradients = {
-  // Degradados Neón (Para botones, headers, elementos destacados)
-  neonPrimary: 'linear-gradient(135deg, #2EB0C4 0%, #8B5CF6 50%, #FF2D95 100%)',
-  neonHorizontal: 'linear-gradient(90deg, #00FFFF 0%, #2EB0C4 25%, #7C3AED 75%, #FF2D95 100%)',
-  neonVertical: 'linear-gradient(180deg, #363A72 0%, #8B5CF6 50%, #2EB0C4 100%)',
-  sunset: 'linear-gradient(135deg, #F97316 0%, #EC4899 50%, #8B5CF6 100%)',
-  ocean: 'linear-gradient(135deg, #22D3EE 0%, #2EB0C4 50%, #363A72 100%)',
+  // Degradados de marca (botones, headers, elementos destacados)
+  neonPrimary: 'linear-gradient(135deg, #A3D33C 0%, #2EA7E0 100%)',
+  neonHorizontal: 'linear-gradient(90deg, #C8E68A 0%, #A3D33C 35%, #2EA7E0 100%)',
+  neonVertical: 'linear-gradient(180deg, #1B7FB0 0%, #2EA7E0 50%, #A3D33C 100%)',
+  sunset: 'linear-gradient(135deg, #FFE500 0%, #F39200 50%, #E30613 100%)',
+  ocean: 'linear-gradient(135deg, #A3D33C 0%, #7FAE1F 100%)',
 
   // Degradados para fondos Dark Mode
-  darkBackground: 'linear-gradient(135deg, #010100 0%, #1A1A2E 50%, #0A0A1A 100%)',
-  darkNeonTint: 'linear-gradient(180deg, #010100 0%, #16213E 50%, #1A1A2E 100%)',
-  darkSidebar: 'linear-gradient(180deg, #151c3a 0%, #1c315a 100%)',
-  darkCard: 'linear-gradient(145deg, #1C2040 0%, #161C38 100%)',
-  darkMesh: `
-    radial-gradient(ellipse at 20% 0%, rgba(139, 92, 246, 0.15) 0%, transparent 50%),
-    radial-gradient(ellipse at 80% 100%, rgba(46, 176, 196, 0.15) 0%, transparent 50%),
-    linear-gradient(135deg, #010100 0%, #1A1A2E 100%)
-  `,
+  darkBackground: '#0E0F0E',
+  darkNeonTint: '#0E0F0E',
+  darkSidebar: '#161816',
+  darkCard: '#161816',
+  darkMesh: '#0E0F0E',
 
   // Degradados para fondos Light Mode
-  lightBackground: 'linear-gradient(135deg, #FFFFFF 0%, #F1F5F9 50%, #FAFBFC 100%)',
-  lightTinted: 'linear-gradient(180deg, #FFFFFF 0%, #ECFEFF 50%, #EDE9FE 100%)',
-  lightCard: 'linear-gradient(145deg, #FFFFFF 0%, #F1F5F9 100%)',
+  lightBackground: 'linear-gradient(135deg, #FFFFFF 0%, #F2F5EE 50%, #FAFBF8 100%)',
+  lightTinted: 'linear-gradient(180deg, #FFFFFF 0%, #EEF6DD 50%, #E6F4FB 100%)',
+  lightCard: 'linear-gradient(145deg, #FFFFFF 0%, #F2F5EE 100%)',
   lightMesh: `
-    radial-gradient(ellipse at 20% 0%, rgba(46, 176, 196, 0.1) 0%, transparent 50%),
-    radial-gradient(ellipse at 80% 100%, rgba(139, 92, 246, 0.08) 0%, transparent 50%),
-    linear-gradient(135deg, #FFFFFF 0%, #FAFBFC 100%)
+    radial-gradient(ellipse at 20% 0%, rgba(163, 211, 60, 0.10) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 100%, rgba(46, 167, 224, 0.08) 0%, transparent 50%),
+    linear-gradient(135deg, #FFFFFF 0%, #FAFBF8 100%)
   `,
 
   // Degradados para Headers de tablas
-  tableHeaderDark: 'linear-gradient(90deg, #24263D 0%, #1F2135 100%)',
-  tableHeaderLight: 'linear-gradient(90deg, rgba(46, 176, 196, 0.15) 0%, rgba(139, 92, 246, 0.1) 100%)',
+  tableHeaderDark: '#1D201C',
+  tableHeaderLight: 'linear-gradient(90deg, rgba(163, 211, 60, 0.14) 0%, rgba(46, 176, 224, 0.08) 100%)',
 } as const;
 
 // =============================================================================
-// EFECTOS NEÓN MEJORADOS
+// EFECTOS (brillos más contenidos que en High: el lima satura rápido)
 // =============================================================================
 
 export const neonEffects = {
-  // Glow Effects
+  // Brillos desactivados en la variante sobria: se dejan las llaves para que
+  // los componentes heredados de High sigan compilando.
   glow: {
-    cyan: `
-      0 0 5px #2EB0C4,
-      0 0 10px #2EB0C4,
-      0 0 20px rgba(46, 176, 196, 0.8),
-      0 0 40px rgba(46, 176, 196, 0.6),
-      0 0 60px rgba(46, 176, 196, 0.4)
-    `,
-    cyanSubtle: `
-      0 0 5px rgba(46, 176, 196, 0.5),
-      0 0 10px rgba(46, 176, 196, 0.3),
-      0 0 20px rgba(46, 176, 196, 0.2)
-    `,
-    cyanIntense: `
-      0 0 5px rgba(46, 176, 196, 0.8),
-      0 0 10px rgba(46, 176, 196, 0.6),
-      0 0 20px rgba(46, 176, 196, 0.4),
-      0 0 40px rgba(46, 176, 196, 0.2)
-    `,
-    magenta: `
-      0 0 5px #FF2D95,
-      0 0 10px #FF2D95,
-      0 0 20px rgba(255, 45, 149, 0.8),
-      0 0 40px rgba(255, 45, 149, 0.6)
-    `,
-    purple: `
-      0 0 5px #8B5CF6,
-      0 0 10px #8B5CF6,
-      0 0 20px rgba(139, 92, 246, 0.8),
-      0 0 40px rgba(139, 92, 246, 0.6)
-    `,
-    multi: `
-      0 0 10px #2EB0C4,
-      0 0 20px rgba(139, 92, 246, 0.6),
-      0 0 30px rgba(255, 45, 149, 0.4)
-    `,
+    cyan: '0 0 0 transparent',
+    cyanSubtle: '0 0 0 transparent',
+    cyanIntense: '0 0 0 transparent',
+    magenta: '0 0 0 transparent',
+    purple: '0 0 0 transparent',
+    multi: '0 0 0 transparent',
   },
 
-  // Text Glow
   textGlow: {
-    cyan: `
-      0 0 5px #2EB0C4,
-      0 0 10px #2EB0C4,
-      0 0 20px rgba(46, 176, 196, 0.8)
-    `,
-    magenta: `
-      0 0 5px rgba(255, 45, 149, 0.5),
-      0 0 10px rgba(255, 45, 149, 0.3)
-    `,
-    purple: `
-      0 0 5px rgba(139, 92, 246, 0.5),
-      0 0 10px rgba(139, 92, 246, 0.3)
-    `,
+    cyan: 'none',
+    magenta: 'none',
+    purple: 'none',
   },
 
   // Glassmorphism
   glass: {
     dark: {
-      background: 'linear-gradient(135deg, rgba(26, 26, 46, 0.8) 0%, rgba(45, 27, 78, 0.6) 100%)',
+      background: 'rgba(22, 24, 22, 0.85)',
       backdropFilter: 'blur(12px)',
-      border: '1px solid rgba(139, 92, 246, 0.2)',
+      border: '1px solid rgba(255, 255, 255, 0.08)',
     },
     darkIntense: {
-      background: 'linear-gradient(135deg, rgba(26, 26, 46, 0.9) 0%, rgba(22, 33, 62, 0.8) 100%)',
+      background: 'rgba(22, 24, 22, 0.92)',
       backdropFilter: 'blur(16px)',
-      border: '1px solid rgba(46, 176, 196, 0.3)',
+      border: '1px solid rgba(255, 255, 255, 0.1)',
     },
     light: {
-      background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(241, 245, 249, 0.8) 100%)',
+      background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(242, 245, 238, 0.8) 100%)',
       backdropFilter: 'blur(12px)',
-      border: '1px solid rgba(46, 176, 196, 0.2)',
+      border: '1px solid rgba(127, 174, 31, 0.2)',
     },
   },
 
   // Gradientes para bordes
   borderGradient: {
-    neon: 'linear-gradient(90deg, #2EB0C4, #8B5CF6, #FF2D95, #2EB0C4)',
-    static: 'linear-gradient(135deg, #2EB0C4 0%, #8B5CF6 100%)',
-    ocean: 'linear-gradient(135deg, #22D3EE 0%, #2EB0C4 100%)',
+    neon: 'linear-gradient(90deg, #A3D33C, #2EA7E0, #A3D33C)',
+    static: 'linear-gradient(135deg, #A3D33C 0%, #2EA7E0 100%)',
+    ocean: 'linear-gradient(135deg, #C8E68A 0%, #A3D33C 100%)',
   },
 } as const;
 
@@ -314,16 +284,16 @@ export const shadows = {
     sm: '0 1px 3px rgba(0, 0, 0, 0.08)',
     md: '0 4px 12px rgba(0, 0, 0, 0.1)',
     lg: '0 8px 24px rgba(0, 0, 0, 0.12)',
-    neon: '0 4px 20px rgba(46, 176, 196, 0.15)',
-    neonHover: '0 10px 40px rgba(46, 176, 196, 0.2)',
+    neon: '0 4px 20px rgba(127, 174, 31, 0.15)',
+    neonHover: '0 10px 40px rgba(127, 174, 31, 0.2)',
   },
   dark: {
     sm: '0 1px 3px rgba(0, 0, 0, 0.4)',
     md: '0 4px 12px rgba(0, 0, 0, 0.5)',
     lg: '0 8px 24px rgba(0, 0, 0, 0.6)',
-    neon: '0 4px 20px rgba(46, 176, 196, 0.2)',
-    neonHover: '0 0 30px rgba(46, 176, 196, 0.3)',
-    card: '0 10px 40px rgba(0, 0, 0, 0.3)',
+    neon: '0 0 0 transparent',
+    neonHover: '0 6px 20px rgba(0, 0, 0, 0.45)',
+    card: '0 1px 3px rgba(0, 0, 0, 0.4)',
   },
 } as const;
 
@@ -336,16 +306,14 @@ export const keyframes = {
     @keyframes neonPulse {
       0%, 100% {
         box-shadow:
-          0 0 5px #2EB0C4,
-          0 0 10px #2EB0C4,
-          0 0 20px rgba(46, 176, 196, 0.6);
+          0 0 4px rgba(163, 211, 60, 0.6),
+          0 0 12px rgba(163, 211, 60, 0.3);
       }
       50% {
         box-shadow:
-          0 0 10px #2EB0C4,
-          0 0 20px #2EB0C4,
-          0 0 40px rgba(46, 176, 196, 0.8),
-          0 0 60px rgba(139, 92, 246, 0.4);
+          0 0 8px rgba(163, 211, 60, 0.7),
+          0 0 20px rgba(163, 211, 60, 0.4),
+          0 0 36px rgba(46, 167, 224, 0.25);
       }
     }
   `,

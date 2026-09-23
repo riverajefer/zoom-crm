@@ -59,10 +59,10 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 const chartCardSx = {
   borderRadius: '20px',
   border: '2px solid',
-  borderColor: (theme: any) => theme.palette.mode === 'dark' ? 'rgba(139,92,246,0.1)' : 'rgba(0,0,0,0.06)',
+  borderColor: (theme: any) => theme.palette.mode === 'dark' ? 'rgba(46, 167, 224,0.1)' : 'rgba(0,0,0,0.06)',
   background: (theme: any) =>
     theme.palette.mode === 'dark'
-      ? 'linear-gradient(145deg, rgba(26,26,46,0.6) 0%, rgba(22,33,62,1) 100%)'
+      ? 'linear-gradient(145deg, rgba(22, 24, 22,0.6) 0%, rgba(26, 28, 25,1) 100%)'
       : 'linear-gradient(145deg, rgba(255,255,255,0.9) 0%, rgba(241,245,249,0.8) 100%)',
 };
 

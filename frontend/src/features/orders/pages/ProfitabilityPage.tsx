@@ -140,7 +140,7 @@ export const ProfitabilityPage: React.FC = () => {
       headerName: 'Nº Orden',
       width: 150,
       renderCell: (params) => (
-        <Box sx={{ fontWeight: 600, color: 'primary.main' }}>
+        <Box sx={{ fontWeight: 600, color: 'secondary.main' }}>
           {params.value}
         </Box>
       ),
@@ -271,7 +271,7 @@ export const ProfitabilityPage: React.FC = () => {
           alignItems: 'center',
           gap: 2,
           background: isDark
-            ? `linear-gradient(135deg, rgba(26, 26, 46, 0.9) 0%, rgba(22, 33, 62, 0.8) 100%)`
+            ? `linear-gradient(135deg, rgba(22, 24, 22, 0.9) 0%, rgba(26, 28, 25, 0.8) 100%)`
             : `linear-gradient(135deg, rgba(255, 255, 255, 0.97) 0%, rgba(16, 185, 129, 0.05) 100%)`,
           border: `1px solid ${
             isDark

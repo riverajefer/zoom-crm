@@ -1,3 +1,4 @@
+import { NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { NotificationsService } from './notifications.service';
 import { PrismaService } from '../../database/prisma.service';
@@ -265,6 +266,96 @@ describe('NotificationsService', () => {
         where: { name: 'admin' },
         include: { users: { select: { id: true } } },
       });
+    });
+  });
+  // ---------------------------------------------------------------------------
+  // resolveTarget
+  // ---------------------------------------------------------------------------
+  describe('resolveTarget', () => {
+    const mockNotification = (relatedType: string | null, relatedId: string | null = 'rel-1') =>
+      prisma.notification.findFirst.mockResolvedValue({ relatedType, relatedId });
+
+    it('should only look up notifications owned by the user', async () => {
+      mockNotification('Order');
+
+      await service.resolveTarget('notif-1', 'user-1');
+
+      expect(prisma.notification.findFirst).toHaveBeenCalledWith({
+        where: { id: 'notif-1', userId: 'user-1' },
+        select: { relatedId: true, relatedType: true },
+      });
+    });
+
+    it('should throw NotFoundException when the notification is not the user\'s', async () => {
+      prisma.notification.findFirst.mockResolvedValue(null);
+
+      await expect(service.resolveTarget('notif-1', 'user-2')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('should return direct entities without extra queries', async () => {
+      mockNotification('ExpenseOrder', 'og-1');
+
+      await expect(service.resolveTarget('notif-1', 'user-1')).resolves.toEqual({
+        entityType: 'EXPENSE_ORDER',
+        entityId: 'og-1',
+      });
+    });
+
+    it('should resolve a CP payment auth request to its account payable', async () => {
+      mockNotification('AccountPayablePaymentAuthRequest', 'req-1');
+      prisma.accountPayablePaymentAuthRequest.findUnique.mockResolvedValue({
+        accountPayableId: 'cp-1',
+      });
+
+      await expect(service.resolveTarget('notif-1', 'user-1')).resolves.toEqual({
+        entityType: 'ACCOUNT_PAYABLE',
+        entityId: 'cp-1',
+      });
+      expect(prisma.accountPayablePaymentAuthRequest.findUnique).toHaveBeenCalledWith({
+        where: { id: 'req-1' },
+        select: { accountPayableId: true },
+      });
+    });
+
+    it('should resolve a CP payment reversal through its payment auth request', async () => {
+      mockNotification('AccountPayablePaymentReversalRequest', 'rev-1');
+      prisma.accountPayablePaymentReversalRequest.findUnique.mockResolvedValue({
+        paymentAuthRequest: { accountPayableId: 'cp-2' },
+      });
+
+      await expect(service.resolveTarget('notif-1', 'user-1')).resolves.toEqual({
+        entityType: 'ACCOUNT_PAYABLE',
+        entityId: 'cp-2',
+      });
+    });
+
+    it('should resolve a cash movement void request to its cash session', async () => {
+      mockNotification('CashMovementVoidRequest', 'void-1');
+      prisma.cashMovementVoidRequest.findUnique.mockResolvedValue({
+        cashMovement: { cashSessionId: 'session-1' },
+      });
+
+      await expect(service.resolveTarget('notif-1', 'user-1')).resolves.toEqual({
+        entityType: 'CASH_SESSION',
+        entityId: 'session-1',
+      });
+    });
+
+    it('should return null when the related request no longer exists', async () => {
+      mockNotification('AccountPayableAuthRequest', 'gone');
+      prisma.accountPayableAuthRequest.findUnique.mockResolvedValue(null);
+
+      await expect(service.resolveTarget('notif-1', 'user-1')).resolves.toBeNull();
+    });
+
+    it('should return null for notifications without relation or unknown types', async () => {
+      mockNotification(null, null);
+      await expect(service.resolveTarget('notif-1', 'user-1')).resolves.toBeNull();
+
+      mockNotification('SomethingElse');
+      await expect(service.resolveTarget('notif-1', 'user-1')).resolves.toBeNull();
     });
   });
 });

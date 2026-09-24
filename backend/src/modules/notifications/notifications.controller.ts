@@ -52,6 +52,22 @@ export class NotificationsController {
     return { count };
   }
 
+  @Get(':id/target')
+  @ApiOperation({
+    summary: 'Resolver la entidad a la que lleva una notificación',
+    description:
+      'Retorna { entityType, entityId } de la entidad con pantalla de detalle (OP, OG, CP, cliente, sesión de caja, insumo), o null si no tiene destino.',
+  })
+  @ApiParam({ name: 'id', description: 'ID de la notificación' })
+  @ApiResponse({ status: 200, description: 'Destino resuelto (o null)' })
+  @ApiResponse({ status: 404, description: 'Notificación no encontrada' })
+  async resolveTarget(
+    @Param('id') id: string,
+    @CurrentUser('id') userId: string,
+  ) {
+    return this.notificationsService.resolveTarget(id, userId);
+  }
+
   @Put(':id/read')
   @ApiOperation({ summary: 'Marcar notificación como leída' })
   @ApiParam({ name: 'id', description: 'ID de la notificación' })

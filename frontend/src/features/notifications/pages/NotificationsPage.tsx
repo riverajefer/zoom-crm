@@ -24,16 +24,19 @@ import {
   DoneAll as DoneAllIcon,
   ArrowForwardIos as ArrowForwardIosIcon,
 } from '@mui/icons-material';
-import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { PageHeader } from '../../../components/common/PageHeader';
 import { LoadingSpinner } from '../../../components/common/LoadingSpinner';
 import { useNotifications } from '../../../hooks/useNotifications';
-import { PATHS } from '../../../router/paths';
+import {
+  isNotificationNavigable,
+  useNotificationNavigation,
+} from '../../../hooks/useNotificationNavigation';
+import { Notification } from '../../../types/edit-request.types';
 
 export const NotificationsPage: React.FC = () => {
-  const navigate = useNavigate();
+  const openNotification = useNotificationNavigation();
   const theme = useTheme();
   const {
     notificationsQuery,
@@ -45,21 +48,11 @@ export const NotificationsPage: React.FC = () => {
   const notifications = notificationsQuery.data?.data || [];
   const isLoading = notificationsQuery.isLoading;
 
-  const handleNotificationClick = async (
-    notificationId: string,
-    relatedId?: string | null,
-    relatedType?: string | null,
-    isRead?: boolean
-  ) => {
-    if (!isRead) {
-      await markAsReadMutation.mutateAsync(notificationId);
+  const handleNotificationClick = async (notification: Notification) => {
+    if (!notification.isRead) {
+      markAsReadMutation.mutate(notification.id);
     }
-
-    if (relatedId && relatedType === 'Order') {
-      navigate(`${PATHS.ORDERS}/${relatedId}`);
-    } else if (relatedId && relatedType === 'Quote') {
-      navigate(`${PATHS.QUOTES}/${relatedId}`);
-    }
+    await openNotification(notification);
   };
 
   const handleMarkAsRead = (e: React.MouseEvent, id: string) => {
@@ -131,14 +124,7 @@ export const NotificationsPage: React.FC = () => {
                           cursor: 'pointer',
                         },
                       }}
-                      onClick={() =>
-                        handleNotificationClick(
-                          notification.id,
-                          notification.relatedId,
-                          notification.relatedType,
-                          notification.isRead
-                        )
-                      }
+                      onClick={() => handleNotificationClick(notification)}
                     >
                       <Box
                         sx={{
@@ -206,7 +192,7 @@ export const NotificationsPage: React.FC = () => {
                               <DeleteIcon fontSize="small" color="error" />
                             </IconButton>
                           </Tooltip>
-                          {notification.relatedId && (notification.relatedType === 'Order' || notification.relatedType === 'Quote') && (
+                          {isNotificationNavigable(notification.relatedId, notification.relatedType) && (
                             <ArrowForwardIosIcon
                               sx={{
                                 fontSize: '1rem',

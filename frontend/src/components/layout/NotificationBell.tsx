@@ -19,10 +19,16 @@ import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { useNotifications } from '../../hooks/useNotifications';
+import {
+  isNotificationNavigable,
+  useNotificationNavigation,
+} from '../../hooks/useNotificationNavigation';
+import { Notification } from '../../types/edit-request.types';
 import { PATHS } from '../../router/paths';
 
 export const NotificationBell: React.FC = () => {
   const navigate = useNavigate();
+  const openNotification = useNotificationNavigation();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
 
   const { notificationsQuery, unreadCountQuery, markAsReadMutation } =
@@ -40,22 +46,15 @@ export const NotificationBell: React.FC = () => {
     setAnchorEl(null);
   };
 
-  const handleNotificationClick = async (
-    notificationId: string,
-    relatedId?: string | null,
-    relatedType?: string | null,
-  ) => {
-    // Marcar como leída
-    await markAsReadMutation.mutateAsync(notificationId);
-
-    // Navegar si tiene relación
-    if (relatedId && relatedType === 'Order') {
-      navigate(`${PATHS.ORDERS}/${relatedId}`);
-    } else if (relatedId && relatedType === 'Quote') {
-      navigate(`${PATHS.QUOTES}/${relatedId}`);
+  const handleNotificationClick = async (notification: Notification) => {
+    if (!notification.isRead) {
+      markAsReadMutation.mutate(notification.id);
     }
 
-    handleClose();
+    if (isNotificationNavigable(notification.relatedId, notification.relatedType)) {
+      handleClose();
+      await openNotification(notification);
+    }
   };
 
   const handleRefresh = async () => {
@@ -113,13 +112,7 @@ export const NotificationBell: React.FC = () => {
           notifications.map((notification) => (
             <MenuItem
               key={notification.id}
-              onClick={() =>
-                handleNotificationClick(
-                  notification.id,
-                  notification.relatedId,
-                  notification.relatedType,
-                )
-              }
+              onClick={() => handleNotificationClick(notification)}
               sx={{
                 backgroundColor: notification.isRead
                   ? 'transparent'

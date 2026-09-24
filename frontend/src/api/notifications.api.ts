@@ -8,6 +8,20 @@ export interface NotificationsResponse {
   limit: number;
 }
 
+export type NotificationTargetType =
+  | 'ORDER'
+  | 'QUOTE'
+  | 'EXPENSE_ORDER'
+  | 'ACCOUNT_PAYABLE'
+  | 'CLIENT'
+  | 'CASH_SESSION'
+  | 'SUPPLY';
+
+export interface NotificationTarget {
+  entityType: NotificationTargetType;
+  entityId: string;
+}
+
 export interface NotificationsFilters {
   page?: number;
   limit?: number;
@@ -51,6 +65,16 @@ export const notificationsApi = {
    */
   markAllAsRead: async () => {
     await axiosInstance.put('/notifications/mark-all-read');
+  },
+
+  /**
+   * Resolver la entidad a la que lleva la notificación (null si no tiene destino)
+   */
+  resolveTarget: async (notificationId: string) => {
+    const { data } = await axiosInstance.get<NotificationTarget | null>(
+      `/notifications/${notificationId}/target`,
+    );
+    return data || null;
   },
 
   /**

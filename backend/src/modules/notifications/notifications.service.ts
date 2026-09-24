@@ -1,6 +1,20 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { CreateNotificationDto, FilterNotificationsDto } from './dto';
+
+export type NotificationTargetType =
+  | 'ORDER'
+  | 'QUOTE'
+  | 'EXPENSE_ORDER'
+  | 'ACCOUNT_PAYABLE'
+  | 'CLIENT'
+  | 'CASH_SESSION'
+  | 'SUPPLY';
+
+export interface NotificationTarget {
+  entityType: NotificationTargetType;
+  entityId: string;
+}
 
 @Injectable()
 export class NotificationsService {
@@ -90,6 +104,95 @@ export class NotificationsService {
         readAt: new Date(),
       },
     });
+  }
+
+  /**
+   * Resolver a qué entidad raíz lleva una notificación (OP, OG, CP, cliente…).
+   *
+   * Muchas notificaciones guardan en `relatedId` el ID de la *solicitud*
+   * (p. ej. AccountPayablePaymentAuthRequest), no el de la entidad; aquí se
+   * sigue la relación hasta la entidad que tiene pantalla de detalle.
+   * Retorna null si la notificación no tiene destino navegable.
+   */
+  async resolveTarget(
+    notificationId: string,
+    userId: string,
+  ): Promise<NotificationTarget | null> {
+    const notification = await this.prisma.notification.findFirst({
+      where: { id: notificationId, userId },
+      select: { relatedId: true, relatedType: true },
+    });
+    if (!notification) {
+      throw new NotFoundException('Notificación no encontrada');
+    }
+
+    const { relatedId: id, relatedType } = notification;
+    if (!id || !relatedType) return null;
+
+    const target = (
+      entityType: NotificationTargetType,
+      entityId: string | null | undefined,
+    ): NotificationTarget | null =>
+      entityId ? { entityType, entityId } : null;
+
+    switch (relatedType) {
+      // Entidades directas
+      case 'Order':
+        return target('ORDER', id);
+      case 'Quote':
+        return target('QUOTE', id);
+      case 'ExpenseOrder':
+        return target('EXPENSE_ORDER', id);
+      case 'AccountPayable':
+        return target('ACCOUNT_PAYABLE', id);
+      case 'Client':
+        return target('CLIENT', id);
+      case 'SUPPLY':
+        return target('SUPPLY', id);
+
+      // Solicitudes sobre una OP
+      case 'AdvancePaymentApproval':
+        return target('ORDER', (await this.prisma.advancePaymentApproval.findUnique({ where: { id }, select: { orderId: true } }))?.orderId);
+      case 'AdvisorChangeRequest':
+        return target('ORDER', (await this.prisma.advisorChangeRequest.findUnique({ where: { id }, select: { orderId: true } }))?.orderId);
+      case 'ClientOwnershipAuthRequest':
+        return target('ORDER', (await this.prisma.clientOwnershipAuthRequest.findUnique({ where: { id }, select: { orderId: true } }))?.orderId);
+      case 'DiscountApproval':
+        return target('ORDER', (await this.prisma.discountApproval.findUnique({ where: { id }, select: { orderId: true } }))?.orderId);
+      case 'OrderEditRequest':
+        return target('ORDER', (await this.prisma.orderEditRequest.findUnique({ where: { id }, select: { orderId: true } }))?.orderId);
+      case 'OrderStatusChangeRequest':
+        return target('ORDER', (await this.prisma.orderStatusChangeRequest.findUnique({ where: { id }, select: { orderId: true } }))?.orderId);
+      case 'PaymentEditApproval':
+        return target('ORDER', (await this.prisma.paymentEditApproval.findUnique({ where: { id }, select: { orderId: true } }))?.orderId);
+      case 'RefundRequest':
+        return target('ORDER', (await this.prisma.refundRequest.findUnique({ where: { id }, select: { orderId: true } }))?.orderId);
+      case 'PayrollDeduction':
+        return target('ORDER', (await this.prisma.payrollDeduction.findUnique({ where: { id }, select: { orderId: true } }))?.orderId);
+      case 'Payment':
+        return target('ORDER', (await this.prisma.payment.findUnique({ where: { id }, select: { orderId: true } }))?.orderId);
+
+      // Solicitudes sobre una OG / CP / cliente
+      case 'ExpenseOrderAuthRequest':
+        return target('EXPENSE_ORDER', (await this.prisma.expenseOrderAuthRequest.findUnique({ where: { id }, select: { expenseOrderId: true } }))?.expenseOrderId);
+      case 'AccountPayableAuthRequest':
+        return target('ACCOUNT_PAYABLE', (await this.prisma.accountPayableAuthRequest.findUnique({ where: { id }, select: { accountPayableId: true } }))?.accountPayableId);
+      case 'AccountPayablePaymentAuthRequest':
+        return target('ACCOUNT_PAYABLE', (await this.prisma.accountPayablePaymentAuthRequest.findUnique({ where: { id }, select: { accountPayableId: true } }))?.accountPayableId);
+      case 'AccountPayablePaymentReversalRequest':
+        return target('ACCOUNT_PAYABLE', (await this.prisma.accountPayablePaymentReversalRequest.findUnique({ where: { id }, select: { paymentAuthRequest: { select: { accountPayableId: true } } } }))?.paymentAuthRequest?.accountPayableId);
+      case 'ClientAdvisorRequest':
+        return target('CLIENT', (await this.prisma.clientAdvisorRequest.findUnique({ where: { id }, select: { clientId: true } }))?.clientId);
+
+      // Caja
+      case 'CashMovement':
+        return target('CASH_SESSION', (await this.prisma.cashMovement.findUnique({ where: { id }, select: { cashSessionId: true } }))?.cashSessionId);
+      case 'CashMovementVoidRequest':
+        return target('CASH_SESSION', (await this.prisma.cashMovementVoidRequest.findUnique({ where: { id }, select: { cashMovement: { select: { cashSessionId: true } } } }))?.cashMovement?.cashSessionId);
+
+      default:
+        return null;
+    }
   }
 
   /**

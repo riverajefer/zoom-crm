@@ -27,6 +27,10 @@ import {
   findActiveCashSession,
 } from '../cash-session/active-cash-session.util';
 import {
+  reportMovementEditedAfterClose,
+  syncPaymentCashMovement,
+} from '../cash-session/payment-cash-movement.util';
+import {
   CreateOrderDto,
   UpdateOrderDto,
   FilterOrdersDto,
@@ -137,21 +141,6 @@ export interface OrdersDashboardSummary {
   pendingAdvancesCount: number;
 }
 
-
-/**
- * Rastro de una edición de pago que modificó un movimiento de caja cuya sesión
- * ya estaba cerrada. Se permite hacerlo (corregir un monto mal digitado no
- * puede quedar bloqueado), pero queda registrado: el arqueo de esa sesión
- * dejó de reflejar sus movimientos.
- */
-interface MovementEditedAfterClose {
-  movementId: string;
-  sessionId: string;
-  oldAmount: string;
-  newAmount: string;
-  oldPaymentMethod: string;
-  newPaymentMethod: string;
-}
 
 /**
  * Ítem de OT que desaparece al eliminarse el ítem de OP del que cuelga.
@@ -2529,7 +2518,6 @@ export class OrdersService {
     // El rastro sale de la transacción en vez de mutar una variable externa:
     // así el audit log solo se escribe si la edición realmente se confirmó.
     const movementEditedAfterClose = await this.prisma.$transaction(async (tx) => {
-      let editedAfterClose: MovementEditedAfterClose | null = null;
       const paymentData: Prisma.PaymentUpdateInput = {};
       if (updatePaymentDto.amount !== undefined)
         paymentData.amount = new Prisma.Decimal(updatePaymentDto.amount);
@@ -2555,126 +2543,18 @@ export class OrdersService {
         },
       });
 
-      // Ajustar movimiento de caja vinculado.
-      //
-      // Si la sesión de ese movimiento ya está cerrada, editarlo altera un
-      // arqueo firmado: `closingAmount`/`systemBalance`/`discrepancy` quedaron
-      // congelados al cerrar y no se recalculan. Se permite igual (decisión de
-      // negocio: corregir un monto mal digitado no puede quedar bloqueado para
-      // siempre), pero **el cambio no puede ser silencioso**: se anota en la
-      // descripción del movimiento —que es lo que se ve en el arqueo y en la
-      // exportación de la sesión— y se deja registro en el audit log.
-      // ¿El pago dejó de ser dinero? Pasa tanto al volverse saldo a favor como
-      // al volverse crédito: en ambos casos el ingreso desaparece de la caja.
-      const becameNonCash = !paymentMovesCash(updated.paymentMethod);
-
-      if (updated.cashMovementId) {
-        const movement = await tx.cashMovement.findUnique({
-          where: { id: updated.cashMovementId },
-          select: {
-            id: true,
-            amount: true,
-            paymentMethod: true,
-            description: true,
-            cashSession: { select: { id: true, status: true } },
-          },
-        });
-
-        const sessionClosed = movement?.cashSession?.status === 'CLOSED';
-        const amountChanged =
-          movement != null && !movement.amount.equals(updated.amount);
-
-        if (becameNonCash) {
-          // El pago dejó de ser dinero (saldo a favor o crédito), así que este
-          // movimiento deja de existir como ingreso. Se anula (patrón
-          // administrativo: solo `isVoided`, sin exigir sesión abierta ni
-          // contramovimiento) y se suelta el vínculo, para que el pago no siga
-          // apuntando a un movimiento anulado.
-          const fecha = new Date().toISOString().slice(0, 10);
-          await tx.cashMovement.update({
-            where: { id: updated.cashMovementId },
-            data: {
-              isVoided: true,
-              voidedById: userId,
-              voidedAt: new Date(),
-              voidReason:
-                voidReasonForNonCash(updated.paymentMethod) +
-                (sessionClosed ? ` (anulado el ${fecha}, tras el cierre)` : ''),
-            },
-          });
-          await tx.payment.update({
-            where: { id: paymentId },
-            data: { cashMovementId: null },
-          });
-        } else {
-          const movementData: Prisma.CashMovementUpdateInput = {
-            amount: updated.amount,
-            paymentMethod: updated.paymentMethod,
-          };
-
-          if (movement && sessionClosed && amountChanged) {
-            const antes = movement.amount.toString();
-            const ahora = updated.amount.toString();
-            const fecha = new Date().toISOString().slice(0, 10);
-            movementData.description =
-              `${movement.description} [Editado el ${fecha} tras el cierre: ` +
-              `${antes} → ${ahora}]`;
-          }
-
-          await tx.cashMovement.update({
-            where: { id: updated.cashMovementId },
-            data: movementData,
-          });
-        }
-
-        if (movement && sessionClosed) {
-          editedAfterClose = {
-            movementId: movement.id,
-            sessionId: movement.cashSession!.id,
-            oldAmount: movement.amount.toString(),
-            newAmount: becameNonCash
-              ? '0 (anulado)'
-              : updated.amount.toString(),
-            oldPaymentMethod: movement.paymentMethod,
-            newPaymentMethod: updated.paymentMethod,
-          };
-        }
-      } else if (!paymentMovesCash(payment.paymentMethod) && !becameNonCash) {
-        // Camino inverso: el pago no era dinero (saldo a favor o crédito, por
-        // diseño sin movimiento) y ahora sí lo es. Sin esto nacería huérfano —
-        // el mismo bug que acabamos de cerrar en el resto de los flujos.
-        // El movimiento se crea en la sesión abierta HOY, no en la del día en
-        // que se registró el crédito: el dinero entra ahora.
-        const activeSession = await findActiveCashSession(tx);
-
-        if (activeSession) {
-          const receiptNumber =
-            await this.consecutivesService.generateNumber('CASH_RECEIPT');
-          const movement = await tx.cashMovement.create({
-            data: {
-              cashSessionId: activeSession.id,
-              receiptNumber,
-              movementType: 'INCOME',
-              paymentMethod: updated.paymentMethod,
-              amount: updated.amount,
-              description: `Abono a Orden ${order.orderNumber}`,
-              referenceType: 'ORDER',
-              referenceId: orderId,
-              performedById: userId,
-            },
-            select: { id: true },
-          });
-          await tx.payment.update({
-            where: { id: paymentId },
-            data: { cashMovementId: movement.id },
-          });
-        } else {
-          await tx.payment.update({
-            where: { id: paymentId },
-            data: { pendingCashEntry: true },
-          });
-        }
-      }
+      // Dejar el movimiento de caja coherente con el pago editado (anularlo si
+      // dejó de ser dinero, ajustarlo, o crearlo si ahora sí lo es).
+      const editedAfterClose = await syncPaymentCashMovement(tx, {
+        paymentId,
+        previousMethod: payment.paymentMethod,
+        updated,
+        orderId,
+        orderNumber: order.orderNumber,
+        userId,
+        generateReceiptNumber: () =>
+          this.consecutivesService.generateNumber('CASH_RECEIPT'),
+      });
 
       // Reajustar el consumo de saldo a favor si el pago editado lo usa (o dejó
       // de usarlo): se libera lo aplicado antes y se vuelve a tomar con el monto
@@ -2725,34 +2605,14 @@ export class OrdersService {
       return editedAfterClose;
     });
 
-    // Rastro del arqueo alterado. Va fuera de la transacción y sin await
-    // bloqueante: es evidencia, no puede tumbar la edición si falla.
     if (movementEditedAfterClose) {
-      this.logger.warn(
-        `Movimiento ${movementEditedAfterClose.movementId} de la sesión de caja ` +
-        `${movementEditedAfterClose.sessionId} (CERRADA) fue modificado al editar ` +
-        `el pago ${paymentId}: ${movementEditedAfterClose.oldAmount} → ` +
-        `${movementEditedAfterClose.newAmount}. El arqueo de esa sesión ya no ` +
-        `refleja sus movimientos.`,
+      reportMovementEditedAfterClose(
+        this.logger,
+        this.auditLogsService,
+        movementEditedAfterClose,
+        paymentId,
+        userId,
       );
-      this.auditLogsService
-        .logUpdate(
-          'CashMovement',
-          movementEditedAfterClose.movementId,
-          {
-            amount: movementEditedAfterClose.oldAmount,
-            paymentMethod: movementEditedAfterClose.oldPaymentMethod,
-          },
-          {
-            amount: movementEditedAfterClose.newAmount,
-            paymentMethod: movementEditedAfterClose.newPaymentMethod,
-            editedAfterSessionClose: true,
-            cashSessionId: movementEditedAfterClose.sessionId,
-            reason: `Edición del pago ${paymentId} sobre una sesión de caja cerrada`,
-          },
-          userId,
-        )
-        .catch(() => {});
     }
 
     // Reemplazar el comprobante si se adjuntó uno nuevo (fuera de la txn)

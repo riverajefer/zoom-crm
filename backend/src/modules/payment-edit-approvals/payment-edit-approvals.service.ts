@@ -33,6 +33,12 @@ import {
 } from '../../common/utils/order-balance.util';
 import { CreditBalanceService } from '../credit-balance/credit-balance.service';
 import { lockOrderForUpdate } from '../../common/utils/order-lock.util';
+import { ConsecutivesService } from '../consecutives/consecutives.service';
+import { AuditLogsService } from '../audit-logs/audit-logs.service';
+import {
+  reportMovementEditedAfterClose,
+  syncPaymentCashMovement,
+} from '../cash-session/payment-cash-movement.util';
 
 const USER_SELECT = {
   id: true,
@@ -73,6 +79,8 @@ export class PaymentEditApprovalsService
     private readonly wsEventsGateway: WsEventsGateway,
     private readonly storageService: StorageService,
     private readonly creditBalanceService: CreditBalanceService,
+    private readonly consecutivesService: ConsecutivesService,
+    private readonly auditLogsService: AuditLogsService,
   ) {}
 
   onModuleInit() {
@@ -393,7 +401,8 @@ export class PaymentEditApprovalsService
       throw new NotFoundException('Solicitud no encontrada o ya procesada');
     }
 
-    const updatedRequest = await this.prisma.$transaction(async (tx) => {
+    const { approved: updatedRequest, editedAfterClose } =
+      await this.prisma.$transaction(async (tx) => {
       // 1. Construir los datos a aplicar (solo campos con payload)
       const paymentData: Prisma.PaymentUpdateInput = {};
       if (request.newAmount !== null) paymentData.amount = request.newAmount;
@@ -410,7 +419,13 @@ export class PaymentEditApprovalsService
       if (request.newReceiptFileId !== null)
         paymentData.receiptFileId = request.newReceiptFileId;
 
-      // 2. Aplicar al pago
+      // 2. Aplicar al pago. El método anterior se lee del pago vivo, no del
+      // snapshot de la solicitud: otra edición pudo cambiarlo mientras esta
+      // esperaba aprobación.
+      const before = await tx.payment.findUniqueOrThrow({
+        where: { id: request.paymentId },
+        select: { paymentMethod: true },
+      });
       const payment = await tx.payment.update({
         where: { id: request.paymentId },
         data: paymentData,
@@ -422,16 +437,19 @@ export class PaymentEditApprovalsService
         },
       });
 
-      // 3. Ajustar movimiento de caja vinculado (si existe)
-      if (payment.cashMovementId) {
-        await tx.cashMovement.update({
-          where: { id: payment.cashMovementId },
-          data: {
-            amount: payment.amount,
-            paymentMethod: payment.paymentMethod,
-          },
-        });
-      }
+      // 3. Dejar el movimiento de caja coherente con el pago (anularlo si
+      // dejó de ser dinero, ajustarlo, o crearlo si ahora sí lo es). Mismo
+      // código que la edición directa: ver `syncPaymentCashMovement`.
+      const editedAfterClose = await syncPaymentCashMovement(tx, {
+        paymentId: request.paymentId,
+        previousMethod: before.paymentMethod,
+        updated: payment,
+        orderId: request.orderId,
+        orderNumber: request.order.orderNumber,
+        userId: reviewerId,
+        generateReceiptNumber: () =>
+          this.consecutivesService.generateNumber('CASH_RECEIPT'),
+      });
 
       // 4. Reajustar el consumo de saldo a favor (el monto o el método pudieron cambiar)
       const order = await tx.order.findUnique({
@@ -454,7 +472,7 @@ export class PaymentEditApprovalsService
       await this.recalculateOrderPaidAmount(request.orderId, tx);
 
       // 6. Marcar solicitud como aprobada
-      return tx.paymentEditApproval.update({
+      const approved = await tx.paymentEditApproval.update({
         where: { id: requestId },
         data: {
           status: EditRequestStatus.APPROVED,
@@ -468,7 +486,19 @@ export class PaymentEditApprovalsService
           order: { select: { id: true, orderNumber: true } },
         },
       });
+
+      return { approved, editedAfterClose };
     });
+
+    if (editedAfterClose) {
+      reportMovementEditedAfterClose(
+        this.logger,
+        this.auditLogsService,
+        editedAfterClose,
+        request.paymentId,
+        reviewerId,
+      );
+    }
 
     // Si se reemplazó el comprobante, eliminar el archivo anterior (fuera de la txn)
     if (request.newReceiptFileId && request.oldReceiptFileId) {

@@ -11,6 +11,8 @@ import { WhatsappService } from '../whatsapp/whatsapp.service';
 import { WsEventsGateway } from '../ws-events/ws-events.gateway';
 import { StorageService } from '../storage/storage.service';
 import { CreditBalanceService } from '../credit-balance/credit-balance.service';
+import { ConsecutivesService } from '../consecutives/consecutives.service';
+import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { NotFoundException, ForbiddenException } from '@nestjs/common';
 import { EditRequestStatus, Prisma } from '../../generated/prisma';
 
@@ -20,6 +22,8 @@ describe('PaymentEditApprovalsService', () => {
   let notificationsService: any;
   let wsEventsGateway: any;
   let storageService: any;
+  let consecutivesService: any;
+  let auditLogsService: any;
 
   beforeEach(async () => {
     prisma = {
@@ -33,11 +37,20 @@ describe('PaymentEditApprovalsService', () => {
       },
       payment: {
         findUnique: jest.fn(),
+        // Método vigente del pago antes de aplicar la edición.
+        findUniqueOrThrow: jest
+          .fn()
+          .mockResolvedValue({ paymentMethod: 'TRANSFER' }),
         findMany: jest.fn(),
         update: jest.fn(),
       },
       cashMovement: {
+        findUnique: jest.fn(),
+        create: jest.fn(),
         update: jest.fn(),
+      },
+      cashSession: {
+        findMany: jest.fn().mockResolvedValue([]),
       },
       paymentEditApproval: {
         create: jest.fn(),
@@ -67,6 +80,13 @@ describe('PaymentEditApprovalsService', () => {
       hardDeleteFile: jest.fn(),
     };
 
+    consecutivesService = {
+      generateNumber: jest.fn().mockResolvedValue('RC-2026-9999'),
+    };
+    auditLogsService = {
+      logUpdate: jest.fn().mockResolvedValue(undefined),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         PaymentEditApprovalsService,
@@ -90,6 +110,8 @@ describe('PaymentEditApprovalsService', () => {
             resyncCredit: jest.fn().mockResolvedValue(undefined),
           },
         },
+        { provide: ConsecutivesService, useValue: consecutivesService },
+        { provide: AuditLogsService, useValue: auditLogsService },
       ],
     }).compile();
 
@@ -272,6 +294,140 @@ describe('PaymentEditApprovalsService', () => {
       prisma.paymentEditApproval.findFirst.mockResolvedValue(null);
       await expect(service.approve('req1', 'rev', {})).rejects.toThrow(
         NotFoundException,
+      );
+    });
+  });
+
+  // Antes la aprobación solo copiaba monto y método al movimiento: un pago que
+  // pasaba a saldo a favor dejaba vivo su ingreso en caja (OP-2026-3575).
+  describe('approve — movimiento de caja', () => {
+    const pendingRequest = (newPaymentMethod: string) => ({
+      id: 'req1',
+      orderId: 'o1',
+      paymentId: 'p1',
+      requestedById: 'u1',
+      status: EditRequestStatus.PENDING,
+      newAmount: null,
+      newPaymentMethod,
+      newPaymentDate: null,
+      newReference: null,
+      newNotes: null,
+      newBankEntity: null,
+      newReceiptFileId: null,
+      order: { id: 'o1', orderNumber: 'OP-2026-3575' },
+    });
+
+    beforeEach(() => {
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'rev',
+        role: { permissions: [{ permission: { name: 'approve_payment_edits' } }] },
+      });
+      prisma.payment.findMany.mockResolvedValue([
+        { amount: new Prisma.Decimal(198300) },
+      ]);
+      prisma.order.findUnique.mockResolvedValue({
+        clientId: 'c1',
+        total: new Prisma.Decimal(198300),
+      });
+      prisma.paymentEditApproval.update.mockResolvedValue({ id: 'req1' });
+    });
+
+    it('anula el movimiento y suelta el vínculo cuando el pago pasa a saldo a favor', async () => {
+      prisma.paymentEditApproval.findFirst.mockResolvedValue(
+        pendingRequest('CREDIT_BALANCE'),
+      );
+      prisma.payment.findUniqueOrThrow.mockResolvedValue({
+        paymentMethod: 'TRANSFER',
+      });
+      prisma.payment.update.mockResolvedValue({
+        id: 'p1',
+        amount: new Prisma.Decimal(198300),
+        paymentMethod: 'CREDIT_BALANCE',
+        cashMovementId: 'mov1',
+      });
+      prisma.cashMovement.findUnique.mockResolvedValue({
+        id: 'mov1',
+        amount: new Prisma.Decimal(198300),
+        paymentMethod: 'TRANSFER',
+        description: 'Abono a Orden OP-2026-3575',
+        cashSession: { id: 's1', status: 'OPEN' },
+      });
+
+      await service.approve('req1', 'rev', {});
+
+      const movUpdate = prisma.cashMovement.update.mock.calls[0][0];
+      expect(movUpdate.where).toEqual({ id: 'mov1' });
+      expect(movUpdate.data.isVoided).toBe(true);
+      expect(movUpdate.data.voidedById).toBe('rev');
+      expect(movUpdate.data.voidReason).toContain('saldo a favor');
+      expect(prisma.payment.update).toHaveBeenCalledWith({
+        where: { id: 'p1' },
+        data: { cashMovementId: null },
+      });
+      // Sesión abierta: no altera un arqueo firmado, no hay rastro que dejar.
+      expect(auditLogsService.logUpdate).not.toHaveBeenCalled();
+    });
+
+    it('crea el movimiento en la caja abierta cuando el pago deja de ser saldo a favor', async () => {
+      prisma.paymentEditApproval.findFirst.mockResolvedValue(
+        pendingRequest('CASH'),
+      );
+      prisma.payment.findUniqueOrThrow.mockResolvedValue({
+        paymentMethod: 'CREDIT_BALANCE',
+      });
+      prisma.payment.update.mockResolvedValue({
+        id: 'p1',
+        amount: new Prisma.Decimal(198300),
+        paymentMethod: 'CASH',
+        cashMovementId: null,
+      });
+      prisma.cashSession.findMany.mockResolvedValue([
+        { id: 's1', cashRegisterId: 'r1' },
+      ]);
+      prisma.cashMovement.create.mockResolvedValue({ id: 'mov-new' });
+
+      await service.approve('req1', 'rev', {});
+
+      const created = prisma.cashMovement.create.mock.calls[0][0].data;
+      expect(created.cashSessionId).toBe('s1');
+      expect(created.receiptNumber).toBe('RC-2026-9999');
+      expect(created.movementType).toBe('INCOME');
+      expect(created.paymentMethod).toBe('CASH');
+      expect(prisma.payment.update).toHaveBeenCalledWith({
+        where: { id: 'p1' },
+        data: { cashMovementId: 'mov-new' },
+      });
+    });
+
+    it('deja rastro en auditoría si el movimiento anulado era de una sesión cerrada', async () => {
+      prisma.paymentEditApproval.findFirst.mockResolvedValue(
+        pendingRequest('CREDIT_BALANCE'),
+      );
+      prisma.payment.update.mockResolvedValue({
+        id: 'p1',
+        amount: new Prisma.Decimal(198300),
+        paymentMethod: 'CREDIT_BALANCE',
+        cashMovementId: 'mov1',
+      });
+      prisma.cashMovement.findUnique.mockResolvedValue({
+        id: 'mov1',
+        amount: new Prisma.Decimal(198300),
+        paymentMethod: 'TRANSFER',
+        description: 'Abono a Orden OP-2026-3575',
+        cashSession: { id: 's1', status: 'CLOSED' },
+      });
+
+      await service.approve('req1', 'rev', {});
+
+      expect(
+        prisma.cashMovement.update.mock.calls[0][0].data.voidReason,
+      ).toContain('tras el cierre');
+      expect(auditLogsService.logUpdate).toHaveBeenCalledWith(
+        'CashMovement',
+        'mov1',
+        expect.anything(),
+        expect.objectContaining({ editedAfterSessionClose: true }),
+        'rev',
       );
     });
   });

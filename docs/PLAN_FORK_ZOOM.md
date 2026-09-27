@@ -22,7 +22,7 @@
 | 8.º | 8 | Arranque de la base de producción | 9 | 20 min |
 | 9.º | 9 | Aceptación funcional (sin WhatsApp) | — | medio día |
 | 10.º | 1 | **Meta / WhatsApp** (aplazada por decisión) | — | 1–3 días de Meta |
-| — | 10 | Sedes (`locationId`) — **después** de producción | — | otro proyecto |
+| — | 10 | Sedes (`locationId`) — ~~después de producción~~ **antes de producción** (decisión 2026-09-27, ver [PLAN_SEDES.md](./PLAN_SEDES.md)) | 8 | otro proyecto |
 
 La fase 2 (dominio) se lanza en paralelo con la 3 porque el reloj de la propagación lo corre un tercero.
 
@@ -401,6 +401,8 @@ Ejecuta este recorrido completo en **staging** (fase 7) y repítelo en producci�
 ---
 
 ## Fase 10 — Sedes (después, y es el punto de no retorno)
+
+> **Cambio 2026-09-27:** el cliente decidió salir a producción **con** sedes. Esta fase va antes de la 8, y la 9 se repite con sedes. El plan detallado está en [PLAN_SEDES.md](./PLAN_SEDES.md).
 
 No la toques hoy. Cuando llegue:
 1. Define **primero** cómo funciona el inventario entre sedes (arrastra pedidos y producción).

@@ -57,6 +57,20 @@ El `--ff-only` es la red de seguridad del salto directo: si `staging` tuviera al
 | 2026-09-18 | **Meta / WhatsApp se deja para el final** del montaje | no hay afán con las aprobaciones. El dominio sí hay que decidirlo antes, porque la URL del botón "Ver detalle" se quema dentro de la plantilla |
 | 2026-09-18 | **Tres bases de datos separadas**: producción, staging y local (Docker) | High comparte base entre dev y staging, lo que obliga a migraciones idempotentes y hace que un `db:reset` local borre lo de QA. El fork es el momento de no heredarlo |
 | 2026-09-18 | El repositorio se llama `zoom-crm`; el proyecto de Railway también | — |
+| 2026-09-27 | **Sedes**: locales `104`, `119`, `125` más una **Matriz** (contabilidad). Clientes, proveedores, productos, insumos **y su stock** son comunes; COT, OP, OT, OPROD, OG, CP y caja son de cada sede; la Matriz tiene sus propias CP y OG | respuestas del cliente tras la reunión de sedes. Detalle en [docs/PLAN_SEDES.md](./docs/PLAN_SEDES.md) |
+| 2026-09-27 | Numeración **por sede y sin año**: `125-OP-0001`, contador que nunca se reinicia | cada sede lleva su numeración. Diverge de High (`OP-2026-0001`): los cherry-picks que toquen `consecutives` van a chocar |
+| 2026-09-27 | **Sin abonos cruzados**; ~~la caja matriz es solo un reporte~~ (reemplazado el mismo día: ver fila de la Matriz); la venta cuenta para la sede donde se hace; todo lo aprueba `admin` | respuestas del cliente |
+| 2026-09-27 | **Producción sale con sedes**: la fase 10 va antes de crear producción | con 3 locales operando, sin sedes compartirían caja y numeración. Invierte el orden de [PLAN_FORK_ZOOM.md](./docs/PLAN_FORK_ZOOM.md) |
+| 2026-09-27 | DTF por sede; teléfono por sede en los PDF, correo común `promocionaleszoom@gmail.com` | respuestas del cliente |
+| 2026-09-27 | Empleados por sede; consumo de insumos registrado por sede; precios, áreas de producción, columnas del kanban y metas (por asesor) comunes; co-propiedad de clientes entre sedes como hoy | respuestas del cliente |
+| 2026-09-27 | Una OP, COT u OT de otra sede se puede **consultar en solo lectura** ("modo consulta"), sin mezclar sedes en los listados. La asistencia se anota en la sede donde estuvo la persona | respuestas del cliente. Diseño en [docs/PLAN_SEDES.md §8](./docs/PLAN_SEDES.md#8-consultar-una-op-cot-u-ot-de-otra-sede) |
+| 2026-09-27 | Sin traslado de documentos entre sedes; prospectos y nómina comunes; notificaciones de operación solo a la sede del documento; un solo número de WhatsApp | respuestas del cliente |
+| 2026-09-27 | **Rol admin**: uno solo, no vende, opera en todas las sedes sin restricción, vista "Todas" agrupada por sede, trazabilidad de sus acciones directas. Crear sedes queda en un rol oculto `soporte` con permisos reservados que el admin no puede otorgarse | respuestas del cliente y recomendación. Detalle en [docs/PLAN_SEDES.md §6](./docs/PLAN_SEDES.md#6-el-rol-administrador) |
+| 2026-09-27 | Dashboard: ventas = valor de las OP creadas (se muestra también el recaudo); gastos = lo pagado; los gastos de la Matriz y la nómina van aparte, sin repartir. Admin: Oscar Herrera (Gerencia), motivo obligatorio en sus acciones directas, solo notificaciones de aprobación | respuestas del cliente |
+| 2026-09-27 | **Matriz**: tipo `HEADQUARTERS`, código `MAT`, **caja propia** (puede pagar en efectivo), gastos que sirven a las 3 sedes, la compra de insumos se asigna a una sede o a la Matriz, nómina como en High. **Cierre general diario** de las 4 cajas dentro del sistema, con bloqueo del día | respuestas del cliente. Detalle en [docs/PLAN_SEDES.md §14](./docs/PLAN_SEDES.md#14-la-matriz) |
+| 2026-09-27 | **Saldo a favor** usable en cualquier sede; cuenta en la sede donde se aplica (en el dashboard, en línea aparte del recaudo) | respuesta del cliente |
+| 2026-09-27 | Técnicas: sede activa por header `X-Location-Id` + `AsyncLocalStorage` + extensión de Prisma que filtra; sala de socket.io por sede; las sedes las crea la migración; staging se reinicia en vez de asignarle sede a los datos viejos | aprobadas. Detalle en [docs/PLAN_SEDES.md §15](./docs/PLAN_SEDES.md#15-decisiones-técnicas) |
+| 2026-09-27 | Plan de sedes organizado en **fases 0 a 8** | [docs/PLAN_SEDES.md §12](./docs/PLAN_SEDES.md#12-fases-de-implementación) |
 
 ### Restricciones heredadas que no se pueden tocar
 
@@ -73,7 +87,7 @@ El `--ff-only` es la red de seguridad del salto directo: si `staging` tuviera al
 - [x] ~~Dominio definitivo~~ → **`zoompublicidadcrm.com`** (confirmado 2026-09-20, registrado en Name.com). Hosts: apex y `www` al frontend, `api.` al backend, `pruebas.` y `api.pruebas.` a staging. Comprado **dentro de Railway**, que gestiona la zona DNS: crea los registros solo al agregar cada dominio a un servicio, apex incluido, así que no hace falta Cloudflare. La zona está vacía y lo que hoy responde es el parking de name.com, no un comodín.
 - [ ] **WhatsApp en staging**: app y número de prueba propios, o sin webhook en QA (aprobaciones desde la UI). El webhook se configura por app de Meta y un WABA se suscribe a una sola app, así que un mismo número no puede servir a producción y a pruebas a la vez.
 - [ ] **Workspace de Railway**: se construye dentro del workspace actual y se transfiere ("Transfer Project") cuando entre en producción.
-- [ ] **Alcance del inventario entre sedes.** Hay que definirlo antes de escribir la primera migración con `locationId`, porque arrastra pedidos y producción.
+- [x] ~~Alcance del inventario entre sedes~~ → **compartido**: un solo stock por insumo para las 3 sedes; cada local produce lo suyo (2026-09-27). Lo que sigue abierto sobre sedes vive en [docs/PLAN_SEDES.md §13](./docs/PLAN_SEDES.md#13-preguntas-abiertas).
 
 ---
 

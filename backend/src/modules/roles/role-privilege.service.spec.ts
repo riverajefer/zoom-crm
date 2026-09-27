@@ -16,6 +16,7 @@ const ROLES: Record<string, { name: string; permissions: string[] }> = {
   'role-conta': { name: 'contabilidad', permissions: ['p1', 'p2', 'p3'] },
   'role-comercial': { name: 'comercial', permissions: ['p1', 'p2'] },
   'role-caja': { name: 'caja', permissions: ['p1', 'p4'] },
+  'role-soporte': { name: 'soporte', permissions: ['p1', 'p2', 'p3', 'p4', 'p5'] },
 };
 
 const PERMISSION_NAMES: Record<string, string> = {
@@ -23,6 +24,7 @@ const PERMISSION_NAMES: Record<string, string> = {
   p2: 'create_orders',
   p3: 'create_users',
   p4: 'caja_confirm_ap_payment_reversal',
+  p5: 'manage_locations', // reservado a soporte
 };
 
 describe('RolePrivilegeService', () => {
@@ -47,6 +49,7 @@ describe('RolePrivilegeService', () => {
             'u-admin': { roleId: 'role-admin', username: 'adminsistema' },
             'u-comercial': { roleId: 'role-comercial', username: 'vendedora' },
             'u-conta': { roleId: 'role-conta', username: 'contadora' },
+            'u-soporte': { roleId: 'role-soporte', username: 'adminsistema' },
           };
           return users[where.id] ?? null;
         }),
@@ -55,6 +58,7 @@ describe('RolePrivilegeService', () => {
         findMany: jest.fn(async ({ where }: any) =>
           (where.id.in as string[])
             .filter((id) => PERMISSION_NAMES[id])
+            .filter((id) => !where.name || where.name.in.includes(PERMISSION_NAMES[id]))
             .map((id) => ({ name: PERMISSION_NAMES[id] })),
         ),
       },
@@ -165,6 +169,41 @@ describe('RolePrivilegeService', () => {
       await expect(
         service.assertCanManageRole('role-comercial', 'role-conta'),
       ).rejects.toThrow(ForbiddenException);
+    });
+  });
+
+  describe('soporte y permisos reservados', () => {
+    it('soporte no tiene restricción', async () => {
+      await expect(service.assertCanGrantPermissions('role-soporte', ['p5'])).resolves.toBeUndefined();
+      await expect(service.assertCanManageUser('role-soporte', 'u-admin')).resolves.toBeUndefined();
+    });
+
+    it('el admin no puede otorgar un permiso reservado', async () => {
+      await expect(service.assertCanGrantPermissions('role-admin', ['p1', 'p5'])).rejects.toThrow(
+        /reservados a soporte \(manage_locations\)/,
+      );
+    });
+
+    it('el admin sigue otorgando los permisos no reservados', async () => {
+      await expect(service.assertCanGrantPermissions('role-admin', ['p1', 'p3'])).resolves.toBeUndefined();
+    });
+
+    it('nadie más que soporte asigna el rol de soporte, ni siquiera el admin', async () => {
+      await expect(service.assertCanAssignRole('role-admin', 'role-soporte')).rejects.toThrow(
+        /reservado a soporte/,
+      );
+    });
+
+    it('el admin no puede modificar a un usuario de soporte', async () => {
+      await expect(service.assertCanManageUser('role-admin', 'u-soporte')).rejects.toThrow(
+        ForbiddenException,
+      );
+    });
+
+    it('isSupportRole distingue al rol de soporte', async () => {
+      await expect(service.isSupportRole('role-soporte')).resolves.toBe(true);
+      await expect(service.isSupportRole('role-admin')).resolves.toBe(false);
+      await expect(service.isSupportRole('role-borrado')).resolves.toBe(false);
     });
   });
 

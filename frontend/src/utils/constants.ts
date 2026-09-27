@@ -214,6 +214,13 @@ export const PERMISSIONS = {
   EXPORT_SALES_BY_ADVISOR: 'export_sales_by_advisor',
   MANAGE_SALES_GOALS: 'manage_sales_goals',
   READ_ALL_ADVISORS_TRACKING: 'read_all_advisors_tracking',
+  // Sedes (solo Zoom). MANAGE_LOCATIONS es reservado a soporte.
+  VIEW_ALL_LOCATIONS: 'view_all_locations',
+  READ_OTHER_LOCATIONS: 'read_other_locations',
+  MANAGE_USER_LOCATIONS: 'manage_user_locations',
+  READ_ALL_CASH_SESSIONS: 'read_all_cash_sessions',
+  PERFORM_GENERAL_CLOSING: 'perform_general_closing',
+  MANAGE_LOCATIONS: 'manage_locations',
 };
 
 export const ROUTES = {

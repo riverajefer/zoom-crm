@@ -16,6 +16,8 @@ export const COMPOSITE_PRIMARY_KEYS: Readonly<Record<string, readonly string[]>>
   OrderItemProductionArea: ['orderItemId', 'productionAreaId'],
   WorkOrderItemProductionArea: ['workOrderItemId', 'productionAreaId'],
   ExpenseOrderItemProductionArea: ['expenseOrderItemId', 'productionAreaId'],
+  // Solo Zoom: sedes permitidas de un usuario (docs/PLAN_SEDES.md)
+  UserLocation: ['userId', 'locationId'],
 };
 
 export const UNKNOWN_RECORD_ID = 'unknown';

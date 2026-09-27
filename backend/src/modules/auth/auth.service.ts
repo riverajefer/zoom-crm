@@ -12,6 +12,22 @@ import { PrismaService } from '../../database/prisma.service';
 import { JwtPayload, TokenPair, AuthenticatedUser } from '../../common/interfaces';
 import { SessionLogsService } from '../session-logs/session-logs.service';
 import { AttendanceService } from '../attendance/attendance.service';
+import { VIEW_ALL_LOCATIONS_PERMISSION } from '../../common/utils/location-context';
+
+/** Sedes del usuario que viajan con el login y con `/auth/me`. */
+export interface UserLocations {
+  locations: {
+    id: string;
+    code: string;
+    name: string;
+    type: string;
+    color: string;
+    address: string | null;
+    phone: string | null;
+  }[];
+  defaultLocationId: string | null;
+  canViewAllLocations: boolean;
+}
 
 @Injectable()
 export class AuthService {
@@ -126,9 +142,12 @@ export class AuthService {
     user: AuthenticatedUser,
     ipAddress?: string,
     userAgent?: string,
-  ): Promise<TokenPair & { user: AuthenticatedUser; permissions: string[] }> {
+  ): Promise<
+    TokenPair & { user: AuthenticatedUser; permissions: string[] } & UserLocations
+  > {
     const tokens = await this.login(user);
     const permissions = await this.getUserPermissions(user.id);
+    const locations = await this.getUserLocations(user.id, permissions);
 
     // Create session log
     await this.sessionLogsService.createLoginLog(user.id, ipAddress, userAgent);
@@ -137,7 +156,53 @@ export class AuthService {
       ...tokens,
       user,
       permissions,
+      ...locations,
     };
+  }
+
+  /**
+   * Sedes en las que el usuario puede operar y la predeterminada, para el
+   * selector del frontend. Con `view_all_locations` son todas las activas.
+   * Ver docs/PLAN_SEDES.md §5.
+   */
+  async getUserLocations(userId: string, permissions: string[]): Promise<UserLocations> {
+    const select = {
+      id: true,
+      code: true,
+      name: true,
+      type: true,
+      color: true,
+      address: true,
+      phone: true,
+    } as const;
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        defaultLocationId: true,
+        locations: {
+          where: { location: { isActive: true } },
+          select: { location: { select } },
+          orderBy: { location: { sortOrder: 'asc' } },
+        },
+      },
+    });
+
+    const canViewAll = permissions.includes(VIEW_ALL_LOCATIONS_PERMISSION);
+    const locations = canViewAll
+      ? await this.prisma.location.findMany({
+          where: { isActive: true },
+          select,
+          orderBy: { sortOrder: 'asc' },
+        })
+      : (user?.locations ?? []).map((ul) => ul.location);
+
+    const defaultLocationId =
+      user?.defaultLocationId && locations.some((l) => l.id === user.defaultLocationId)
+        ? user.defaultLocationId
+        : null;
+
+    return { locations, defaultLocationId, canViewAllLocations: canViewAll };
   }
 
   /**
@@ -277,6 +342,7 @@ export class AuthService {
 
     // Extraer solo los nombres de los permisos
     const permissions = user.role.permissions.map((rp: any) => rp.permission.name);
+    const locations = await this.getUserLocations(user.id, permissions);
 
     return {
       user: {
@@ -305,6 +371,7 @@ export class AuthService {
         updatedAt: user.updatedAt,
       },
       permissions,
+      ...locations,
     };
   }
 

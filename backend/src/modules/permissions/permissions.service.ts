@@ -2,7 +2,12 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
+import {
+  isReservedPermission,
+  SUPPORT_ROLE_NAME,
+} from '../../common/constants/roles.constants';
 import { CreatePermissionDto, UpdatePermissionDto } from './dto';
 import { PermissionsRepository } from './permissions.repository';
 @Injectable()
@@ -14,8 +19,21 @@ export class PermissionsService {
   /**
    * Obtiene todos los permisos
    */
-  async findAll() {
-    return this.permissionsRepository.findAll();
+  async findAll(actorRoleId?: string) {
+    const all = await this.permissionsRepository.findAll();
+    return (await this.seesReserved(actorRoleId))
+      ? all
+      : all.filter((p) => !isReservedPermission(p.name));
+  }
+
+  /**
+   * Los permisos reservados solo los ve soporte. Sin actor (llamada interna)
+   * no se filtra.
+   */
+  private async seesReserved(actorRoleId?: string): Promise<boolean> {
+    if (!actorRoleId) return true;
+    const roleName = await this.permissionsRepository.findRoleName(actorRoleId);
+    return roleName === SUPPORT_ROLE_NAME;
   }
 
   /**
@@ -28,10 +46,14 @@ export class PermissionsService {
   /**
    * Obtiene un permiso por ID
    */
-  async findOne(id: string) {
+  async findOne(id: string, actorRoleId?: string) {
     const permission = await this.permissionsRepository.findById(id);
 
-    if (!permission) {
+    const hidden =
+      !!permission &&
+      isReservedPermission(permission.name) &&
+      !(await this.seesReserved(actorRoleId));
+    if (!permission || hidden) {
       throw new NotFoundException(`Permission with ID ${id} not found`);
     }
 
@@ -49,6 +71,12 @@ export class PermissionsService {
    * Crea un nuevo permiso
    */
   async create(createPermissionDto: CreatePermissionDto) {
+    if (isReservedPermission(createPermissionDto.name)) {
+      throw new ForbiddenException(
+        `El permiso «${createPermissionDto.name}» está reservado a soporte`,
+      );
+    }
+
     // Verificar si el nombre ya existe
     const existingPermission = await this.permissionsRepository.findByName(
       createPermissionDto.name,
@@ -87,7 +115,15 @@ export class PermissionsService {
    * Actualiza un permiso
    */
   async update(id: string, updatePermissionDto: UpdatePermissionDto) {
-    await this.findOne(id);
+    const current = await this.findOne(id);
+
+    // Los reservados los administra el seed; renombrarlos rompería el bloqueo.
+    if (
+      isReservedPermission(current.name) ||
+      (updatePermissionDto.name && isReservedPermission(updatePermissionDto.name))
+    ) {
+      throw new ForbiddenException('Los permisos reservados a soporte no se editan');
+    }
 
     // Verificar si el nuevo nombre ya existe
     if (updatePermissionDto.name) {

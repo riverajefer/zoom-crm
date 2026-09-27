@@ -5,6 +5,22 @@ export interface AuditContext {
   userId?: string;
   ipAddress?: string;
   userAgent?: string;
+  /**
+   * Sede activa del request. Comparte el store con la auditoría porque los dos
+   * nacen y mueren con el mismo request; se lee y escribe con las funciones de
+   * `location-context.ts`, no directamente.
+   */
+  location?: RequestLocation;
+}
+
+/** Ver `location-context.ts` y docs/PLAN_SEDES.md §15.1. */
+export interface RequestLocation {
+  /** Sede activa. `null` en la vista "Todas" o si el usuario no tiene sede. */
+  locationId: string | null;
+  /** Vista "Todas las sedes" (solo con `view_all_locations`). */
+  all: boolean;
+  /** Sedes que el usuario puede operar. */
+  permittedIds: string[];
 }
 
 /**
@@ -62,4 +78,9 @@ export function setAuditUserId(userId: string | undefined): void {
   if (store) {
     store.userId = userId;
   }
+}
+
+/** Acceso al store del request para `location-context.ts`. Sin request, `undefined`. */
+export function getRequestStore(): AuditContext | undefined {
+  return storage.getStore();
 }

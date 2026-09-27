@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { User, LoginDto, AuthResponse } from '../types';
 import { authApi } from '../api/auth.api';
+import { useLocationStore } from './locationStore';
 
 /**
  * Promesa de refresh en vuelo (single-flight).
@@ -92,6 +93,7 @@ export const useAuthStore = create<AuthState>()(
             mustChangePassword: response.user.mustChangePassword ?? false,
             isLoading: false,
           });
+          useLocationStore.getState().setFromAuth(response);
         } catch (error: unknown) {
           const message = error instanceof Error ? error.message : 'Error al iniciar sesión';
           set({
@@ -116,6 +118,7 @@ export const useAuthStore = create<AuthState>()(
           error: null,
         });
         localStorage.removeItem('auth-storage');
+        useLocationStore.getState().clear();
 
         // Intentar logout en backend con el token guardado explícitamente
         if (accessToken) {
@@ -186,6 +189,7 @@ export const useAuthStore = create<AuthState>()(
               set({
                 permissions: profileData.permissions || [],
               });
+              useLocationStore.getState().setFromAuth(profileData);
             } catch (permError) {
               console.error('Error loading user permissions:', permError);
             }

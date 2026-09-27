@@ -29,6 +29,7 @@ const mockRolePrivilegeService = {
   assertCanManageUser: jest.fn(),
   assertCanManageRole: jest.fn(),
   assertCanGrantPermissions: jest.fn(),
+  isSupportRole: jest.fn(),
 };
 
 const mockPermissionsRepository = {
@@ -500,6 +501,37 @@ describe('RolesService', () => {
         service.assignPermissions('role-1', { permissionIds: ['perm-9'] }, 'actor-role'),
       ).rejects.toThrow(ForbiddenException);
       expect(mockRolesRepository.replacePermissions).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('rol de soporte', () => {
+    const soporte = { id: 'role-sop', name: 'soporte', description: null, createdAt: new Date(), updatedAt: new Date(), _count: { users: 1 }, permissions: [], users: [] };
+    const admin = { ...soporte, id: 'role-adm', name: 'admin' };
+
+    it('no aparece en la lista para quien no es soporte', async () => {
+      mockRolesRepository.findAll.mockResolvedValue([admin, soporte]);
+      mockRolePrivilegeService.isSupportRole.mockResolvedValue(false);
+
+      const result = await service.findAll('role-adm');
+
+      expect(result.map((r) => r.name)).toEqual(['admin']);
+    });
+
+    it('su detalle es 404 para quien no es soporte', async () => {
+      mockRolesRepository.findById.mockResolvedValue(soporte);
+      mockRolePrivilegeService.isSupportRole.mockResolvedValue(false);
+
+      await expect(service.findOne('role-sop', 'role-adm')).rejects.toThrow(NotFoundException);
+    });
+
+    it.each(['soporte', 'Soporte', ' SOPORTE '])('el nombre «%s» está reservado', async (name) => {
+      await expect(service.create({ name } as any, 'role-adm')).rejects.toThrow(/reservado/);
+    });
+
+    it('no se puede eliminar', async () => {
+      mockRolesRepository.findById.mockResolvedValue(soporte);
+
+      await expect(service.remove('role-sop', 'role-sop')).rejects.toThrow(BadRequestException);
     });
   });
 });

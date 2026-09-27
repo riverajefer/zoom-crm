@@ -1,5 +1,6 @@
 import axios, { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from 'axios';
 import { useAuthStore } from '../store/authStore';
+import { useLocationStore } from '../store/locationStore';
 import { getFriendlyErrorMessage } from '../utils/error-messages';
 import { useMaintenanceModeStore } from '../hooks/useMaintenanceMode';
 import { enqueueSnackbar } from 'notistack';
@@ -39,12 +40,47 @@ axiosInstance.interceptors.request.use(
       config.headers.Authorization = `Bearer ${token}`;
     }
 
+    // Sede activa (docs/PLAN_SEDES.md §15.1). Sin sede, el backend usa la
+    // predeterminada del usuario.
+    const activeLocationId = useLocationStore.getState().activeLocationId;
+    if (token && activeLocationId) {
+      config.headers['X-Location-Id'] = activeLocationId;
+    }
+
     return config;
   },
   (error: AxiosError) => {
     return Promise.reject(error);
   }
 );
+
+/**
+ * Recuperación de la sede activa, compartida (single-flight): cuando varias
+ * peticiones reciben a la vez `LOCATION_NOT_ALLOWED`, todas esperan la misma
+ * recarga de sedes y se muestra un solo aviso.
+ */
+let locationRecovery: Promise<void> | null = null;
+
+function recoverActiveLocation(): Promise<void> {
+  if (!locationRecovery) {
+    locationRecovery = (async () => {
+      useLocationStore.getState().clear();
+      try {
+        const { data } = await axiosInstance.post('/auth/me');
+        useLocationStore.getState().setFromAuth(data);
+      } catch {
+        // Sin sedes recargadas, el reintento va sin header y el backend usa la predeterminada.
+      }
+      enqueueSnackbar('Tu sede activa cambió: volviste a tu sede predeterminada.', {
+        variant: 'info',
+        preventDuplicate: true,
+      });
+    })().finally(() => {
+      locationRecovery = null;
+    });
+  }
+  return locationRecovery;
+}
 
 // Interceptor de respuesta: maneja 503 (mantenimiento), 401, refresh token y errores
 axiosInstance.interceptors.response.use(
@@ -60,6 +96,7 @@ axiosInstance.interceptors.response.use(
   async (error: AxiosError) => {
     const originalRequest = error.config as InternalAxiosRequestConfig & {
       _retry?: boolean;
+      _locationRetry?: boolean;
     };
 
     // Manejo de Modo Mantenimiento — 503 Service Unavailable
@@ -70,6 +107,25 @@ axiosInstance.interceptors.response.use(
         'El sistema se encuentra en mantenimiento. Por favor intenta más tarde.';
       useMaintenanceModeStore.getState().activateMaintenance(message);
       return Promise.reject(error);
+    }
+
+    // Sede activa que ya no está permitida (se la quitaron al usuario, o se
+    // desactivó): se vuelve a la predeterminada, se recargan las sedes y se
+    // reintenta una vez. Nunca se cambia de sede en silencio.
+    const errorCode = (error.response?.data as { code?: string } | undefined)?.code;
+    if (
+      error.response?.status === 403 &&
+      errorCode === 'LOCATION_NOT_ALLOWED' &&
+      !originalRequest._locationRetry
+    ) {
+      originalRequest._locationRetry = true;
+      await recoverActiveLocation();
+      const nextLocation = useLocationStore.getState().activeLocationId;
+      if (originalRequest.headers) {
+        if (nextLocation) originalRequest.headers['X-Location-Id'] = nextLocation;
+        else delete originalRequest.headers['X-Location-Id'];
+      }
+      return axiosInstance(originalRequest);
     }
 
     // Manejo de Modo "Missing Permissions" — 403 Forbidden

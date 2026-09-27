@@ -228,6 +228,37 @@ export const permissionGroups: PermissionGroup[] = [
       },
     ],
   },
+  // Sedes (solo Zoom): ver docs/PLAN_SEDES.md §5, §6 y §14. `manage_locations`
+  // es reservado (src/common/constants/roles.constants.ts): solo lo tiene soporte.
+  {
+    label: '🏢 Sedes',
+    permissions: [
+      {
+        name: 'view_all_locations',
+        description: 'Operar en cualquier sede y ver la vista "Todas las sedes"',
+      },
+      {
+        name: 'read_other_locations',
+        description: 'Consultar en solo lectura OP, COT y OT de otras sedes',
+      },
+      {
+        name: 'manage_user_locations',
+        description: 'Asignar a los usuarios sus sedes permitidas y la predeterminada',
+      },
+      {
+        name: 'read_all_cash_sessions',
+        description: 'Ver en solo lectura las cajas de todas las sedes',
+      },
+      {
+        name: 'perform_general_closing',
+        description: 'Hacer el cierre general diario de las cajas',
+      },
+      {
+        name: 'manage_locations',
+        description: 'Crear y editar sedes (reservado a soporte)',
+      },
+    ],
+  },
 ];
 
 export const allCatalogPermissions = permissionGroups.flatMap(

@@ -5,12 +5,16 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
-import { CreateUserDto, UpdateUserDto } from './dto';
+import { CreateUserDto, SetUserLocationsDto, UpdateUserDto } from './dto';
 import { UsersRepository } from './users.repository';
 import { RolesRepository } from '../roles/roles.repository';
 import { CargosRepository } from '../cargos/cargos.repository';
 import { RolePrivilegeService } from '../roles/role-privilege.service';
 import { AuthenticatedUser } from '../../common/interfaces';
+import {
+  ADMIN_ROLE_NAME,
+  SUPPORT_ROLE_NAME,
+} from '../../common/constants/roles.constants';
 
 @Injectable()
 export class UsersService {
@@ -27,7 +31,7 @@ export class UsersService {
     const role = await this.rolesRepository.findById(currentUser.roleId);
     const roleName = role?.name?.toLowerCase();
 
-    if (roleName !== 'admin') {
+    if (roleName !== ADMIN_ROLE_NAME && roleName !== SUPPORT_ROLE_NAME) {
       throw new ForbiddenException('Only admin users can deactivate users');
     }
   }
@@ -35,17 +39,26 @@ export class UsersService {
   /**
    * Obtiene todos los usuarios con su rol
    */
-  async findAll() {
-    return this.usersRepository.findAll();
+  async findAll(actorRoleId?: string) {
+    const users = await this.usersRepository.findAll();
+    // Los usuarios de soporte solo los ve soporte. Sin actor (llamada interna) no se filtra.
+    if (!actorRoleId || (await this.rolePrivilegeService.isSupportRole(actorRoleId))) {
+      return users;
+    }
+    return users.filter((u) => u.role?.name !== SUPPORT_ROLE_NAME);
   }
 
   /**
    * Obtiene un usuario por ID con su rol y permisos
    */
-  async findOne(id: string) {
+  async findOne(id: string, actorRoleId?: string) {
     const user = await this.usersRepository.findById(id);
 
-    if (!user) {
+    const hidden =
+      user?.role?.name === SUPPORT_ROLE_NAME &&
+      !!actorRoleId &&
+      !(await this.rolePrivilegeService.isSupportRole(actorRoleId));
+    if (!user || hidden) {
       throw new NotFoundException(`User with ID ${id} not found`);
     }
 
@@ -284,6 +297,7 @@ export class UsersService {
    */
   async remove(id: string, currentUser: AuthenticatedUser) {
     await this.assertAdmin(currentUser);
+    await this.rolePrivilegeService.assertCanManageUser(currentUser.roleId, id);
 
     await this.findOne(id);
 
@@ -297,6 +311,7 @@ export class UsersService {
    */
   async deactivate(id: string, currentUser: AuthenticatedUser) {
     await this.assertAdmin(currentUser);
+    await this.rolePrivilegeService.assertCanManageUser(currentUser.roleId, id);
 
     const user = await this.usersRepository.findById(id);
 
@@ -314,5 +329,32 @@ export class UsersService {
       message: `User with ID ${id} deactivated successfully`,
       user: deactivatedUser,
     };
+  }
+
+  /**
+   * Asigna las sedes en las que opera el usuario y la predeterminada (en la
+   * que entra al iniciar sesión). Ver docs/PLAN_SEDES.md §6.5.
+   */
+  async setLocations(id: string, dto: SetUserLocationsDto, actorRoleId: string) {
+    await this.findOne(id, actorRoleId);
+    await this.rolePrivilegeService.assertCanManageUser(actorRoleId, id);
+
+    const locationIds = [...new Set(dto.locationIds)];
+    const defaultLocationId = dto.defaultLocationId ?? null;
+
+    if (defaultLocationId && !locationIds.includes(defaultLocationId)) {
+      throw new BadRequestException(
+        'La sede predeterminada tiene que estar entre las sedes permitidas',
+      );
+    }
+
+    if (locationIds.length > 0) {
+      const active = await this.usersRepository.countActiveLocations(locationIds);
+      if (active !== locationIds.length) {
+        throw new BadRequestException('Alguna de las sedes no existe o está inactiva');
+      }
+    }
+
+    return this.usersRepository.setLocations(id, locationIds, defaultLocationId);
   }
 }

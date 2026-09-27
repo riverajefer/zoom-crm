@@ -33,8 +33,8 @@ describe('UsersController', () => {
   describe('findAll', () => {
     it('should delegate to usersService.findAll', async () => {
       mockUsersService.findAll.mockResolvedValue([]);
-      const result = await controller.findAll();
-      expect(mockUsersService.findAll).toHaveBeenCalled();
+      const result = await controller.findAll('role-actor');
+      expect(mockUsersService.findAll).toHaveBeenCalledWith('role-actor');
       expect(result).toEqual([]);
     });
   });
@@ -43,8 +43,8 @@ describe('UsersController', () => {
     it('should delegate to usersService.findOne with the given id', async () => {
       const user = { id: 'user-1', email: 'a@b.com' };
       mockUsersService.findOne.mockResolvedValue(user);
-      const result = await controller.findOne('user-1');
-      expect(mockUsersService.findOne).toHaveBeenCalledWith('user-1');
+      const result = await controller.findOne('user-1', 'role-actor');
+      expect(mockUsersService.findOne).toHaveBeenCalledWith('user-1', 'role-actor');
       expect(result).toEqual(user);
     });
   });

@@ -33,8 +33,8 @@ describe('PermissionsController', () => {
   describe('findAll', () => {
     it('should delegate to permissionsService.findAll', async () => {
       mockPermissionsService.findAll.mockResolvedValue([]);
-      expect(await controller.findAll()).toEqual([]);
-      expect(mockPermissionsService.findAll).toHaveBeenCalled();
+      expect(await controller.findAll('role-actor')).toEqual([]);
+      expect(mockPermissionsService.findAll).toHaveBeenCalledWith('role-actor');
     });
   });
 
@@ -42,8 +42,8 @@ describe('PermissionsController', () => {
     it('should delegate to permissionsService.findOne with the given id', async () => {
       const perm = { id: 'perm-1', name: 'read_users' };
       mockPermissionsService.findOne.mockResolvedValue(perm);
-      expect(await controller.findOne('perm-1')).toEqual(perm);
-      expect(mockPermissionsService.findOne).toHaveBeenCalledWith('perm-1');
+      expect(await controller.findOne('perm-1', 'role-actor')).toEqual(perm);
+      expect(mockPermissionsService.findOne).toHaveBeenCalledWith('perm-1', 'role-actor');
     });
   });
 

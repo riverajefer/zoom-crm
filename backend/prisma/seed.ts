@@ -5,6 +5,11 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
 import 'dotenv/config';
 import { allCatalogPermissions } from './permissions-catalog';
+import {
+  ADMIN_ROLE_NAME,
+  isReservedPermission,
+  SUPPORT_ROLE_NAME,
+} from '../src/common/constants/roles.constants';
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const adapter = new PrismaPg(pool);
@@ -517,6 +522,28 @@ async function main() {
   });
   console.log(`  ✓ Role: user`);
 
+  // Soporte (solo Zoom) - todo, más los permisos reservados. Oculto al resto.
+  const supportRole = await prisma.role.upsert({
+    where: { name: SUPPORT_ROLE_NAME },
+    update: {},
+    create: {
+      name: SUPPORT_ROLE_NAME,
+      description: 'Soporte técnico: mantiene el sistema. Oculto para los demás roles',
+    },
+  });
+  console.log(`  ✓ Role: ${SUPPORT_ROLE_NAME}`);
+
+  // Contabilidad (solo Zoom) - Matriz, cajas de todas las sedes y cierre general
+  const contabilidadRole = await prisma.role.upsert({
+    where: { name: 'contabilidad' },
+    update: {},
+    create: {
+      name: 'contabilidad',
+      description: 'Contabilidad: Matriz, cajas de todas las sedes y cierre general',
+    },
+  });
+  console.log(`  ✓ Role: contabilidad`);
+
   // Caja Role - gestión de pagos y anticipos
   const cajaRole = await prisma.role.upsert({
     where: { name: 'caja' },
@@ -562,12 +589,47 @@ async function main() {
     console.log(`  ✓ ${roleName}: ${permissionNames.length} permissions`);
   };
 
-  // Admin - todos los permisos
+  // Admin - todos los permisos, menos los reservados a soporte
   await assignPermissionsToRole(
     adminRole.id,
-    'admin',
+    ADMIN_ROLE_NAME,
+    Object.keys(permissions).filter((name) => !isReservedPermission(name)),
+  );
+
+  // Soporte - todos los permisos, reservados incluidos
+  await assignPermissionsToRole(
+    supportRole.id,
+    SUPPORT_ROLE_NAME,
     Object.keys(permissions),
   );
+
+  // Contabilidad - punto de partida; después se ajusta desde la pantalla de Roles
+  await assignPermissionsToRole(contabilidadRole.id, 'contabilidad', [
+    'view_all_locations',
+    'read_all_cash_sessions',
+    'perform_general_closing',
+    'read_users',
+    'read_suppliers',
+    'read_cash_registers',
+    'read_cash_sessions',
+    'read_cash_movements',
+    'read_expense_types',
+    'create_expense_orders',
+    'read_expense_orders',
+    'update_expense_orders',
+    'export_expense_orders',
+    'create_accounts_payable',
+    'read_accounts_payable',
+    'update_accounts_payable',
+    'register_ap_payment',
+    'export_accounts_payable',
+    'read_payroll_employees',
+    'read_payroll_periods',
+    'read_payroll_deductions',
+    'use_attendance',
+    'create_comments',
+    'read_comments',
+  ]);
 
   // Manager - gestión de usuarios y lectura de clientes/proveedores
   await assignPermissionsToRole(managerRole.id, 'manager', [
@@ -704,21 +766,24 @@ async function main() {
   ]);
 
   // ============================================
-  // 4. Crear Usuario Admin
+  // 4. Crear Usuario de Soporte
   // ============================================
-  console.log('\n👤 Creating admin user...');
+  // En Zoom `adminsistema` es la cuenta de soporte (docs/PLAN_SEDES.md §6.1).
+  // El admin del negocio tiene su propio usuario: en producción lo crea soporte
+  // y en staging es `admin.zoom` (demo).
+  console.log('\n👤 Creating support user...');
 
   const adminPassword = await bcrypt.hash(adminPasswordPlain, 12);
 
   let adminUser = await prisma.user.findFirst({ where: { OR: [{ username: 'adminsistema' }, { email: 'admin@example.com' }] } });
   if (!adminUser) {
     adminUser = await prisma.user.create({
-      data: { username: 'adminsistema', email: 'admin@example.com', password: adminPassword, roleId: adminRole.id, firstName: 'Admin', lastName: 'Sistema' },
+      data: { username: 'adminsistema', email: 'admin@example.com', password: adminPassword, roleId: supportRole.id, firstName: 'Soporte', lastName: 'Sistema' },
     });
   } else {
-    adminUser = await prisma.user.update({ where: { id: adminUser.id }, data: { roleId: adminRole.id } });
+    adminUser = await prisma.user.update({ where: { id: adminUser.id }, data: { roleId: supportRole.id } });
   }
-  console.log(`  ✓ Admin user: ${adminUser.username}`);
+  console.log(`  ✓ Support user: ${adminUser.username}`);
 
   // Las cuentas de prueba tienen contraseña pública (están en este repo), así
   // que solo existen cuando se siembran datos de demostración.
@@ -746,6 +811,56 @@ async function main() {
       regularUser = await prisma.user.update({ where: { id: regularUser.id }, data: { roleId: userRole.id } });
     }
     console.log(`  ✓ Regular user: ${regularUser.username}`);
+
+    // Usuarios de prueba por sede (docs/PLAN_SEDES.md §11). Contraseña pública:
+    // solo existen con datos de demostración.
+    const sedesDemoPassword = await bcrypt.hash('zoom123', 12);
+    const sedes = await prisma.location.findMany({ select: { id: true, code: true } });
+    const sedeId = (code: string) => {
+      const sede = sedes.find((l) => l.code === code);
+      if (!sede) throw new Error(`Falta la sede ${code}: corre las migraciones`);
+      return sede.id;
+    };
+    const demoUsers: {
+      username: string;
+      firstName: string;
+      lastName: string;
+      roleId: string;
+      sedes: string[];
+      defaultSede: string | null;
+    }[] = [
+      { username: 'admin.zoom', firstName: 'Admin', lastName: 'Zoom', roleId: adminRole.id, sedes: [], defaultSede: null },
+      { username: 'contabilidad.lina', firstName: 'Lina', lastName: 'Contabilidad', roleId: contabilidadRole.id, sedes: ['MAT'], defaultSede: 'MAT' },
+      { username: 'asesor.104', firstName: 'Asesor', lastName: '104', roleId: userRole.id, sedes: ['104'], defaultSede: '104' },
+      { username: 'asesor.119', firstName: 'Asesor', lastName: '119', roleId: userRole.id, sedes: ['119'], defaultSede: '119' },
+      { username: 'asesor.125', firstName: 'Asesor', lastName: '125', roleId: userRole.id, sedes: ['125'], defaultSede: '125' },
+      { username: 'asesor.apoyo', firstName: 'Asesor', lastName: 'Apoyo', roleId: userRole.id, sedes: ['125', '119'], defaultSede: '125' },
+      { username: 'caja.104', firstName: 'Caja', lastName: '104', roleId: cajaRole.id, sedes: ['104'], defaultSede: '104' },
+      { username: 'caja.119', firstName: 'Caja', lastName: '119', roleId: cajaRole.id, sedes: ['119'], defaultSede: '119' },
+      { username: 'caja.125', firstName: 'Caja', lastName: '125', roleId: cajaRole.id, sedes: ['125'], defaultSede: '125' },
+      { username: 'produccion.119', firstName: 'Producción', lastName: '119', roleId: userRole.id, sedes: ['119'], defaultSede: '119' },
+    ];
+
+    for (const demo of demoUsers) {
+      const data = {
+        firstName: demo.firstName,
+        lastName: demo.lastName,
+        roleId: demo.roleId,
+        defaultLocationId: demo.defaultSede ? sedeId(demo.defaultSede) : null,
+      };
+      const user = await prisma.user.upsert({
+        where: { username: demo.username },
+        update: data,
+        create: { ...data, username: demo.username, password: sedesDemoPassword },
+      });
+      await prisma.userLocation.deleteMany({ where: { userId: user.id } });
+      if (demo.sedes.length > 0) {
+        await prisma.userLocation.createMany({
+          data: demo.sedes.map((code) => ({ userId: user.id, locationId: sedeId(code) })),
+        });
+      }
+      console.log(`  ✓ Demo user: ${demo.username} (${demo.sedes.join(', ') || 'todas'})`);
+    }
   }
 
   // ============================================

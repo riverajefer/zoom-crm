@@ -325,6 +325,10 @@ Las fases 3, 4 y 5 son independientes entre sí y pueden ir en cualquier orden d
 
 ### Fase 1 · Sedes, usuarios, roles y sede activa
 
+> **1a hecha** (2026-09-27): modelo y migración, sede activa (header + interceptor + contexto), roles `soporte` y `contabilidad`, permisos reservados, módulo `/sedes`, página oculta `/sistema/sedes`, sedes en la ficha de usuario, selector en el Topbar y usuarios de prueba. **Falta la 1b**: trazabilidad de las acciones directas del admin (§6.3).
+>
+> Aplazado a la fase 2: los usuarios de prueba todavía no se crean como `Employee` (la sede del empleado llega con la fase 2).
+
 Todavía **no toca documentos**: al terminar, la app funciona como hoy, pero ya sabe quién está en qué sede.
 
 - **Modelo**: `Location` (código, nombre, tipo `STORE` o `HEADQUARTERS`, dirección, teléfono, color, activa) y `UserLocation` (sedes permitidas y predeterminada). La **migración crea las 4 sedes** (§15.3).

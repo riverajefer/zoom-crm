@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException, BadRequestException } from '@nestjs/common';
+import { NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { PermissionsService } from './permissions.service';
 import { PermissionsRepository } from './permissions.repository';
 
@@ -12,6 +12,7 @@ const mockPermissionsRepository = {
   create: jest.fn(),
   update: jest.fn(),
   delete: jest.fn(),
+  findRoleName: jest.fn(),
 };
 
 describe('PermissionsService', () => {
@@ -251,6 +252,49 @@ describe('PermissionsService', () => {
         'Cannot delete permission assigned to roles',
       );
       expect(mockPermissionsRepository.delete).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('permisos reservados a soporte', () => {
+    const reservado = { ...mockPermissionFromRepo, id: 'perm-ml', name: 'manage_locations', roles: [] };
+
+    it('no aparecen en la lista para quien no es soporte', async () => {
+      mockPermissionsRepository.findAll.mockResolvedValue([mockPermissionFromRepo, reservado]);
+      mockPermissionsRepository.findRoleName.mockResolvedValue('admin');
+
+      const result = await service.findAll('role-adm');
+
+      expect(result.map((p: any) => p.name)).toEqual(['read_users']);
+    });
+
+    it('soporte sí los ve', async () => {
+      mockPermissionsRepository.findAll.mockResolvedValue([mockPermissionFromRepo, reservado]);
+      mockPermissionsRepository.findRoleName.mockResolvedValue('soporte');
+
+      expect(await service.findAll('role-sop')).toHaveLength(2);
+    });
+
+    it('su detalle es 404 para quien no es soporte', async () => {
+      mockPermissionsRepository.findById.mockResolvedValue(reservado);
+      mockPermissionsRepository.findRoleName.mockResolvedValue('admin');
+
+      await expect(service.findOne('perm-ml', 'role-adm')).rejects.toThrow(NotFoundException);
+    });
+
+    it('no se crean por la API', async () => {
+      await expect(
+        service.create({ name: 'manage_locations', description: 'x' } as any),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('no se editan ni se les pone su nombre a otro permiso', async () => {
+      mockPermissionsRepository.findById.mockResolvedValueOnce(reservado);
+      await expect(service.update('perm-ml', { description: 'x' } as any)).rejects.toThrow(ForbiddenException);
+
+      mockPermissionsRepository.findById.mockResolvedValueOnce(mockPermissionFromRepo);
+      await expect(
+        service.update('perm-1', { name: 'manage_locations' } as any),
+      ).rejects.toThrow(ForbiddenException);
     });
   });
 });

@@ -1,3 +1,4 @@
+import type { Sede, UserSedes } from './sede.types';
 import type {
   EmployeePersonalData,
   EmployeeType,
@@ -29,6 +30,10 @@ export interface User {
   profilePhoto?: string | null;
   roleId: string;
   cargoId?: string;
+  /** Sede en la que entra al iniciar sesión (solo en el detalle de usuario). */
+  defaultLocationId?: string | null;
+  /** Sedes permitidas (solo en el detalle y la lista de usuarios). */
+  locations?: { location: Pick<Sede, 'id' | 'code' | 'name' | 'type' | 'color'> }[];
   role?: {
     id: string;
     name: string;
@@ -48,7 +53,7 @@ export interface User {
   updatedAt: string;
 }
 
-export interface ProfileResponse {
+export interface ProfileResponse extends Partial<UserSedes> {
   user: User;
   permissions: string[];
 }
@@ -85,7 +90,7 @@ export interface UpdateUserDto {
   isActive?: boolean;
 }
 
-export interface AuthResponse {
+export interface AuthResponse extends Partial<UserSedes> {
   accessToken: string;
   refreshToken: string;
   user: User;

@@ -6,6 +6,15 @@ import { Prisma } from '../../generated/prisma';
 export class PermissionsRepository {
   constructor(private readonly prisma: PrismaService) {}
 
+  /** Nombre del rol, para decidir si ve los permisos reservados. */
+  async findRoleName(roleId: string): Promise<string | null> {
+    const role = await this.prisma.role.findUnique({
+      where: { id: roleId },
+      select: { name: true },
+    });
+    return role?.name ?? null;
+  }
+
   /**
    * Encuentra todos los permisos
    */

@@ -4,13 +4,13 @@ import {
   Injectable,
 } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
+import {
+  ADMIN_ROLE_NAME,
+  RESERVED_PERMISSIONS,
+  SUPPORT_ROLE_NAME,
+} from '../../common/constants/roles.constants';
 
-/**
- * Nombre del rol de administrador. El sistema lo reconoce por este nombre en
- * decenas de lugares (aprobaciones, notificaciones, guards), así que está
- * reservado: ningún otro rol puede llamarse así, ni con otras mayúsculas.
- */
-export const ADMIN_ROLE_NAME = 'admin';
+export { ADMIN_ROLE_NAME };
 
 /** ¿El nombre choca con el del rol de administrador? */
 export function isReservedAdminName(name: string): boolean {
@@ -39,10 +39,24 @@ export function isReservedAdminName(name: string): boolean {
  * - **Tocar el rol admin exige ser admin**, sin importar sus permisos. El
  *   sistema lo reconoce por nombre en decenas de lugares, así que vale más que
  *   su conjunto de permisos y compararlo solo por conjuntos lo subestimaría.
+ *
+ * Por encima de los dos está `soporte` (solo en Zoom, ver docs/PLAN_SEDES.md
+ * §6.1): no tiene restricción, y nadie más puede tocar su rol ni a sus
+ * usuarios. Los permisos reservados no los otorga nadie por la API, ni siquiera
+ * el admin: solo el seed se los da a `soporte`.
  */
 @Injectable()
 export class RolePrivilegeService {
   constructor(private readonly prisma: PrismaService) {}
+
+  /** ¿El rol es el de soporte? Decide qué se le muestra (roles, usuarios, permisos). */
+  async isSupportRole(roleId: string): Promise<boolean> {
+    const role = await this.prisma.role.findUnique({
+      where: { id: roleId },
+      select: { name: true },
+    });
+    return role?.name === SUPPORT_ROLE_NAME;
+  }
 
   /** Puedes asignar el rol solo si sus permisos están contenidos en los tuyos. */
   async assertCanAssignRole(actorRoleId: string, targetRoleId: string) {
@@ -110,12 +124,22 @@ export class RolePrivilegeService {
   ) {
     const candidatePermissionIds = target.permissionIds;
     const targetIsAdmin = target.name === ADMIN_ROLE_NAME;
-    if (candidatePermissionIds.length === 0 && !targetIsAdmin) return;
+    const targetIsSupport = target.name === SUPPORT_ROLE_NAME;
+    if (candidatePermissionIds.length === 0 && !targetIsAdmin && !targetIsSupport) {
+      return;
+    }
 
     const actor = await this.loadRole(actorRoleId);
     if (!actor) {
       throw new ForbiddenException('Tu rol no existe');
     }
+    if (actor.name === SUPPORT_ROLE_NAME) return;
+
+    if (targetIsSupport) {
+      throw new ForbiddenException(`No puedes ${action}: está reservado a soporte.`);
+    }
+    await this.assertNoReservedPermissions(candidatePermissionIds, action);
+
     if (actor.name === ADMIN_ROLE_NAME) return;
 
     // El rol admin vale más que sus permisos: el sistema lo reconoce por
@@ -147,6 +171,26 @@ export class RolePrivilegeService {
     throw new ForbiddenException(
       `No puedes ${action}: incluye permisos que tu rol no tiene ` +
         `(${missing.map((p) => p.name).join(', ')}).`,
+    );
+  }
+
+  /** Nadie otorga por la API un permiso reservado, ni siquiera el admin. */
+  private async assertNoReservedPermissions(permissionIds: string[], action: string) {
+    if (permissionIds.length === 0) return;
+
+    const reserved = await this.prisma.permission.findMany({
+      where: {
+        id: { in: [...new Set(permissionIds)] },
+        name: { in: [...RESERVED_PERMISSIONS] },
+      },
+      select: { name: true },
+      orderBy: { name: 'asc' },
+    });
+    if (reserved.length === 0) return;
+
+    throw new ForbiddenException(
+      `No puedes ${action}: incluye permisos reservados a soporte ` +
+        `(${reserved.map((p) => p.name).join(', ')}).`,
     );
   }
 

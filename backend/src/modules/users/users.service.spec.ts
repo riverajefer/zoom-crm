@@ -29,6 +29,8 @@ const mockUsersRepository = {
   deactivate: jest.fn(),
   updateRefreshToken: jest.fn(),
   delete: jest.fn(),
+  setLocations: jest.fn(),
+  countActiveLocations: jest.fn(),
 };
 
 const mockRolesRepository = {
@@ -47,6 +49,7 @@ const mockRolePrivilegeService = {
   assertCanManageUser: jest.fn(),
   assertCanManageRole: jest.fn(),
   assertCanGrantPermissions: jest.fn(),
+  isSupportRole: jest.fn(),
 };
 
 const mockCargosRepository = {
@@ -462,6 +465,79 @@ describe('UsersService', () => {
         'role-conta',
         'role-2',
       );
+    });
+  });
+
+  // ─────────────────────────────────────────────
+  // Soporte oculto y sedes (docs/PLAN_SEDES.md §6.1 y §6.5)
+  // ─────────────────────────────────────────────
+  describe('usuarios de soporte', () => {
+    const soporte = { ...mockUserFromRepo, id: 'u-sop', role: { ...mockUserFromRepo.role, name: 'soporte' } };
+
+    it('quien no es soporte no ve a los usuarios de soporte en la lista', async () => {
+      mockUsersRepository.findAll.mockResolvedValue([mockUserFromRepo, soporte]);
+      mockRolePrivilegeService.isSupportRole.mockResolvedValue(false);
+
+      const result = await service.findAll('role-admin');
+
+      expect(result.map((u: any) => u.id)).toEqual(['user-1']);
+    });
+
+    it('soporte los ve a todos', async () => {
+      mockUsersRepository.findAll.mockResolvedValue([mockUserFromRepo, soporte]);
+      mockRolePrivilegeService.isSupportRole.mockResolvedValue(true);
+
+      expect(await service.findAll('role-soporte')).toHaveLength(2);
+    });
+
+    it('el detalle de un usuario de soporte es 404 para los demás', async () => {
+      mockUsersRepository.findById.mockResolvedValue(soporte);
+      mockRolePrivilegeService.isSupportRole.mockResolvedValue(false);
+
+      await expect(service.findOne('u-sop', 'role-admin')).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('setLocations', () => {
+    beforeEach(() => {
+      mockUsersRepository.findById.mockResolvedValue(mockUserFromRepo);
+      mockRolePrivilegeService.isSupportRole.mockResolvedValue(false);
+      mockUsersRepository.setLocations.mockResolvedValue(mockUserFromRepo);
+    });
+
+    it('guarda las sedes sin repetir y la predeterminada', async () => {
+      mockUsersRepository.countActiveLocations.mockResolvedValue(2);
+
+      await service.setLocations(
+        'user-1',
+        { locationIds: ['l-104', 'l-119', 'l-104'], defaultLocationId: 'l-119' },
+        'role-admin',
+      );
+
+      expect(mockRolePrivilegeService.assertCanManageUser).toHaveBeenCalledWith('role-admin', 'user-1');
+      expect(mockUsersRepository.setLocations).toHaveBeenCalledWith('user-1', ['l-104', 'l-119'], 'l-119');
+    });
+
+    it('rechaza una predeterminada que no está entre las permitidas', async () => {
+      await expect(
+        service.setLocations('user-1', { locationIds: ['l-104'], defaultLocationId: 'l-119' }, 'role-admin'),
+      ).rejects.toThrow(BadRequestException);
+      expect(mockUsersRepository.setLocations).not.toHaveBeenCalled();
+    });
+
+    it('rechaza sedes inexistentes o inactivas', async () => {
+      mockUsersRepository.countActiveLocations.mockResolvedValue(1);
+
+      await expect(
+        service.setLocations('user-1', { locationIds: ['l-104', 'l-vieja'] }, 'role-admin'),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('una lista vacía deja al usuario sin sede', async () => {
+      await service.setLocations('user-1', { locationIds: [] }, 'role-admin');
+
+      expect(mockUsersRepository.countActiveLocations).not.toHaveBeenCalled();
+      expect(mockUsersRepository.setLocations).toHaveBeenCalledWith('user-1', [], null);
     });
   });
 });

@@ -29,8 +29,8 @@ export class RolesController {
    */
   @Get()
   @RequirePermissions('read_roles')
-  findAll() {
-    return this.rolesService.findAll();
+  findAll(@CurrentUser('roleId') actorRoleId: string) {
+    return this.rolesService.findAll(actorRoleId);
   }
 
   /**
@@ -40,8 +40,8 @@ export class RolesController {
    */
   @Get(':id')
   @RequirePermissions('read_roles')
-  findOne(@Param('id') id: string) {
-    return this.rolesService.findOne(id);
+  findOne(@Param('id') id: string, @CurrentUser('roleId') actorRoleId: string) {
+    return this.rolesService.findOne(id, actorRoleId);
   }
 
   /**

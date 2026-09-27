@@ -35,8 +35,8 @@ describe('RolesController', () => {
   describe('findAll', () => {
     it('should delegate to rolesService.findAll', async () => {
       mockRolesService.findAll.mockResolvedValue([]);
-      expect(await controller.findAll()).toEqual([]);
-      expect(mockRolesService.findAll).toHaveBeenCalled();
+      expect(await controller.findAll('role-actor')).toEqual([]);
+      expect(mockRolesService.findAll).toHaveBeenCalledWith('role-actor');
     });
   });
 
@@ -44,8 +44,8 @@ describe('RolesController', () => {
     it('should delegate to rolesService.findOne with the given id', async () => {
       const role = { id: 'role-1', name: 'admin' };
       mockRolesService.findOne.mockResolvedValue(role);
-      expect(await controller.findOne('role-1')).toEqual(role);
-      expect(mockRolesService.findOne).toHaveBeenCalledWith('role-1');
+      expect(await controller.findOne('role-1', 'role-actor')).toEqual(role);
+      expect(mockRolesService.findOne).toHaveBeenCalledWith('role-1', 'role-actor');
     });
   });
 

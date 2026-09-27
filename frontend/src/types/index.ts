@@ -6,6 +6,7 @@ export * from './api.types';
 export * from './audit-log.types';
 export * from './cargo.types';
 export * from './location.types';
+export * from './sede.types';
 export * from './client.types';
 export * from './supplier.types';
 export * from './session-log.types';

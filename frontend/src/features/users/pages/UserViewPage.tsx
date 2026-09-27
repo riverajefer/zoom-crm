@@ -6,6 +6,7 @@ import { PageHeader } from '../../../components/common/PageHeader';
 import { LoadingSpinner } from '../../../components/common/LoadingSpinner';
 import { ConfirmDialog } from '../../../components/common/ConfirmDialog';
 import { UserDetail } from '../components/UserDetail';
+import { UserSedesCard } from '../../sedes/components/UserSedesCard';
 import { useUsers } from '../hooks/useUsers';
 import { ROUTES, PERMISSIONS } from '../../../utils/constants';
 import { useAuthStore } from '../../../store/authStore';
@@ -23,7 +24,9 @@ const UserViewPage: React.FC = () => {
   const { getUserQuery, deactivateUserMutation } = useUsers();
   const { data: user, isLoading, isError } = getUserQuery(id || '');
 
-  const isAdmin = currentUser?.role?.name?.toLowerCase() === 'admin';
+  // Desactivar es del admin y de soporte (el backend lo exige igual).
+  const roleName = currentUser?.role?.name?.toLowerCase();
+  const isAdmin = roleName === 'admin' || roleName === 'soporte';
   const canDeactivate = isAdmin && user?.isActive !== false;
 
   const handleDeactivate = async () => {
@@ -65,6 +68,8 @@ const UserViewPage: React.FC = () => {
         canEdit={hasPermission(PERMISSIONS.UPDATE_USERS)}
         canDeactivate={canDeactivate}
       />
+
+      <UserSedesCard user={user} canManage={hasPermission(PERMISSIONS.MANAGE_USER_LOCATIONS)} />
 
       <ConfirmDialog
         open={confirmDeactivateOpen}

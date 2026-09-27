@@ -24,7 +24,12 @@ model User {
   phone              String?
   isActive           Boolean  @default(true)
   mustChangePassword Boolean  @default(false)
+  // Sede en la que entra al iniciar sesión. Vacía para quien opera en todas
+  // (admin, soporte) y para los usuarios anteriores a las sedes.
+  defaultLocationId  String?  @map("default_location_id")
 
+  defaultLocation                           Location?                              @relation("UserDefaultLocation", fields: [defaultLocationId], references: [id])
+  locations                                 UserLocation[]
   role                                      Role                                   @relation(fields: [roleId], references: [id])
   cargo                                     Cargo?                                 @relation(fields: [cargoId], references: [id])
   sessionLogs                               SessionLog[]
@@ -131,6 +136,49 @@ model Cargo {
 
   @@unique([name, productionAreaId])
   @@map("cargos")
+}
+
+// =============================================================================
+// Sedes (solo Zoom). Ver docs/PLAN_SEDES.md
+// =============================================================================
+
+enum LocationType {
+  STORE // Local que vende y produce: 104, 119, 125
+  HEADQUARTERS // Matriz: contabilidad, gastos comunes y cierre general
+}
+
+model Location {
+  id        String       @id @default(uuid())
+  // Código corto y estable: es el prefijo de la numeración (`125-OP-0001`)
+  code      String       @unique
+  name      String
+  type      LocationType @default(STORE)
+  address   String? // La que se imprime en los PDF
+  phone     String?
+  color     String // Hex: identifica la sede en el selector, los chips y los banners
+  isActive  Boolean      @default(true) @map("is_active")
+  sortOrder Int          @default(0) @map("sort_order")
+  createdAt DateTime     @default(now()) @map("created_at")
+  updatedAt DateTime     @updatedAt @map("updated_at")
+
+  users        UserLocation[]
+  defaultUsers User[]         @relation("UserDefaultLocation")
+
+  @@map("locations")
+}
+
+/// Sedes en las que un usuario puede operar.
+model UserLocation {
+  userId     String   @map("user_id")
+  locationId String   @map("location_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  location Location @relation(fields: [locationId], references: [id])
+
+  @@id([userId, locationId])
+  @@index([locationId])
+  @@map("user_locations")
 }
 
 model Role {
@@ -631,8 +679,8 @@ model Quote {
   notes  String?
 
   // Rechazo (obligatorio al pasar a REJECTED)
-  rejectionReason String?   @map("rejection_reason")
-  rejectedAt      DateTime? @map("rejected_at")
+  rejectionReason    String?      @map("rejection_reason")
+  rejectedAt         DateTime?    @map("rejected_at")
   // Estado desde el que se rechazó; es el destino al restaurarla
   rejectedFromStatus QuoteStatus? @map("rejected_from_status")
 

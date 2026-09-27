@@ -11,7 +11,7 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { UsersService } from './users.service';
-import { CreateUserDto, UpdateUserDto } from './dto';
+import { CreateUserDto, SetUserLocationsDto, UpdateUserDto } from './dto';
 import { JwtAuthGuard } from '../auth/guards';
 import { PermissionsGuard } from '../../common/guards';
 import { CurrentUser, RequirePermissions } from '../../common/decorators';
@@ -31,8 +31,8 @@ export class UsersController {
    */
   @Get()
   @RequirePermissions('read_users')
-  findAll() {
-    return this.usersService.findAll();
+  findAll(@CurrentUser('roleId') actorRoleId: string) {
+    return this.usersService.findAll(actorRoleId);
   }
 
   /**
@@ -42,8 +42,8 @@ export class UsersController {
    */
   @Get(':id')
   @RequirePermissions('read_users')
-  findOne(@Param('id') id: string) {
-    return this.usersService.findOne(id);
+  findOne(@Param('id') id: string, @CurrentUser('roleId') actorRoleId: string) {
+    return this.usersService.findOne(id, actorRoleId);
   }
 
   /**
@@ -73,6 +73,21 @@ export class UsersController {
     @CurrentUser('roleId') actorRoleId: string,
   ) {
     return this.usersService.update(id, updateUserDto, actorRoleId);
+  }
+
+  /**
+   * PUT /api/v1/users/:id/locations
+   * Asigna las sedes permitidas y la predeterminada
+   * Requiere permiso: manage_user_locations
+   */
+  @Put(':id/locations')
+  @RequirePermissions('manage_user_locations')
+  setLocations(
+    @Param('id') id: string,
+    @Body() dto: SetUserLocationsDto,
+    @CurrentUser('roleId') actorRoleId: string,
+  ) {
+    return this.usersService.setLocations(id, dto, actorRoleId);
   }
 
   /**

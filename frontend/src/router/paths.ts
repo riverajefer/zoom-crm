@@ -16,6 +16,8 @@ export const PATHS = {
   PRODUCTION_AREAS_CREATE: '/production-areas/new',
   PRODUCTION_AREAS_EDIT: '/production-areas/:id/edit',
   PRODUCTION_AREAS_VIEW: '/production-areas/:id',
+  // Sedes (solo soporte, fuera del menú): docs/PLAN_SEDES.md §6.4
+  SEDES_ADMIN: '/sistema/sedes',
   CARGOS: '/cargos',
   CARGOS_CREATE: '/cargos/new',
   CARGOS_EDIT: '/cargos/:id/edit',

@@ -13,7 +13,7 @@ import { PermissionsService } from './permissions.service';
 import { CreatePermissionDto, UpdatePermissionDto } from './dto';
 import { JwtAuthGuard } from '../auth/guards';
 import { PermissionsGuard } from '../../common/guards';
-import { RequirePermissions } from '../../common/decorators';
+import { CurrentUser, RequirePermissions } from '../../common/decorators';
 
 @ApiTags('permissions')
 @ApiBearerAuth('JWT-auth')
@@ -29,8 +29,8 @@ export class PermissionsController {
    */
   @Get()
   @RequirePermissions('read_permissions')
-  findAll() {
-    return this.permissionsService.findAll();
+  findAll(@CurrentUser('roleId') actorRoleId: string) {
+    return this.permissionsService.findAll(actorRoleId);
   }
 
   /**
@@ -40,8 +40,8 @@ export class PermissionsController {
    */
   @Get(':id')
   @RequirePermissions('read_permissions')
-  findOne(@Param('id') id: string) {
-    return this.permissionsService.findOne(id);
+  findOne(@Param('id') id: string, @CurrentUser('roleId') actorRoleId: string) {
+    return this.permissionsService.findOne(id, actorRoleId);
   }
 
   /**

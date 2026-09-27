@@ -25,6 +25,15 @@ export class UsersRepository {
         firstName: true,
         lastName: true,
         profilePhoto: true,
+        defaultLocationId: true,
+        locations: {
+          select: {
+            location: {
+              select: { id: true, code: true, name: true, type: true, color: true },
+            },
+          },
+          orderBy: { location: { sortOrder: 'asc' } },
+        },
         role: {
           select: {
             id: true,
@@ -67,6 +76,15 @@ export class UsersRepository {
         updatedAt: true,
         firstName: true,
         lastName: true,
+        defaultLocationId: true,
+        locations: {
+          select: {
+            location: {
+              select: { id: true, code: true, name: true, type: true, color: true },
+            },
+          },
+          orderBy: { location: { sortOrder: 'asc' } },
+        },
         role: {
           select: {
             id: true,
@@ -241,6 +259,24 @@ export class UsersRepository {
   /**
    * Actualiza un usuario
    */
+  async countActiveLocations(ids: string[]): Promise<number> {
+    return this.prisma.location.count({ where: { id: { in: ids }, isActive: true } });
+  }
+
+  /**
+   * Reemplaza las sedes permitidas y la predeterminada, en una transacción.
+   */
+  async setLocations(id: string, locationIds: string[], defaultLocationId: string | null) {
+    await this.prisma.$transaction([
+      this.prisma.userLocation.deleteMany({ where: { userId: id } }),
+      this.prisma.userLocation.createMany({
+        data: locationIds.map((locationId) => ({ userId: id, locationId })),
+      }),
+      this.prisma.user.update({ where: { id }, data: { defaultLocationId } }),
+    ]);
+    return this.findById(id);
+  }
+
   async update(id: string, data: Prisma.UserUpdateInput) {
     return this.prisma.user.update({
       where: { id },

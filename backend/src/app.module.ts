@@ -15,6 +15,7 @@ import { PermissionsModule } from './modules/permissions/permissions.module';
 import { AuditLogsModule } from './modules/audit-logs/audit-logs.module';
 import { SessionLogsModule } from './modules/session-logs/session-logs.module';
 import { CargosModule } from './modules/cargos/cargos.module';
+import { SedesModule } from './modules/sedes/sedes.module';
 import { LocationsModule } from './modules/locations/locations.module';
 import { ClientsModule } from './modules/clients/clients.module';
 import { SuppliersModule } from './modules/suppliers/suppliers.module';
@@ -48,6 +49,7 @@ import { ExpenseTypesModule } from './modules/expense-types/expense-types.module
 import { ExpenseOrdersModule } from './modules/expense-orders/expense-orders.module';
 import { OrderTimelineModule } from './modules/order-timeline/order-timeline.module';
 import { AuditContextInterceptor } from './common/interceptors/audit-context.interceptor';
+import { LocationContextInterceptor } from './common/interceptors/location-context.interceptor';
 import { HeartbeatInterceptor } from './common/interceptors/heartbeat.interceptor';
 import { MaintenanceMiddleware } from './common/middleware/maintenance.middleware';
 import { AuditContextMiddleware } from './common/middleware/audit-context.middleware';
@@ -104,6 +106,7 @@ import { ClientErrorsModule } from './modules/client-errors/client-errors.module
     AuditLogsModule,
     SessionLogsModule,
     CargosModule,
+    SedesModule,
     // Módulos de ubicaciones, clientes y proveedores
     LocationsModule,
     ClientsModule,
@@ -209,6 +212,10 @@ import { ClientErrorsModule } from './modules/client-errors/client-errors.module
     {
       provide: APP_INTERCEPTOR,
       useClass: HeartbeatInterceptor,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: LocationContextInterceptor,
     },
   ],
 })

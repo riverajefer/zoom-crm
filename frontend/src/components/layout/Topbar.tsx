@@ -28,6 +28,7 @@ import { formatFullName } from '../../utils/helpers';
 import { NotificationBell } from './NotificationBell';
 import { PendingApprovalsBell } from './PendingApprovalsBell';
 import { AttendanceButton } from './AttendanceButton';
+import { LocationSelector } from './LocationSelector';
 import { gradients, neonColors, neonAccents, darkSurfaces, darkModeColors } from '../../theme';
 import { PERMISSIONS } from '../../utils/constants';
 
@@ -209,6 +210,9 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuClick }) => {
               </>
             )}
           </Box>
+
+          {/* Sede activa (solo Zoom): docs/PLAN_SEDES.md §5 */}
+          <LocationSelector />
 
           {/* Attendance Button — visible solo para usuarios con permiso use_attendance */}
           {hasPermission(PERMISSIONS.USE_ATTENDANCE) && <AttendanceButton />}

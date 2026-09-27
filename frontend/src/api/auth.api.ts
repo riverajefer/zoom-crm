@@ -1,5 +1,5 @@
 import axiosInstance from './axios';
-import { AuthResponse, LoginDto, ProfileResponse, UpdateProfilePhotoDto } from '../types';
+import { AuthResponse, LoginDto, ProfileResponse, UpdateProfilePhotoDto, UserSedes } from '../types';
 
 export const authApi = {
   /**
@@ -35,7 +35,7 @@ export const authApi = {
   /**
    * Obtener información del usuario actual con sus permisos
    */
-  me: async (): Promise<{ user: any; permissions: string[] }> => {
+  me: async (): Promise<{ user: any; permissions: string[] } & Partial<UserSedes>> => {
     const response = await axiosInstance.post('/auth/me');
     return response.data;
   },

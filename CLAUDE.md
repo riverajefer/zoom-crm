@@ -58,6 +58,7 @@ git cherry-pick <sha>
 ### Restricciones que no se pueden tocar
 
 - **El rol admin debe llamarse exactamente `admin`**: se busca por nombre en 24 archivos.
+- **Rol `soporte` y permisos reservados** (solo Zoom, `backend/src/common/constants/roles.constants.ts`): `soporte` tiene todo lo del admin más los reservados (`manage_locations`), está por encima de él en `RolePrivilegeService` y no se muestra a nadie más: ni el rol, ni sus usuarios, ni los permisos reservados. Nadie otorga un reservado por la API; solo el seed y `prisma:sync:permissions` se los dan a `soporte`.
 - **El ambiente de Railway debe llamarse literalmente `staging`**: `backend/railway.toml` usa `[environments.staging.deploy]`. Con otro nombre el backend arranca como producción.
 - **Una sola réplica del backend**: 9 crons se duplicarían y socket.io no tiene adapter compartido.
 - **Las variables `AWS_*` (S3) son obligatorias para arrancar**: `StorageS3Service` lanza en el constructor si falta alguna. WhatsApp, en cambio, degrada con un warning.
@@ -66,7 +67,11 @@ git cherry-pick <sha>
 
 ### Login
 
-Es por **username, no por email**: el administrador inicial es `adminsistema`, con la contraseña de `SEED_ADMIN_PASSWORD`. Mandar el email da 401. La tabla de usuarios de prueba de más abajo es de la plantilla original y no aplica.
+Es por **username, no por email**: el usuario inicial es `adminsistema`, con la contraseña de `SEED_ADMIN_PASSWORD`. **En Zoom `adminsistema` tiene rol `soporte`, no `admin`**: el admin del negocio (Oscar Herrera) tiene su propio usuario, que en producción crea soporte. Mandar el email da 401.
+
+### Sedes
+
+Locales 104, 119, 125 y la Matriz (`Location`, módulo `/sedes`; `/locations` ya es el de departamentos y ciudades). La sede activa viaja en el header `X-Location-Id` (o `all` para "Todas") y la resuelve `LocationContextInterceptor`, que la deja en el contexto del request (`getRequestLocation()`). Un header no permitido es 403 con código `LOCATION_NOT_ALLOWED`. Plan y decisiones: [docs/PLAN_SEDES.md](./docs/PLAN_SEDES.md).
 
 ### Pendientes conocidos
 
@@ -899,11 +904,13 @@ npm run lint                # Ejecutar ESLint
 
 ## Usuarios de Prueba
 
-El seed crea **un** administrador en todos los ambientes:
+El seed crea **un** usuario en todos los ambientes:
 
 | Username | Password | Rol |
 |----------|----------|-----|
-| `adminsistema` | la de `SEED_ADMIN_PASSWORD` | `admin` (todos los permisos) |
+| `adminsistema` | la de `SEED_ADMIN_PASSWORD` | `soporte` (todos los permisos, reservados incluidos) |
+
+Con `SEED_DEMO=true` crea además los usuarios de prueba por sede de [docs/PLAN_SEDES.md §11](./docs/PLAN_SEDES.md#11-usuarios-de-prueba-staging) (`admin.zoom`, `asesor.104`, `asesor.apoyo`, `caja.119`…), con contraseña `zoom123`.
 
 - El login es por **username**; mandar el email da 401.
 - En producción `SEED_ADMIN_PASSWORD` es obligatoria: el seed se niega a correr sin ella. Fuera de producción, si falta, cae en `admin123`.
@@ -971,7 +978,7 @@ npm install
 cp .env.example .env.development   # VITE_API_URL=http://localhost:3000/api/v1
 npm run dev
 
-# 6. http://localhost:5173 — usuario `adminsistema`, contraseña la de SEED_ADMIN_PASSWORD
+# 6. http://localhost:5173 — usuario `adminsistema` (soporte), contraseña la de SEED_ADMIN_PASSWORD
 ```
 
 **Nota**: no uses `npm run db:setup` ni `db:reset` contra una base de Railway: corren `prisma migrate dev`, que puede reescribir el historial de migraciones.

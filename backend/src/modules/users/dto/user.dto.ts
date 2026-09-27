@@ -1,4 +1,5 @@
 import {
+  IsArray,
   IsBoolean,
   IsEmail,
   IsNotEmpty,
@@ -153,4 +154,23 @@ export class UpdateUserDto {
   @IsBoolean()
   @IsOptional()
   isActive?: boolean;
+}
+
+/** Sedes en las que opera un usuario. Ver docs/PLAN_SEDES.md §5. */
+export class SetUserLocationsDto {
+  @ApiProperty({
+    type: [String],
+    description: 'Sedes permitidas. Vacío: el usuario queda sin sede.',
+  })
+  @IsArray()
+  @IsUUID('all', { each: true })
+  locationIds: string[];
+
+  @ApiPropertyOptional({
+    description: 'Sede en la que entra al iniciar sesión. Tiene que estar entre las permitidas.',
+    nullable: true,
+  })
+  @IsUUID()
+  @IsOptional()
+  defaultLocationId?: string | null;
 }

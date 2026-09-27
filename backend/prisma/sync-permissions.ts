@@ -8,7 +8,9 @@
  *
  * Es 100% idempotente y NO destructivo:
  *   - Hace `upsert` de cada permiso (crea o refresca la descripción).
- *   - Asocia los permisos al rol `admin` con `skipDuplicates`.
+ *   - Asocia los permisos al rol `admin` con `skipDuplicates`, menos los
+ *     reservados a soporte (y se los quita si los tuviera).
+ *   - Si existe el rol `soporte` (solo Zoom), le asocia todos los permisos.
  *   - NUNCA borra filas de `rolePermission`, a diferencia de `seed.ts`.
  *     Esto es clave: los permisos de los demás roles se administran desde la
  *     UI de Roles y no deben perderse al correr este script.
@@ -28,6 +30,12 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
 import 'dotenv/config';
 import { permissionGroups, allCatalogPermissions } from './permissions-catalog';
+import {
+  ADMIN_ROLE_NAME,
+  isReservedPermission,
+  RESERVED_PERMISSIONS,
+  SUPPORT_ROLE_NAME,
+} from '../src/common/constants/roles.constants';
 
 const DRY_RUN = process.env.DRY_RUN === '1' || process.env.DRY_RUN === 'true';
 
@@ -44,7 +52,8 @@ async function main() {
     `\n🔐 Sincronizando permisos${DRY_RUN ? ' — MODO DRY RUN, no se escribe nada' : ''}\n`,
   );
 
-  const adminRole = await prisma.role.findUnique({ where: { name: 'admin' } });
+  const adminRole = await prisma.role.findUnique({ where: { name: ADMIN_ROLE_NAME } });
+  const supportRole = await prisma.role.findUnique({ where: { name: SUPPORT_ROLE_NAME } });
   if (!adminRole) {
     throw new Error('Rol "admin" no encontrado. Corre el seed principal primero.');
   }
@@ -56,6 +65,8 @@ async function main() {
   const existingByName = new Map(existing.map((p) => [p.name, p.id]));
 
   const permissionIds: string[] = [];
+  // Los reservados no van al admin: ver src/common/constants/roles.constants.ts
+  const adminPermissionIds: string[] = [];
   let created = 0;
 
   for (const group of permissionGroups) {
@@ -66,7 +77,10 @@ async function main() {
 
       if (DRY_RUN) {
         const id = existingByName.get(perm.name);
-        if (id) permissionIds.push(id);
+        if (id) {
+          permissionIds.push(id);
+          if (!isReservedPermission(perm.name)) adminPermissionIds.push(id);
+        }
       } else {
         const permission = await prisma.permission.upsert({
           where: { name: perm.name },
@@ -74,6 +88,7 @@ async function main() {
           create: perm,
         });
         permissionIds.push(permission.id);
+        if (!isReservedPermission(perm.name)) adminPermissionIds.push(permission.id);
       }
 
       console.log(`   ${isNew ? '+ NUEVO ' : '✓ existe'}  ${perm.name}`);
@@ -83,31 +98,51 @@ async function main() {
 
   if (DRY_RUN) {
     const alreadyAssigned = await prisma.rolePermission.count({
-      where: { roleId: adminRole.id, permissionId: { in: permissionIds } },
+      where: { roleId: adminRole.id, permissionId: { in: adminPermissionIds } },
     });
     console.log('─'.repeat(60));
     console.log(`Total revisado:        ${allPermissions.length} permisos`);
     console.log(`Se crearían:           ${created}`);
     console.log(
-      `Se asignarían a admin: ${allPermissions.length - alreadyAssigned} (ya tiene ${alreadyAssigned})`,
+      `Se asignarían a admin: ${adminPermissionIds.length - alreadyAssigned} (ya tiene ${alreadyAssigned})`,
     );
     console.log('\n⚠️  DRY RUN: no se aplicó ningún cambio.\n');
     return;
   }
 
   const { count: assigned } = await prisma.rolePermission.createMany({
-    data: permissionIds.map((permissionId) => ({
+    data: adminPermissionIds.map((permissionId) => ({
       roleId: adminRole.id,
       permissionId,
     })),
     skipDuplicates: true,
   });
 
+  // Si por error el admin tuviera un permiso reservado, se le quita.
+  const { count: revoked } = await prisma.rolePermission.deleteMany({
+    where: {
+      roleId: adminRole.id,
+      permission: { name: { in: [...RESERVED_PERMISSIONS] } },
+    },
+  });
+
+  // Soporte tiene todos los permisos de la base, no solo los del catálogo.
+  let supportAssigned = 0;
+  if (supportRole) {
+    const everyPermission = await prisma.permission.findMany({ select: { id: true } });
+    ({ count: supportAssigned } = await prisma.rolePermission.createMany({
+      data: everyPermission.map(({ id }) => ({ roleId: supportRole.id, permissionId: id })),
+      skipDuplicates: true,
+    }));
+  }
+
   console.log('─'.repeat(60));
   console.log(`Total procesado:      ${allPermissions.length} permisos`);
   console.log(`Creados:              ${created}`);
   console.log(`Actualizados:         ${allPermissions.length - created}`);
   console.log(`Asignados al rol admin: ${assigned} (el resto ya los tenía)`);
+  if (revoked > 0) console.log(`Reservados quitados al admin: ${revoked}`);
+  if (supportRole) console.log(`Asignados a soporte:  ${supportAssigned}`);
   console.log(
     '\n✅ Listo. Asigna estos permisos a los demás roles desde la UI de Roles.\n',
   );

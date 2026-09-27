@@ -222,3 +222,49 @@ el frontend ofrece **solicitar co-propiedad** del cliente existente
 (`client-advisor-requests`) — que es lo que el asesor realmente busca — o crear
 igual con `?force=true`. El criterio lo comparten script y backend en
 `src/common/utils/normalize.util.ts`, para que el reporte y el formulario no discrepen.
+
+---
+
+## Traer los catálogos de High a Zoom
+
+**Scripts:** `export-high-catalog.sh` (lee High) + `prisma/import-high-catalog.ts` (escribe en Zoom)
+
+Trae 11 catálogos: unidades de medida, áreas de producción, cargos, canales de
+venta, tipos y subcategorías de gasto, categorías de producto, productos,
+categorías de insumo, insumos y proveedores. No trae nada transaccional.
+
+```bash
+cd backend
+
+# 1. Exportar de High (sesión de SOLO LECTURA). La URL de High no vive en este repo.
+HIGH_DATABASE_URL='postgresql://...' ./scripts/export-high-catalog.sh
+#    → prisma/data/high-catalog/*.json  (ignorados por git: traen datos de proveedores)
+
+# 2. Simular contra la base destino: reporta nuevos, fusionados, rechazados. No escribe.
+DATABASE_URL='postgresql://...destino...' npm run prisma:import:high
+
+# 3. Aplicar
+DATABASE_URL='postgresql://...destino...' npm run prisma:import:high -- --apply
+```
+
+Pasa siempre `DATABASE_URL` explícito: sin él el script usa el de `backend/.env`,
+que puede apuntar a Railway. El destino se imprime antes de empezar.
+
+- **Una sola transacción**: entra todo o nada. La simulación ejecuta lo mismo y
+  hace rollback, así que su reporte es exactamente lo que hará `--apply`.
+- **Clave natural, no ids**: los padres van por nombre en los JSON. La
+  comparación ignora mayúsculas, tildes, espacios sobrantes y la forma Unicode
+  (NFC/NFD), así que `Producción`, `produccion` y `Producción ` son uno solo.
+- **Duplicados de High se fusionan**: sus hijos quedan bajo el sobreviviente
+  (el primero creado en High). El reporte lista cada fusión.
+- **Proveedores**: criterio de `normalize.util` — NIT sin dígito de
+  verificación, NITs de relleno (`1111111111`…) descartados como llave, nombre
+  sin sufijos societarios. Mismo nombre con NIT distinto queda aparte y se avisa.
+- **Lo que ya existe en Zoom no se sobrescribe**: solo se llenan campos vacíos.
+  Se puede correr varias veces; la segunda no crea nada.
+- **Stock de insumos en 0**: es inventario de High. Se conservan precio de
+  compra, stock mínimo y factor de conversión.
+- **Slugs y SKU/email únicos**: si están ocupados se genera `-2`, o se deja el
+  campo vacío, y se avisa.
+- Una fila cuyo padre no existe (área, categoría, unidad, ciudad) se **rechaza**
+  y se informa; el resto se importa igual.

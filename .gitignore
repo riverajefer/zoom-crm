@@ -7,3 +7,7 @@ frontend/.env.production
 backend/src/coverage-phase1
 # Database backups
 backups/
+
+# Catálogos exportados de High (scripts/export-high-catalog.sh). Traen datos de
+# proveedores reales; se importan con `npm run prisma:import:high` y no se versionan.
+backend/prisma/data/high-catalog/*.json

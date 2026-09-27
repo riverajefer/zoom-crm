@@ -24,6 +24,7 @@
     "prisma:seed:ap": "ts-node prisma/seed-accounts-payable.ts",
     "prisma:seed:exports": "ts-node prisma/seed-export-permissions.ts",
     "prisma:seed:prospects": "ts-node prisma/seed-prospect-permissions.ts",
+    "prisma:import:high": "ts-node prisma/import-high-catalog.ts",
     "prisma:sync:permissions": "ts-node prisma/sync-permissions.ts",
     "prisma:backfill:credit-balance": "ts-node prisma/backfill-credit-balance-applications.ts",
     "prisma:backfill:refunded-amount": "ts-node --transpile-only prisma/backfill-refunded-amount.ts",

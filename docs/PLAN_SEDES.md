@@ -315,13 +315,13 @@ Cada uno queda también como `Employee` de su sede predeterminada (menos `admins
 
 Las fases 3, 4 y 5 son independientes entre sí y pueden ir en cualquier orden después de la 2.
 
-### Fase 0 · Preparación
+### Fase 0 · Preparación ✅
 
-- **Confirmar qué base es la de staging.** La de `backend/.env` apunta a una Postgres de Railway con datos de High (usuarios reales, 303 OP). Hay que saber si es la de High o una copia en el staging de Zoom antes de tocarla.
-- **Reiniciar la base de staging de Zoom** (§15.3). Se siembra de nuevo en la fase 1, ya con sedes.
-- **Última sincronización con High** (`git cherry -v develop upstream/develop`): traer lo pendiente **antes** de la fase 2. Después, los cherry-picks que toquen documentos, consecutivos o caja van a chocar.
-- **Tag `pre-sedes`** en `develop`, como punto de referencia antes del cambio irreversible.
-- Tests verdes en backend y frontend como línea base.
+- ✅ **Qué base es la de staging** (2026-09-27): `mainline.proxy.rlwy.net:55766`, la que aparecía comentada en `backend/.env` y `.env.development`, es la **Postgres de staging de High** (proyecto "High solutions", confirmado con el CLI de Railway). La de staging de Zoom (proyecto "ZOMM-CRM") **no tiene proxy TCP público**: solo se llega a ella por la red interna de Railway. Nunca se escribió en la de High: la corrida del importador contra ella fue una simulación con rollback.
+- **Reiniciar la base de staging de Zoom** (§15.3): se hace **al desplegar la fase 1**, no antes, porque esa es la primera migración que la necesita limpia. Como no tiene acceso público, se hace desde dentro de Railway (`railway ssh` al servicio `zoom-backend`, o un proxy TCP temporal que se apaga al terminar). Requiere confirmación explícita en el momento.
+- ✅ **Última sincronización con High** (2026-09-27): solo faltaba `9af43d6`, traído como `c75cce2`. De aquí en adelante, los cherry-picks que toquen documentos, consecutivos o caja van a chocar.
+- ✅ **Tag `pre-sedes`** en `develop`, como punto de referencia antes del cambio irreversible.
+- ✅ **Línea base** (2026-09-27): `tsc` limpio en ambos, 2917 tests del backend (189 suites) y 511 del frontend (61 archivos) en verde.
 
 ### Fase 1 · Sedes, usuarios, roles y sede activa
 

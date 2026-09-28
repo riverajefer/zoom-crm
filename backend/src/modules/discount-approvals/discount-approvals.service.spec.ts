@@ -222,6 +222,8 @@ describe('DiscountApprovalsService', () => {
       expect(notificationsService.notifyUsersWithPermission).toHaveBeenCalledWith(
         'approve_discounts',
         expect.objectContaining({ type: NotificationType.DISCOUNT_APPROVAL_PENDING }),
+        // Solo Zoom: el aviso solo llega a la sede de la OP.
+        { orderId: expect.any(String) },
       );
       expect(res.id).toBe('req-new');
     });

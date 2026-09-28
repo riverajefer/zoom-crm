@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { Prisma } from '../../generated/prisma';
+import { getLocationScope } from '../../common/utils/location-context';
 
 @Injectable()
 export class DashboardRepository {
@@ -61,12 +62,23 @@ export class DashboardRepository {
   }
 
   async getMonthlyData(): Promise<Array<{ month: string; ventas: number; gastos: number }>> {
+    // SQL crudo: la extensión de sede no lo ve, así que filtra aquí con la misma
+    // regla (docs/PLAN_SEDES.md §15.1). Un listado: filtra también a quien ve todas.
+    const scope = getLocationScope();
+    const ordersSede = scope
+      ? Prisma.sql`AND location_id = ANY(${scope.locationIds})`
+      : Prisma.empty;
+    const expensesSede = scope
+      ? Prisma.sql`AND eo.location_id = ANY(${scope.locationIds})`
+      : Prisma.empty;
+
     const ventasRaw = await this.prisma.$queryRaw<Array<{ month: string; total: string }>>`
       SELECT TO_CHAR(DATE_TRUNC('month', created_at), 'YYYY-MM') AS month,
              COALESCE(SUM(total - reversed_amount), 0)::text AS total
       FROM "orders"
       WHERE status != 'ANULADO'
         AND created_at >= NOW() - INTERVAL '12 months'
+        ${ordersSede}
       GROUP BY DATE_TRUNC('month', created_at)
       ORDER BY DATE_TRUNC('month', created_at)
     `;
@@ -78,6 +90,7 @@ export class DashboardRepository {
       JOIN "expense_orders" eo ON eoi.expense_order_id = eo.id
       WHERE eo.status IN ('AUTHORIZED', 'PAID')
         AND eo.created_at >= NOW() - INTERVAL '12 months'
+        ${expensesSede}
       GROUP BY DATE_TRUNC('month', eo.created_at)
       ORDER BY DATE_TRUNC('month', eo.created_at)
     `;

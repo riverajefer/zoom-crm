@@ -162,7 +162,12 @@ export interface ClientDuplicateMatch {
   name: string;
   document: string | null;
   tier: 'ALTA' | 'MEDIA' | 'BAJA';
-  advisors: { id: string; name: string }[];
+  /** `sede`: la predeterminada del asesor (solo Zoom). */
+  advisors: {
+    id: string;
+    name: string;
+    sede?: { code: string; name: string; color: string } | null;
+  }[];
 }
 
 /** Cuerpo del 409 que devuelve `POST /clients` cuando detecta un posible duplicado. */

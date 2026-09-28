@@ -421,6 +421,7 @@ export class AdvancePaymentApprovalsService implements OnModuleInit, ApprovalReq
         relatedId: request.id,
         relatedType: 'AdvancePaymentApproval',
       },
+      { orderId: request.orderId },
     );
 
     // Notificaciones WA de anticipo desactivadas temporalmente

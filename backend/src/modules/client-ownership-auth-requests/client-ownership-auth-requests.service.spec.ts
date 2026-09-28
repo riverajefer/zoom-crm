@@ -299,6 +299,8 @@ describe('ClientOwnershipAuthRequestsService', () => {
       expect(mockNotificationsService.notifyUsersWithPermission).toHaveBeenCalledWith(
         'approve_client_ownership_auth',
         expect.objectContaining({ type: 'CLIENT_OWNERSHIP_AUTH_PENDING' }),
+        // Solo Zoom: el aviso solo llega a la sede de la OP.
+        { orderId: expect.any(String) },
       );
     });
   });

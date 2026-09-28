@@ -224,7 +224,14 @@ export class ClientsRepository {
         advisors: {
           select: {
             advisor: {
-              select: { id: true, username: true, firstName: true, lastName: true },
+              select: {
+                id: true,
+                username: true,
+                firstName: true,
+                lastName: true,
+                // Solo Zoom: la alerta dice de qué sede es el asesor (docs/PLAN_SEDES.md §5).
+                defaultLocation: { select: { code: true, name: true, color: true } },
+              },
             },
           },
         },

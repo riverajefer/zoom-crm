@@ -358,4 +358,45 @@ describe('NotificationsService', () => {
       await expect(service.resolveTarget('notif-1', 'user-1')).resolves.toBeNull();
     });
   });
+
+  // Solo Zoom (docs/PLAN_SEDES.md §5)
+  describe('notifyUsersWithPermission con sede', () => {
+    const data = { type: 'DISCOUNT_APPROVAL_PENDING', title: 't', message: 'm' } as any;
+
+    it('sin sede avisa a todos los que tienen el permiso', async () => {
+      prisma.user.findMany.mockResolvedValue([{ id: 'u1' }] as any);
+
+      await service.notifyUsersWithPermission('approve_discounts', data);
+
+      const where = prisma.user.findMany.mock.calls[0][0].where;
+      expect(where.OR).toBeUndefined();
+    });
+
+    it('con la OP, solo a los de su sede y a quienes ven todas las sedes', async () => {
+      prisma.order.findUnique.mockResolvedValue({ locationId: 'l-119' } as any);
+      prisma.user.findMany.mockResolvedValue([{ id: 'caja-119' }] as any);
+
+      await service.notifyUsersWithPermission('approve_discounts', data, { orderId: 'o1' });
+
+      const where = prisma.user.findMany.mock.calls[0][0].where;
+      expect(where.OR).toEqual([
+        { locations: { some: { locationId: 'l-119' } } },
+        { role: { permissions: { some: { permission: { name: 'view_all_locations' } } } } },
+      ]);
+      expect(prisma.notification.createMany).toHaveBeenCalledWith({
+        data: [expect.objectContaining({ userId: 'caja-119' })],
+      });
+    });
+
+    it('con la sede directa no busca la OP', async () => {
+      prisma.user.findMany.mockResolvedValue([] as any);
+
+      await service.notifyUsersWithPermission('approve_discounts', data, { locationId: 'l-104' });
+
+      expect(prisma.order.findUnique).not.toHaveBeenCalled();
+      expect(prisma.user.findMany.mock.calls[0][0].where.OR[0]).toEqual({
+        locations: { some: { locationId: 'l-104' } },
+      });
+    });
+  });
 });

@@ -1,6 +1,10 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { CreateNotificationDto, FilterNotificationsDto } from './dto';
+import {
+  VIEW_ALL_LOCATIONS_PERMISSION,
+  withoutLocationScope,
+} from '../../common/utils/location-context';
 
 export type NotificationTargetType =
   | 'ORDER'
@@ -239,12 +243,19 @@ export class NotificationsService {
   }
 
   /**
-   * Notificar a todos los usuarios que tengan un permiso específico
+   * Notificar a todos los usuarios que tengan un permiso específico.
+   *
+   * Solo Zoom: con `scope`, el aviso es de un documento de una sede y solo les
+   * llega a los usuarios de esa sede y a quienes ven todas las sedes. Sin esto
+   * la caja del 104 recibía los anticipos del 119 (docs/PLAN_SEDES.md §5).
+   * `orderId` resuelve la sede de la OP; `locationId` la da directa.
    */
   async notifyUsersWithPermission(
     permissionName: string,
     data: Omit<CreateNotificationDto, 'userId'>,
+    scope?: { orderId?: string; locationId?: string },
   ): Promise<void> {
+    const locationId = await this.resolveScopeLocation(scope);
     const users = await this.prisma.user.findMany({
       where: {
         role: {
@@ -254,6 +265,16 @@ export class NotificationsService {
             },
           },
         },
+        ...(locationId && {
+          OR: [
+            { locations: { some: { locationId } } },
+            {
+              role: {
+                permissions: { some: { permission: { name: VIEW_ALL_LOCATIONS_PERMISSION } } },
+              },
+            },
+          ],
+        }),
       },
       select: { id: true },
     });
@@ -268,5 +289,21 @@ export class NotificationsService {
     await this.prisma.notification.createMany({
       data: notifications,
     });
+  }
+
+  /** Sede del documento del aviso. La OP se busca en todas las sedes. */
+  private async resolveScopeLocation(scope?: {
+    orderId?: string;
+    locationId?: string;
+  }): Promise<string | null> {
+    if (scope?.locationId) return scope.locationId;
+    if (!scope?.orderId) return null;
+    const order = await withoutLocationScope(() =>
+      this.prisma.order.findUnique({
+        where: { id: scope.orderId },
+        select: { locationId: true },
+      }),
+    );
+    return order?.locationId ?? null;
   }
 }

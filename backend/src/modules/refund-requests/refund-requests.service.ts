@@ -337,6 +337,7 @@ export class RefundRequestsService
         relatedId: request.id,
         relatedType: 'RefundRequest',
       },
+      { orderId: request.orderId },
     );
 
     // Notificar por WhatsApp (fire & forget)
@@ -425,6 +426,7 @@ export class RefundRequestsService
         relatedId: request.id,
         relatedType: 'RefundRequest',
       },
+      { orderId: request.orderId },
     );
 
     this.wsEventsGateway.emitApprovalUpdated(updated);

@@ -278,6 +278,7 @@ export class PaymentEditApprovalsService
         relatedId: request.id,
         relatedType: 'PaymentEditApproval',
       },
+      { orderId },
     );
 
     // Notificación WhatsApp con botones Autorizar/Rechazar

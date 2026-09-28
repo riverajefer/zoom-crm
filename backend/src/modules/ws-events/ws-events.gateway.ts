@@ -9,7 +9,11 @@ import { Server, Socket } from 'socket.io';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../database/prisma.service';
-import { WS_EVENTS, WS_ROOMS } from './ws-events.types';
+import { WS_EVENTS, WS_ROOMS, advancePaymentSedeRoom } from './ws-events.types';
+import {
+  VIEW_ALL_LOCATIONS_PERMISSION,
+  withoutLocationScope,
+} from '../../common/utils/location-context';
 
 @WebSocketGateway({
   namespace: '/ws',
@@ -70,9 +74,13 @@ export class WsEventsGateway
       client.data.userId = userId;
 
       if (hasPermission) {
-        client.join(WS_ROOMS.ADVANCE_PAYMENT_APPROVALS);
+        // La sala general sigue recibiendo lo que no se sabe de qué sede es.
+        // Además, una sala por cada sede permitida (solo Zoom, docs/PLAN_SEDES.md
+        // §15.2): así la caja del 104 no recibe las solicitudes del 119.
+        const rooms = [WS_ROOMS.ADVANCE_PAYMENT_APPROVALS, ...(await this.sedeRoomsFor(userId))];
+        client.join(rooms);
         this.logger.log(
-          `Client ${client.id} (user: ${userId}) joined advance_payment_approvals room`,
+          `Client ${client.id} (user: ${userId}) joined ${rooms.join(', ')}`,
         );
       }
 
@@ -90,14 +98,54 @@ export class WsEventsGateway
   }
 
   emitApprovalCreated(data: unknown) {
-    this.server
-      .to(WS_ROOMS.ADVANCE_PAYMENT_APPROVALS)
-      .emit(WS_EVENTS.APPROVAL_REQUEST_CREATED, data);
+    void this.emitToSede(WS_EVENTS.APPROVAL_REQUEST_CREATED, data);
   }
 
   emitApprovalUpdated(data: unknown) {
-    this.server
-      .to(WS_ROOMS.ADVANCE_PAYMENT_APPROVALS)
-      .emit(WS_EVENTS.APPROVAL_REQUEST_UPDATED, data);
+    void this.emitToSede(WS_EVENTS.APPROVAL_REQUEST_UPDATED, data);
+  }
+
+  /**
+   * Emite a la sala de la sede de la OP de la solicitud y a la de quienes ven
+   * todas las sedes. Sin `orderId` (algunas actualizaciones de estado solo
+   * traen `{ id, status }`) no se sabe la sede y va a la sala general.
+   */
+  private async emitToSede(event: string, data: unknown): Promise<void> {
+    try {
+      const orderId = (data as { orderId?: unknown } | null)?.orderId;
+      const order =
+        typeof orderId === 'string'
+          ? await withoutLocationScope(() =>
+              this.prisma.order.findUnique({ where: { id: orderId }, select: { locationId: true } }),
+            )
+          : null;
+      const rooms = order
+        ? [advancePaymentSedeRoom(order.locationId), advancePaymentSedeRoom('all')]
+        : [WS_ROOMS.ADVANCE_PAYMENT_APPROVALS];
+      this.server.to(rooms).emit(event, data);
+    } catch (error) {
+      this.logger.warn(`No se pudo emitir ${event}: ${(error as Error).message}`);
+    }
+  }
+
+  /** Salas de sede del usuario: las permitidas, o la de "todas" con `view_all_locations`. */
+  private async sedeRoomsFor(userId: string): Promise<string[]> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        locations: { select: { locationId: true } },
+        role: {
+          select: {
+            permissions: {
+              where: { permission: { name: VIEW_ALL_LOCATIONS_PERMISSION } },
+              select: { permissionId: true },
+            },
+          },
+        },
+      },
+    });
+    if (!user) return [];
+    if (user.role.permissions.length > 0) return [advancePaymentSedeRoom('all')];
+    return user.locations.map((l) => advancePaymentSedeRoom(l.locationId));
   }
 }

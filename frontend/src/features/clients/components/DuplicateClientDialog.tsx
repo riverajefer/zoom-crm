@@ -18,6 +18,7 @@ import { useSnackbar } from 'notistack';
 import { useClientAdvisorRequests } from '../hooks/useClientAdvisorRequests';
 import { useAuthStore } from '../../../store/authStore';
 import type { ClientDuplicateMatch } from '../../../types';
+import { SedeDot } from '../../../components/layout/LocationSelector';
 
 const TIER_LABEL: Record<ClientDuplicateMatch['tier'], string> = {
   ALTA: 'Mismo documento y nombre',
@@ -137,11 +138,31 @@ export const DuplicateClientDialog: React.FC<DuplicateClientDialogProps> = ({
                         Documento: {match.document}
                       </Typography>
                     )}
-                    <Typography variant="body2" color="text.secondary">
-                      {match.advisors.length > 0
-                        ? `Asesor: ${match.advisors.map((a) => a.name).join(', ')}`
-                        : 'Sin asesor asignado'}
-                    </Typography>
+                    {match.advisors.length > 0 ? (
+                      <Stack spacing={0.5} sx={{ mt: 0.5 }}>
+                        {match.advisors.map((a) => (
+                          <Box key={a.id} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Typography variant="body2" color="text.secondary">
+                              Asesor: {a.name}
+                            </Typography>
+                            {/* Solo Zoom: de qué local es el cliente (docs/PLAN_SEDES.md §5) */}
+                            {a.sede && (
+                              <Chip
+                                size="small"
+                                variant="outlined"
+                                label={a.sede.name}
+                                icon={<SedeDot color={a.sede.color} />}
+                                sx={{ pl: 0.5 }}
+                              />
+                            )}
+                          </Box>
+                        ))}
+                      </Stack>
+                    ) : (
+                      <Typography variant="body2" color="text.secondary">
+                        Sin asesor asignado
+                      </Typography>
+                    )}
                   </Box>
                   <Chip
                     size="small"

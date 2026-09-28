@@ -274,6 +274,8 @@ describe('RefundRequestsService', () => {
         expect.objectContaining({
           type: 'REFUND_REQUEST_PENDING',
         }),
+        // Solo Zoom: el aviso solo llega a la sede de la OP.
+        { orderId: expect.any(String) },
       );
       expect(wsGateway.emitApprovalCreated).toHaveBeenCalled();
       expect(result.id).toBe('req-1');
@@ -513,6 +515,8 @@ describe('RefundRequestsService', () => {
       expect(notifications.notifyUsersWithPermission).toHaveBeenCalledWith(
         'execute_refunds',
         expect.objectContaining({ relatedType: 'RefundRequest' }),
+        // Solo Zoom: el aviso solo llega a la sede de la OP.
+        { orderId: expect.any(String) },
       );
     });
 

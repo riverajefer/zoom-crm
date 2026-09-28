@@ -23,7 +23,12 @@ export interface DuplicateMatch {
   document: string | null;
   /** ALTA = mismo documento y mismo nombre; MEDIA = solo documento; BAJA = solo nombre. */
   tier: 'ALTA' | 'MEDIA' | 'BAJA';
-  advisors: { id: string; name: string }[];
+  /** `sede`: la predeterminada del asesor (solo Zoom), para saber que es cliente de otro local. */
+  advisors: {
+    id: string;
+    name: string;
+    sede: { code: string; name: string; color: string } | null;
+  }[];
 }
 
 @Injectable()
@@ -108,6 +113,7 @@ export class ClientsService {
             [a.advisor.firstName, a.advisor.lastName].filter(Boolean).join(' ') ||
             a.advisor.username ||
             'Sin nombre',
+          sede: a.advisor.defaultLocation ?? null,
         })),
       });
     }

@@ -270,6 +270,7 @@ export class ClientOwnershipAuthRequestsService implements OnModuleInit, Approva
         relatedId: request.id,
         relatedType: 'ClientOwnershipAuthRequest',
       },
+      { orderId },
     );
 
     // Notificar por WhatsApp a usuarios con permiso (fire & forget)

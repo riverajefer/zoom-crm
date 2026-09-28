@@ -244,6 +244,7 @@ export class DiscountApprovalsService implements OnModuleInit, ApprovalRequestHa
         relatedId: request.id,
         relatedType: 'DiscountApproval',
       },
+      { orderId: request.orderId },
     );
 
     // Notificar por WhatsApp a usuarios con permiso (fire & forget)

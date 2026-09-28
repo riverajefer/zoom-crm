@@ -364,7 +364,13 @@ Todavía **no toca documentos**: al terminar, la app funciona como hoy, pero ya 
 
 **Se acepta cuando**: `asesor.104` y `asesor.125` no ven los documentos del otro; los números salen `104-OP-0001` y `125-OP-0001` en paralelo; un abono cruzado se rechaza; un saldo a favor del 119 se aplica en el 125; la notificación de una OP del 119 no le llega al 125.
 
-### Fase 3 · Caja por sede
+### Fase 3 · Caja por sede ✅
+
+> **Hecha** (2026-09-28, probada por API contra `zoom_seedtest`): la migración `cash_register_per_sede` crea "Caja <sede>" para cada sede que no tenga caja, y crear una sede le crea la suya. Las sesiones de caja se filtran por la sede de su caja (la extensión filtra `CashSession` a través de `cashRegister`), así que cada cajero solo ve y abre la caja de su sede (abrir la de otra da 404). Los pagos, anticipos, devoluciones, pagos de CP y autorizaciones de OG caen en la sesión abierta de **la caja de la sede del documento**, no de la sede activa (`findActiveCashSessionForLocation`): el admin con el 104 activo registra un pago a una OP del 119 y cae en la caja del 119. Si la caja de esa sede está cerrada, el pago queda en la cola de pendientes, y al abrirse la caja solo entran los pendientes de su sede. El filtro por fecha del historial de sesiones usa el día en hora de Bogotá.
+>
+> **Contabilidad** ve las cajas de todas las sedes con `view_all_locations`, y en solo lectura porque el seed no le da `open_cash_session`, `close_cash_session` ni movimientos. `read_all_cash_sessions` todavía no lo revisa ningún endpoint: queda para la vista consolidada del cierre general (fase 7).
+>
+> **Error encontrado en el camino**: `withoutLocationScope()` devolvía la consulta de Prisma sin esperarla, y como las consultas de Prisma son perezosas, se ejecutaba después, fuera de la salida del filtro. Ahora hace `await` adentro. Además de la caja, arregla tres usos de la fase 2 que fallaban en silencio: las fuentes de saldo a favor de otra sede, la sede de un aviso y la sala de socket de una OP.
 
 - Una caja por sede, más la de la Matriz (§4, §14). El pago cae en la sesión de la caja de la sede activa (`findActiveCashSession(cashRegisterId)`).
 - Reembolsos y anticipos por la caja de la sede del documento.

@@ -45,4 +45,16 @@ describe('location-context', () => {
       );
     });
   });
+
+  it('withoutLocationScope ejecuta adentro una consulta perezosa (como las de Prisma)', async () => {
+    // Un thenable que, como PrismaPromise, lee el contexto recién cuando se espera.
+    const lazyQuery = { then: (resolve: (v: unknown) => void) => resolve(getLocationScope()) };
+
+    await runWithAuditContext(
+      { location: { locationId: 'l-125', all: false, permittedIds: ['l-125'] } },
+      async () => {
+        await expect(withoutLocationScope(() => lazyQuery)).resolves.toBeNull();
+      },
+    );
+  });
 });

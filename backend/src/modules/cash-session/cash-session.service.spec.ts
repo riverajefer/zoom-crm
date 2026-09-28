@@ -43,6 +43,11 @@ describe('CashSessionService', () => {
     prisma.cashDenominationCount = { createMany: jest.fn() };
     // El servicio usa $transaction(async tx => ...); tx === prisma para controlar los mocks.
     prisma.$transaction.mockImplementation((fn: any) => fn(prisma));
+    // Solo Zoom: la caja se busca antes de abrir (filtrada por la sede activa).
+    (prisma as any).cashRegister = {
+      ...((prisma as any).cashRegister ?? {}),
+      findUnique: jest.fn().mockResolvedValue({ id: 'reg-1', locationId: 'loc-125' }),
+    };
 
     auditLogs = {
       logCreate: jest.fn().mockResolvedValue(undefined),
@@ -116,6 +121,11 @@ describe('CashSessionService', () => {
       notes: 'apertura',
     } as any;
 
+    it('una caja de otra sede no existe', async () => {
+      (prisma as any).cashRegister.findUnique.mockResolvedValue(null);
+      await expect(service.openSession(dto, 'user-1')).rejects.toThrow(NotFoundException);
+    });
+
     it('rechaza si la caja ya tiene una sesión abierta', async () => {
       repository.findOpenByRegisterId.mockResolvedValue({ id: 'cs-open' });
       await expect(service.openSession(dto, 'user-1')).rejects.toThrow(ConflictException);
@@ -137,7 +147,7 @@ describe('CashSessionService', () => {
       const openingArg = prisma.cashSession.create.mock.calls[0][0].data.openingAmount;
       expect(Number(openingArg.toString())).toBe(100500);
       expect(prisma.cashDenominationCount.createMany).toHaveBeenCalled();
-      expect(pendingEntries.flushInto).toHaveBeenCalledWith(prisma, 'cs-new', 'user-1');
+      expect(pendingEntries.flushInto).toHaveBeenCalledWith(prisma, 'cs-new', 'user-1', 'loc-125');
       expect(repository.findById).toHaveBeenCalledWith('cs-new');
     });
   });

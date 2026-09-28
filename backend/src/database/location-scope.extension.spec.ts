@@ -76,4 +76,21 @@ describe('location-scope extension', () => {
       ['AccountPayable', 'CashRegister', 'DtfRecord', 'ExpenseOrder', 'Order', 'ProductionOrder', 'Quote', 'WorkOrder'],
     );
   });
+
+  it('las sesiones de caja se filtran por la sede de su caja', async () => {
+    const args = await asUser(SEDE_125, () => run('CashSession', 'findFirst', { where: { status: 'OPEN' } }));
+
+    expect(args.where).toEqual({ status: 'OPEN', cashRegister: { locationId: { in: ['l-125'] } } });
+  });
+
+  it('si el where ya filtra la caja, la sede se suma con AND', async () => {
+    const args = await asUser(SEDE_125, () =>
+      run('CashSession', 'findMany', { where: { cashRegister: { isActive: true } } }),
+    );
+
+    expect(args.where).toEqual({
+      cashRegister: { isActive: true },
+      AND: [{ cashRegister: { locationId: { in: ['l-125'] } } }],
+    });
+  });
 });

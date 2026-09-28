@@ -5,7 +5,7 @@ import {
   voidReasonForNonCash,
 } from '../../common/utils/payment-method.util';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
-import { findActiveCashSession } from './active-cash-session.util';
+import { findActiveCashSessionForLocation } from './active-cash-session.util';
 
 /**
  * Rastro de una edición de pago que modificó un movimiento de caja cuya sesión
@@ -34,6 +34,8 @@ export interface SyncPaymentCashMovementParams {
   };
   orderId: string;
   orderNumber: string;
+  /** Sede de la OP: si hay que crear el movimiento, va a la caja de esa sede. */
+  locationId: string;
   userId: string;
   /** Consecutivo `CASH_RECEIPT` para el movimiento que haya que crear. */
   generateReceiptNumber: () => Promise<string>;
@@ -148,7 +150,7 @@ export async function syncPaymentCashMovement(
     // diseño sin movimiento) y ahora sí lo es. Sin esto nacería huérfano.
     // El movimiento se crea en la sesión abierta HOY, no en la del día en
     // que se registró el crédito: el dinero entra ahora.
-    const activeSession = await findActiveCashSession(tx);
+    const activeSession = await findActiveCashSessionForLocation(tx, params.locationId);
 
     if (activeSession) {
       const receiptNumber = await params.generateReceiptNumber();

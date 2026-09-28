@@ -24,7 +24,7 @@ import { ClientOwnershipAuthRequestsService } from '../client-ownership-auth-req
 import { PayrollDeductionsService } from '../payroll-deductions/payroll-deductions.service';
 import {
   ActiveCashSession,
-  findActiveCashSession,
+  findActiveCashSessionForLocation,
 } from '../cash-session/active-cash-session.util';
 import {
   reportMovementEditedAfterClose,
@@ -757,8 +757,8 @@ export class OrdersService {
         );
       }
 
-      // 1. Buscar sesión activa
-      activeSession = await findActiveCashSession(this.prisma);
+      // 1. Buscar la sesión abierta de la caja de la sede de la OP (§4)
+      activeSession = await findActiveCashSessionForLocation(this.prisma, locationId);
     }
 
     // Descuento por nómina: el cliente es un empleado y el trabajo se le resta
@@ -1437,7 +1437,7 @@ export class OrdersService {
           if (!firstPayment) {
             // Pago nuevo: mismo tratamiento que en `addPayment`.
             if (movesCash) {
-              const activeSession = await findActiveCashSession(tx);
+              const activeSession = await findActiveCashSessionForLocation(tx, oldOrder.locationId);
 
               if (activeSession) {
                 const receiptNumber =
@@ -2196,7 +2196,8 @@ export class OrdersService {
     const movesCash = paymentMovesCash(createPaymentDto.paymentMethod);
 
     // Buscar sesión de caja abierta activa
-    const activeSession = await findActiveCashSession(this.prisma);
+    // La caja de la sede de la OP (docs/PLAN_SEDES.md §4)
+    const activeSession = await findActiveCashSessionForLocation(this.prisma, order.locationId);
 
     // Nota: se permite que el pago exceda el saldo pendiente.
     // El excedente queda como "saldo a favor" (paidAmount > total → balance negativo)
@@ -2640,6 +2641,7 @@ export class OrdersService {
         updated,
         orderId,
         orderNumber: order.orderNumber,
+        locationId: order.locationId,
         userId,
         generateReceiptNumber: () =>
           this.consecutivesService.generateNumber('CASH_RECEIPT', order.locationId),

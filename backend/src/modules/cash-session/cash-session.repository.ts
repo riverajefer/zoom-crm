@@ -4,6 +4,7 @@ import { CashSessionStatus, Prisma } from '../../generated/prisma';
 import { FilterCashSessionsDto } from './dto';
 import { EXCLUDE_REVERSALS } from '../cash-movement/cash-movement.helpers';
 import { clampPageSize, MAX_PAGE_SIZE } from '../../common/dto/pagination.dto';
+import { endOfDay, startOfDay } from '../../common/utils/date-range.util';
 
 const SESSION_SELECT = {
   id: true,
@@ -80,11 +81,13 @@ export class CashSessionRepository {
       ...(cashRegisterId && { cashRegisterId }),
       ...(status && { status }),
       ...(openedById && { openedById }),
+      // Una sesión es del día en que se abrió, en hora de Bogotá: un
+      // `YYYY-MM-DD` cubre el día completo allá (docs/PLAN_SEDES.md §4).
       ...(openedFrom || openedTo
         ? {
             openedAt: {
-              ...(openedFrom && { gte: new Date(openedFrom) }),
-              ...(openedTo && { lte: new Date(openedTo) }),
+              ...(openedFrom && { gte: startOfDay(openedFrom) }),
+              ...(openedTo && { lte: endOfDay(openedTo) }),
             },
           }
         : {}),

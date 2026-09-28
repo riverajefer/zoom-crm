@@ -53,4 +53,16 @@ describe('SedesService', () => {
 
     await expect(service.findOne('l-x')).rejects.toThrow(NotFoundException);
   });
+
+  it('la sede nace con su caja', async () => {
+    repo.findByCode.mockResolvedValue(null);
+
+    await service.create({ code: '130', name: 'Local 130', color: '#123456' });
+
+    expect(repo.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cashRegisters: { create: { name: 'Caja Local 130', description: 'Caja de Local 130' } },
+      }),
+    );
+  });
 });

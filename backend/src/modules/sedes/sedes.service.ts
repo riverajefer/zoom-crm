@@ -27,9 +27,13 @@ export class SedesService {
     if (await this.sedesRepository.findByCode(dto.code)) {
       throw new BadRequestException(`Ya existe una sede con el código «${dto.code}»`);
     }
+    const name = dto.name.trim();
     return this.sedesRepository.create({
       code: dto.code,
-      name: dto.name.trim(),
+      name,
+      // Cada sede nace con su caja (docs/PLAN_SEDES.md §4 y §6.4). Los
+      // consecutivos no hace falta crearlos: nacen al primer número.
+      cashRegisters: { create: { name: `Caja ${name}`, description: `Caja de ${name}` } },
       type: dto.type,
       address: dto.address?.trim() || null,
       phone: dto.phone?.trim() || null,

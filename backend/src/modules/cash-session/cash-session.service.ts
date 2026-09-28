@@ -54,6 +54,16 @@ export class CashSessionService {
   }
 
   async openSession(dto: OpenCashSessionDto, userId: string) {
+    // La caja tiene que ser de la sede activa: la búsqueda pasa por el filtro de
+    // sede, así que la de otra sede no existe (docs/PLAN_SEDES.md §4).
+    const register = await this.prisma.cashRegister.findUnique({
+      where: { id: dto.cashRegisterId },
+      select: { id: true, locationId: true },
+    });
+    if (!register) {
+      throw new NotFoundException(`Caja registradora ${dto.cashRegisterId} no encontrada`);
+    }
+
     // Check for existing open session
     const existing = await this.repository.findOpenByRegisterId(
       dto.cashRegisterId,
@@ -95,7 +105,8 @@ export class CashSessionService {
 
       // Ingresar los abonos que se registraron sin caja abierta. Va dentro de
       // la misma transacción: si la apertura falla, la cola queda intacta.
-      await this.pendingCashEntriesService.flushInto(tx, created.id, userId);
+      // Solo los de la sede de esta caja (§4).
+      await this.pendingCashEntriesService.flushInto(tx, created.id, userId, register.locationId);
 
       return created;
     });

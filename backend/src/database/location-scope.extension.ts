@@ -19,6 +19,15 @@ export const LOCATION_SCOPED_MODELS = new Set<string>([
 ]);
 
 /**
+ * Modelos sin sede propia que la toman de un documento con sede: se filtran a
+ * través de esa relación. Las sesiones de caja son de la sede de su caja
+ * (docs/PLAN_SEDES.md §4).
+ */
+export const RELATION_SCOPED_MODELS: Readonly<Record<string, string>> = {
+  CashSession: 'cashRegister',
+};
+
+/**
  * Operaciones que reciben el filtro en su `where`. Las de un solo registro
  * (`findUnique`, `update`, `delete`) también: un documento de otra sede no
  * existe (404), y así el backend impide escribir en otra sede aunque la
@@ -44,6 +53,21 @@ const SCOPED_OPERATIONS = new Set<string>([
 /** Listados: lo único que se le filtra a quien opera en todas las sedes. */
 const LIST_OPERATIONS = new Set<string>(['findMany', 'count', 'aggregate', 'groupBy']);
 
+/**
+ * Agrega la sede, a través de `relation`, al `where`. Si el `where` ya filtra
+ * esa relación, la condición de sede se suma con `AND` para no pisarla.
+ */
+export function scopeWhereThroughRelation(
+  where: Record<string, unknown> | undefined,
+  relation: string,
+  locationIds: string[],
+) {
+  const condition = { [relation]: { locationId: { in: locationIds } } };
+  if (!where || !(relation in where)) return { ...(where ?? {}), ...condition };
+  const and = Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : [];
+  return { ...where, AND: [...and, condition] };
+}
+
 /** Agrega la sede al `where` sin pisar una que ya venga explícita. */
 export function scopeWhere(where: Record<string, unknown> | undefined, locationIds: string[]) {
   if (where && 'locationId' in where) return where;
@@ -66,7 +90,9 @@ export async function scopeLocationQuery<A>({
   args: A;
   query: (args: A) => Promise<unknown>;
 }): Promise<unknown> {
-  if (!model || !LOCATION_SCOPED_MODELS.has(model) || !SCOPED_OPERATIONS.has(operation)) {
+  const relation = model ? RELATION_SCOPED_MODELS[model] : undefined;
+  const scoped = !!model && (LOCATION_SCOPED_MODELS.has(model) || !!relation);
+  if (!scoped || !SCOPED_OPERATIONS.has(operation)) {
     return query(args);
   }
   const scope = getLocationScope();
@@ -74,7 +100,10 @@ export async function scopeLocationQuery<A>({
   if (scope.listsOnly && !LIST_OPERATIONS.has(operation)) return query(args);
 
   const scopedArgs = { ...(args as Record<string, unknown>) };
-  scopedArgs.where = scopeWhere(scopedArgs.where as Record<string, unknown> | undefined, scope.locationIds);
+  const where = scopedArgs.where as Record<string, unknown> | undefined;
+  scopedArgs.where = relation
+    ? scopeWhereThroughRelation(where, relation, scope.locationIds)
+    : scopeWhere(where, scope.locationIds);
   return query(scopedArgs as A);
 }
 

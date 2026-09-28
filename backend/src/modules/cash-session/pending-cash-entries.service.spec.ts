@@ -48,7 +48,7 @@ describe('PendingCashEntriesService', () => {
     it('ingresa el abono pendiente a la sesión que se abre y lo desmarca', async () => {
       mockTx.payment.findMany.mockResolvedValue([makePending()]);
 
-      const n = await service.flushInto(mockTx, 'session-9', 'user-1');
+      const n = await service.flushInto(mockTx, 'session-9', 'user-1', 'loc-125');
 
       expect(n).toBe(1);
       expect(mockTx.cashMovement.create).toHaveBeenCalledWith(
@@ -74,7 +74,7 @@ describe('PendingCashEntriesService', () => {
       // se cobró tiene que quedar visible o se pierde para la conciliación.
       mockTx.payment.findMany.mockResolvedValue([makePending()]);
 
-      await service.flushInto(mockTx, 'session-9', 'user-1');
+      await service.flushInto(mockTx, 'session-9', 'user-1', 'loc-125');
 
       const { description } = mockTx.cashMovement.create.mock.calls[0][0].data;
       expect(description).toContain('OP-2026-0100');
@@ -87,7 +87,7 @@ describe('PendingCashEntriesService', () => {
         makePending({ cashMovementId: 'mov-existente' }),
       ]);
 
-      const n = await service.flushInto(mockTx, 'session-9', 'user-1');
+      const n = await service.flushInto(mockTx, 'session-9', 'user-1', 'loc-125');
 
       expect(mockTx.cashMovement.create).not.toHaveBeenCalled();
       expect(n).toBe(0);
@@ -105,7 +105,7 @@ describe('PendingCashEntriesService', () => {
         makePending({ id: 'p3' }),
       ]);
 
-      const n = await service.flushInto(mockTx, 'session-9', 'user-1');
+      const n = await service.flushInto(mockTx, 'session-9', 'user-1', 'loc-125');
 
       expect(n).toBe(3);
       expect(mockTx.cashMovement.create).toHaveBeenCalledTimes(3);
@@ -115,7 +115,7 @@ describe('PendingCashEntriesService', () => {
     it('no hace nada si la cola está vacía', async () => {
       mockTx.payment.findMany.mockResolvedValue([]);
 
-      const n = await service.flushInto(mockTx, 'session-9', 'user-1');
+      const n = await service.flushInto(mockTx, 'session-9', 'user-1', 'loc-125');
 
       expect(n).toBe(0);
       expect(mockTx.cashMovement.create).not.toHaveBeenCalled();
@@ -125,7 +125,7 @@ describe('PendingCashEntriesService', () => {
     it('usa el tx recibido, no el prisma global (debe ser atómico con la apertura)', async () => {
       mockTx.payment.findMany.mockResolvedValue([makePending()]);
 
-      await service.flushInto(mockTx, 'session-9', 'user-1');
+      await service.flushInto(mockTx, 'session-9', 'user-1', 'loc-125');
 
       expect(mockPrisma.payment.findMany).not.toHaveBeenCalled();
       expect(mockPrisma.payment.update).not.toHaveBeenCalled();
@@ -185,5 +185,14 @@ describe('PendingCashEntriesService', () => {
       expect(res.count).toBe(0);
       expect(Number(res.totalAmount.toString())).toBe(0);
     });
+  });
+
+  // Solo Zoom (docs/PLAN_SEDES.md §4)
+  it('al abrir una caja solo entran los abonos pendientes de su sede', async () => {
+    mockTx.payment.findMany.mockResolvedValue([]);
+
+    await service.flushInto(mockTx, 'session-9', 'user-1', 'loc-119');
+
+    expect(mockTx.payment.findMany.mock.calls.at(-1)[0].where.order).toEqual({ locationId: 'loc-119' });
   });
 });

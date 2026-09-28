@@ -441,21 +441,22 @@ export class PaymentEditApprovalsService
       // 3. Dejar el movimiento de caja coherente con el pago (anularlo si
       // dejó de ser dinero, ajustarlo, o crearlo si ahora sí lo es). Mismo
       // código que la edición directa: ver `syncPaymentCashMovement`.
+      // La sede de la OP decide la caja y la numeración (docs/PLAN_SEDES.md §4).
+      const { locationId: orderLocationId } = await tx.order.findUniqueOrThrow({
+        where: { id: request.orderId },
+        select: { locationId: true },
+      });
       const editedAfterClose = await syncPaymentCashMovement(tx, {
         paymentId: request.paymentId,
         previousMethod: before.paymentMethod,
         updated: payment,
         orderId: request.orderId,
         orderNumber: request.order.orderNumber,
+        locationId: orderLocationId,
         userId: reviewerId,
         // El recibo se numera en la sede de la OP (docs/PLAN_SEDES.md §3).
-        generateReceiptNumber: async () => {
-          const { locationId } = await tx.order.findUniqueOrThrow({
-            where: { id: request.orderId },
-            select: { locationId: true },
-          });
-          return this.consecutivesService.generateNumber('CASH_RECEIPT', locationId);
-        },
+        generateReceiptNumber: () =>
+          this.consecutivesService.generateNumber('CASH_RECEIPT', orderLocationId),
       });
 
       // 4. Reajustar el consumo de saldo a favor (el monto o el método pudieron cambiar)

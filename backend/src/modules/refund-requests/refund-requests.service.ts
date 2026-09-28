@@ -9,7 +9,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { createOrReturnTwin } from '../../common/utils/unique-violation.util';
-import { findActiveCashSession } from '../cash-session/active-cash-session.util';
+import { findActiveCashSessionForLocation } from '../cash-session/active-cash-session.util';
 import { lockOrderForUpdate } from '../../common/utils/order-lock.util';
 import { NotificationsService } from '../notifications/notifications.service';
 import { WhatsappService } from '../whatsapp/whatsapp.service';
@@ -465,7 +465,8 @@ export class RefundRequestsService
       throw new ConflictException('Esta devolución ya fue pagada');
     }
 
-    const activeSession = await findActiveCashSession(this.prisma);
+    // La caja de la sede de la OP (docs/PLAN_SEDES.md §4)
+    const activeSession = await findActiveCashSessionForLocation(this.prisma, request.order.locationId);
 
     if (!activeSession) {
       throw new BadRequestException(

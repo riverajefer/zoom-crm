@@ -13,6 +13,10 @@ describe('CashSessionRepository', () => {
         findMany: jest.fn().mockResolvedValue([]),
         count: jest.fn().mockResolvedValue(0),
       },
+      cashSession: {
+        findMany: jest.fn().mockResolvedValue([]),
+        count: jest.fn().mockResolvedValue(0),
+      },
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -63,6 +67,16 @@ describe('CashSessionRepository', () => {
       expect(prisma.cashMovement.count).toHaveBeenCalledWith({
         where: { cashSessionId: 'cs1', isVoided: false, originalMovement: null },
       });
+    });
+  });
+
+  describe('findAll', () => {
+    it('should resolve a date-only range to the full day in Bogotá time', async () => {
+      await repository.findAll({ openedFrom: '2026-09-28', openedTo: '2026-09-28' });
+
+      const { where } = prisma.cashSession.findMany.mock.calls[0][0];
+      expect(where.openedAt.gte.toISOString()).toBe('2026-09-28T05:00:00.000Z');
+      expect(where.openedAt.lte.toISOString()).toBe('2026-09-29T04:59:59.999Z');
     });
   });
 });

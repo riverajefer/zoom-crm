@@ -78,8 +78,11 @@ export function getLocationScope(): { locationIds: string[]; listsOnly: boolean 
  * lo poco que debe cruzar sedes: el saldo a favor (que se usa en cualquier
  * sede) y el modo consulta de la fase 4. Ver docs/PLAN_SEDES.md §15.1.
  */
-export function withoutLocationScope<T>(fn: () => T): T {
+export async function withoutLocationScope<T>(fn: () => T | PromiseLike<T>): Promise<T> {
   const store = getRequestStore();
   if (!store) return fn();
-  return runWithAuditContext({ ...store, locationBypass: true }, fn);
+  // El `await` va adentro: las consultas de Prisma son perezosas y se ejecutan
+  // cuando alguien las espera. Devolver la consulta sin esperarla haría que se
+  // ejecutara afuera, con el filtro puesto.
+  return runWithAuditContext({ ...store, locationBypass: true }, async () => await fn());
 }

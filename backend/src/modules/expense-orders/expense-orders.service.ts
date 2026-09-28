@@ -25,7 +25,7 @@ import { ExpenseOrderAuthRequestsService } from '../expense-order-auth-requests/
 import { AccountsPayableService } from '../accounts-payable/accounts-payable.service';
 import { computeExpenseTotals } from '../../common/utils/expense-totals.util';
 import { normalizeRate } from '../../common/utils/rounding.util';
-import { findActiveCashSession } from '../cash-session/active-cash-session.util';
+import { findActiveCashSessionForLocation } from '../cash-session/active-cash-session.util';
 import { requireActiveLocationId } from '../../common/utils/location-context';
 
 const ALLOWED_TRANSITIONS: Record<ExpenseOrderStatus, ExpenseOrderStatus[]> = {
@@ -485,7 +485,8 @@ export class ExpenseOrdersService {
     // La caja abierta se verifica ANTES de tocar el estado. Al revés, una OG sin
     // caja quedaba en AUTHORIZED sin pago ni movimientos, y como ya no estaba en
     // ADMIN_AUTHORIZED, Caja no podía volver a intentarlo.
-    const activeSession = await findActiveCashSession(this.prisma);
+    // La caja de la sede de la OG: un local o la Matriz (docs/PLAN_SEDES.md §4)
+    const activeSession = await findActiveCashSessionForLocation(this.prisma, expenseOrder.locationId);
 
     if (!activeSession) {
       throw new BadRequestException(

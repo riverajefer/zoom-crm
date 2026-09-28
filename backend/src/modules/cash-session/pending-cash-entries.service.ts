@@ -3,6 +3,7 @@ import { Prisma } from '../../generated/prisma';
 import { PrismaService } from '../../database/prisma.service';
 import { ACTIVE_PAYMENT_WHERE } from '../../common/utils/order-balance.util';
 import { ConsecutivesService } from '../consecutives/consecutives.service';
+import { getRequestLocation } from '../../common/utils/location-context';
 
 /**
  * Cola de abonos que se registraron sin caja abierta.
@@ -35,23 +36,35 @@ export class PendingCashEntriesService {
    * ids y sin sesiones, no hay nada que proteger.
    */
   async isAnySessionOpen(): Promise<{ isOpen: boolean }> {
+    // La caja que importa es la de la sede activa: ahí entra el abono (§4).
+    const locationId = getRequestLocation()?.locationId;
     const open = await this.prisma.cashSession.findFirst({
-      where: { status: 'OPEN' },
+      where: { status: 'OPEN', ...(locationId && { cashRegister: { locationId } }) },
       select: { id: true },
     });
     return { isOpen: open !== null };
+  }
+
+  /** Abonos en cola de la sede activa; en "Todas", los de todas (§4). */
+  private pendingWhere(): Prisma.PaymentWhereInput {
+    const locationId = getRequestLocation()?.locationId;
+    return {
+      pendingCashEntry: true,
+      ...ACTIVE_PAYMENT_WHERE,
+      ...(locationId && { order: { locationId } }),
+    };
   }
 
   /** Cuántos abonos esperan entrar a caja, y por cuánto. */
   async getPendingSummary() {
     const [aggregate, payments] = await Promise.all([
       this.prisma.payment.aggregate({
-        where: { pendingCashEntry: true, ...ACTIVE_PAYMENT_WHERE },
+        where: this.pendingWhere(),
         _count: true,
         _sum: { amount: true },
       }),
       this.prisma.payment.findMany({
-        where: { pendingCashEntry: true, ...ACTIVE_PAYMENT_WHERE },
+        where: this.pendingWhere(),
         select: {
           id: true,
           amount: true,
@@ -83,11 +96,13 @@ export class PendingCashEntriesService {
     tx: Prisma.TransactionClient,
     cashSessionId: string,
     performedById: string,
+    /** Sede de la caja: solo entran los abonos de OP de esa sede (§4). */
+    locationId: string,
   ): Promise<number> {
     // Un abono anulado mientras esperaba caja no entra al arqueo: ese dinero
     // ya no existe, y crearle el movimiento lo resucitaría como ingreso.
     const pending = await tx.payment.findMany({
-      where: { pendingCashEntry: true, ...ACTIVE_PAYMENT_WHERE },
+      where: { pendingCashEntry: true, ...ACTIVE_PAYMENT_WHERE, order: { locationId } },
       select: {
         id: true,
         amount: true,

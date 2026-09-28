@@ -37,7 +37,7 @@ const money = (value: unknown) =>
 
 import { computeExpenseTotals } from '../../common/utils/expense-totals.util';
 import { normalizeRate } from '../../common/utils/rounding.util';
-import { findActiveCashSession } from '../cash-session/active-cash-session.util';
+import { findActiveCashSessionForLocation } from '../cash-session/active-cash-session.util';
 import {
   BUSINESS_TIMEZONE,
   businessToday,
@@ -531,8 +531,8 @@ export class AccountsPayableService {
 
     await this.assertPayableAmount(ap, dto.amount);
 
-    // Caja: buscar sesión de caja activa automáticamente
-    const activeSession = await findActiveCashSession(this.prisma);
+    // Caja: la sesión abierta de la caja de la sede de la CP (docs/PLAN_SEDES.md §4)
+    const activeSession = await findActiveCashSessionForLocation(this.prisma, ap.locationId);
 
     return this.executePayment(
       id,

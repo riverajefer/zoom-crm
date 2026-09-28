@@ -1,5 +1,6 @@
 import { ConflictException } from '@nestjs/common';
 import { CashSessionStatus, Prisma } from '../../generated/prisma';
+import { withoutLocationScope } from '../../common/utils/location-context';
 
 /**
  * Resolución de "la caja abierta" para los flujos que mueven dinero.
@@ -17,6 +18,10 @@ import { CashSessionStatus, Prisma } from '../../generated/prisma';
  * El índice parcial `cash_sessions_one_open_per_register` garantiza como máximo
  * una sesión abierta por caja, así que dos resultados son siempre dos cajas
  * distintas.
+ *
+ * En Zoom la búsqueda es siempre por sede: la versión sin sede
+ * (`findActiveCashSession`, heredada de High) se quitó en la fase 3 para que
+ * un cherry-pick que la use no compile y obligue a elegir la sede.
  */
 
 export interface ActiveCashSession {
@@ -27,41 +32,36 @@ export interface ActiveCashSession {
 /** Acepta tanto `PrismaService` como el cliente de una transacción. */
 type CashSessionClient = Pick<Prisma.TransactionClient, 'cashSession'>;
 
-export const MULTIPLE_OPEN_SESSIONS_MESSAGE =
-  'Hay más de una caja abierta y el sistema no puede saber en cuál registrar ' +
-  'este movimiento. Cierra la caja que no corresponda y vuelve a intentarlo.';
+export const NO_REGISTER_FOR_SEDE_MULTIPLE =
+  'Hay más de una caja abierta en esta sede y el sistema no puede saber en cuál ' +
+  'registrar este movimiento. Cierra la caja que no corresponda y vuelve a intentarlo.';
 
 /**
- * Devuelve la sesión de caja abierta, o `null` si no hay ninguna.
+ * La sesión abierta de la caja de una sede, o `null` si no hay ninguna.
  *
- * @param client  `PrismaService` o el `tx` de una transacción en curso.
- * @param cashRegisterId  Caja concreta. Cuando el llamador sabe a qué caja va el
- *   movimiento no hay ambigüedad posible: es el camino que habrá que usar el día
- *   que exista la dimensión de sede.
+ * Solo Zoom (docs/PLAN_SEDES.md §4): cada sede tiene su caja, y el dinero de un
+ * documento entra o sale por la caja de la sede del documento. Con las 3 cajas
+ * abiertas a la vez, buscar "la caja abierta" sin sede cruzaría la plata de
+ * una sede a otra. Se busca sin el filtro del request: la sede la da el
+ * documento, no la sede activa de quien opera.
  *
- * @throws ConflictException si hay varias cajas abiertas y no se indicó cuál.
+ * @throws ConflictException si la sede tiene varias cajas abiertas.
  */
-export async function findActiveCashSession(
+export async function findActiveCashSessionForLocation(
   client: CashSessionClient,
-  cashRegisterId?: string,
+  locationId: string,
 ): Promise<ActiveCashSession | null> {
-  if (cashRegisterId) {
-    return client.cashSession.findFirst({
-      where: { cashRegisterId, status: CashSessionStatus.OPEN },
+  const open = await withoutLocationScope(() =>
+    client.cashSession.findMany({
+      where: { status: CashSessionStatus.OPEN, cashRegister: { locationId } },
       select: { id: true, cashRegisterId: true },
-    });
-  }
-
-  // `take: 2` alcanza: solo hace falta distinguir "ninguna", "una" y "más de una".
-  const open = await client.cashSession.findMany({
-    where: { status: CashSessionStatus.OPEN },
-    select: { id: true, cashRegisterId: true },
-    orderBy: { openedAt: 'asc' },
-    take: 2,
-  });
+      orderBy: { openedAt: 'asc' },
+      take: 2,
+    }),
+  );
 
   if (open.length === 0) return null;
   if (open.length === 1) return open[0];
 
-  throw new ConflictException(MULTIPLE_OPEN_SESSIONS_MESSAGE);
+  throw new ConflictException(NO_REGISTER_FOR_SEDE_MULTIPLE);
 }

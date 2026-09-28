@@ -49,7 +49,7 @@ export class CashMovementService {
     // Validate session exists and is open
     const session = await this.prisma.cashSession.findUnique({
       where: { id: dto.cashSessionId },
-      select: { id: true, status: true },
+      select: { id: true, status: true, cashRegister: { select: { locationId: true } } },
     });
     if (!session) {
       throw new NotFoundException(`Sesión de caja ${dto.cashSessionId} no encontrada`);
@@ -60,7 +60,11 @@ export class CashMovementService {
       );
     }
 
-    const receiptNumber = await this.consecutivesService.generateNumber('CASH_RECEIPT');
+    // El recibo se numera en la sede de la caja (docs/PLAN_SEDES.md §3).
+    const receiptNumber = await this.consecutivesService.generateNumber(
+      'CASH_RECEIPT',
+      session.cashRegister.locationId,
+    );
     const amount = new Prisma.Decimal(dto.amount);
 
     const movementId = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {

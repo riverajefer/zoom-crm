@@ -286,7 +286,7 @@ describe('ProductionRepository', () => {
 
   describe('createOrder', () => {
     it('should call prisma.productionOrder.create', async () => {
-      const data = { oprodNumber: 'OP-1', templateId: 't1', workOrderId: 'wo1', createdById: 'u1' };
+      const data = { oprodNumber: 'OP-1', locationId: 'loc-125', templateId: 't1', workOrderId: 'wo1', createdById: 'u1' };
       prisma.productionOrder.create.mockResolvedValue({ id: 'po1' });
       const result = await repository.createOrder(data);
       expect(prisma.productionOrder.create).toHaveBeenCalledWith({ data });

@@ -47,7 +47,8 @@ describe('InventoryRepository', () => {
       
       expect(result).toEqual({ id: 'mov-1' });
       expect(prisma.inventoryMovement.create).toHaveBeenCalledWith(
-        expect.objectContaining({ data })
+        // Solo Zoom: sin sede activa (test unitario) la sede queda vacía.
+        expect.objectContaining({ data: { locationId: null, ...data } })
       );
     });
 
@@ -63,7 +64,8 @@ describe('InventoryRepository', () => {
       
       expect(result).toEqual({ id: 'tx-mov' });
       expect(tx.inventoryMovement.create).toHaveBeenCalledWith(
-        expect.objectContaining({ data })
+        // Solo Zoom: sin sede activa (test unitario) la sede queda vacía.
+        expect.objectContaining({ data: { locationId: null, ...data } })
       );
     });
   });

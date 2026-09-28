@@ -26,6 +26,7 @@ import { AccountsPayableService } from '../accounts-payable/accounts-payable.ser
 import { computeExpenseTotals } from '../../common/utils/expense-totals.util';
 import { normalizeRate } from '../../common/utils/rounding.util';
 import { findActiveCashSession } from '../cash-session/active-cash-session.util';
+import { requireActiveLocationId } from '../../common/utils/location-context';
 
 const ALLOWED_TRANSITIONS: Record<ExpenseOrderStatus, ExpenseOrderStatus[]> = {
   [ExpenseOrderStatus.DRAFT]: [ExpenseOrderStatus.CREATED, ExpenseOrderStatus.ADMIN_AUTHORIZED],
@@ -151,13 +152,16 @@ export class ExpenseOrdersService {
     // Reintento en caso de colisión de consecutivo
     const maxAttempts = 3;
     let attempts = 0;
-    let currentOgNumber = await this.consecutivesService.generateNumber('EXPENSE');
+    // La OG nace en la sede activa: un local o la Matriz (docs/PLAN_SEDES.md §14).
+    const locationId = requireActiveLocationId();
+    let currentOgNumber = await this.consecutivesService.generateNumber('EXPENSE', locationId);
 
     while (attempts < maxAttempts) {
       attempts++;
       try {
         const created = await this.repository.create({
           ogNumber: currentOgNumber,
+          locationId,
           expenseTypeId: dto.expenseTypeId,
           expenseSubcategoryId: dto.expenseSubcategoryId,
           workOrderId: dto.workOrderId,
@@ -227,8 +231,8 @@ export class ExpenseOrdersService {
           (error.meta?.modelName === 'ExpenseOrder' && (error.meta?.target === undefined || target === '""'));
 
         if (isUniqueConstraintError && isNumberTarget && attempts < maxAttempts) {
-          await this.consecutivesService.syncCounter('EXPENSE');
-          currentOgNumber = await this.consecutivesService.generateNumber('EXPENSE');
+          await this.consecutivesService.syncCounter('EXPENSE', locationId);
+          currentOgNumber = await this.consecutivesService.generateNumber('EXPENSE', locationId);
           continue;
         }
         throw error;
@@ -501,7 +505,10 @@ export class ExpenseOrdersService {
     // Crear movimientos de caja + auto-transición a PAID
 
     for (const item of expenseOrder.items) {
-      const receiptNumber = await this.consecutivesService.generateNumber('CASH_RECEIPT');
+      const receiptNumber = await this.consecutivesService.generateNumber(
+        'CASH_RECEIPT',
+        expenseOrder.locationId,
+      );
       await this.prisma.cashMovement.create({
         data: {
           amount: item.total,

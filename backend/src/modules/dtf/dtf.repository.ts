@@ -98,6 +98,8 @@ export class DtfRepository {
 
   async create(data: {
     consecutive: string;
+    /** Sede de la DTF (docs/PLAN_SEDES.md §2). */
+    locationId: string;
     productId: string;
     clientId: string;
     quantity: Prisma.Decimal;

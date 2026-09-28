@@ -89,19 +89,19 @@ export class LocationContextInterceptor implements NestInterceptor {
 
     if (requested === ALL_LOCATIONS) {
       if (!viewAll) this.deny('No tienes acceso a la vista de todas las sedes');
-      return { locationId: null, all: true, permittedIds };
+      return { locationId: null, all: true, permittedIds, viewAll };
     }
 
     if (requested) {
       if (!permittedIds.includes(requested)) this.deny('No tienes acceso a esa sede');
-      return { locationId: requested, all: false, permittedIds };
+      return { locationId: requested, all: false, permittedIds, viewAll };
     }
 
     const fallback =
       user?.defaultLocationId && permittedIds.includes(user.defaultLocationId)
         ? user.defaultLocationId
         : (permittedIds[0] ?? null);
-    return { locationId: fallback, all: false, permittedIds };
+    return { locationId: fallback, all: false, permittedIds, viewAll };
   }
 
   private deny(message: string): never {

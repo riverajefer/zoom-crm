@@ -6,6 +6,7 @@ import {
   computeOrderBalance,
 } from '../../common/utils/order-balance.util';
 import { lockOrderForUpdate } from '../../common/utils/order-lock.util';
+import { withoutLocationScope } from '../../common/utils/location-context';
 
 export interface CreditSource {
   orderId: string;
@@ -44,7 +45,9 @@ export class CreditBalanceService {
   ): Promise<CreditSource[]> {
     const db = options.tx ?? this.prisma;
 
-    const orders = await db.order.findMany({
+    // El saldo a favor se usa en cualquier sede (docs/PLAN_SEDES.md §4): las
+    // OP de origen pueden ser de otra sede, así que se buscan en todas.
+    const orders = await withoutLocationScope(() => db.order.findMany({
       where: {
         clientId,
         ...(options.excludeOrderId && { id: { not: options.excludeOrderId } }),
@@ -59,7 +62,7 @@ export class CreditBalanceService {
         reversedAmount: true,
       },
       orderBy: { orderDate: 'asc' },
-    });
+    }));
 
     return orders
       .map((order) => ({
@@ -229,6 +232,15 @@ export class CreditBalanceService {
    * Suma `delta` al crédito ya aplicado de una OP y recalcula su saldo pendiente.
    */
   private async bumpAppliedCredit(
+    tx: Prisma.TransactionClient,
+    orderId: string,
+    delta: Prisma.Decimal,
+  ): Promise<void> {
+    // La OP puede ser de otra sede: el saldo a favor cruza sedes (§4).
+    return withoutLocationScope(() => this.bumpAppliedCreditInAnySede(tx, orderId, delta));
+  }
+
+  private async bumpAppliedCreditInAnySede(
     tx: Prisma.TransactionClient,
     orderId: string,
     delta: Prisma.Decimal,

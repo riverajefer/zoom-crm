@@ -46,6 +46,10 @@ describe('InventoryService', () => {
       workOrderItemSupply: {
         findMany: jest.fn(),
       },
+      // Solo Zoom: el consumo guarda la sede de la OT.
+      workOrder: {
+        findUniqueOrThrow: jest.fn().mockResolvedValue({ locationId: 'loc-125' }),
+      },
     };
     mockPrisma.$transaction = jest.fn((callback) => callback(mockPrisma));
     const module: TestingModule = await Test.createTestingModule({

@@ -3,6 +3,7 @@ import { PrismaService } from '../../database/prisma.service';
 import { AttendanceSource, AttendanceType } from '../../generated/prisma';
 import { AttendanceFilterDto, AdjustAttendanceDto } from './dto';
 import { clampPageSize, MAX_PAGE_SIZE } from '../../common/dto/pagination.dto';
+import { getRequestLocation } from '../../common/utils/location-context';
 
 @Injectable()
 export class AttendanceRepository {
@@ -53,6 +54,8 @@ export class AttendanceRepository {
         userId,
         date,
         clockIn: now,
+        // Dónde estuvo la persona: la sede activa al marcar (docs/PLAN_SEDES.md §5).
+        locationId: getRequestLocation()?.locationId ?? null,
         type: AttendanceType.MANUAL,
         source: AttendanceSource.BUTTON,
         notes,

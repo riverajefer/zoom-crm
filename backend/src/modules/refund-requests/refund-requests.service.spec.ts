@@ -376,6 +376,7 @@ describe('RefundRequestsService', () => {
   const orden = (overrides: Record<string, unknown> = {}) => ({
     id: 'o1',
     orderNumber: 'OP-1',
+    locationId: 'loc-125',
     status: OrderStatus.DELIVERED,
     subtotal: '500',
     discountAmount: '0',
@@ -614,7 +615,7 @@ describe('RefundRequestsService', () => {
 
       await service.execute(requestId, executorId);
 
-      expect(consecutives.generateNumber).toHaveBeenCalledWith('CASH_RECEIPT');
+      expect(consecutives.generateNumber).toHaveBeenCalledWith('CASH_RECEIPT', 'loc-125');
       expect(prisma.cashMovement.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({

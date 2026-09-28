@@ -51,6 +51,7 @@ const USER_SELECT = {
 const ORDER_SELECT = {
   id: true,
   orderNumber: true,
+  locationId: true,
   status: true,
   subtotal: true,
   discountAmount: true,
@@ -479,8 +480,11 @@ export class RefundRequestsService
     const refundAmount = new Prisma.Decimal(request.refundAmount);
     const reversedAmount = new Prisma.Decimal(request.reversedAmount ?? 0);
 
-    const receiptNumber =
-      await this.consecutivesService.generateNumber('CASH_RECEIPT');
+    // El recibo se numera en la sede de la OP (docs/PLAN_SEDES.md §3).
+    const receiptNumber = await this.consecutivesService.generateNumber(
+      'CASH_RECEIPT',
+      request.order.locationId,
+    );
 
     const updated = await this.prisma.$transaction(async (tx) => {
       // El WHERE lleva la condición de no-ejecutada: aprobar dos veces movería

@@ -9,6 +9,7 @@ import { UpdatePayrollEmployeeDto } from './dto/update-payroll-employee.dto';
 import { UsersRepository } from '../../users/users.repository';
 import { UsersService } from '../../users/users.service';
 import { RolesRepository } from '../../roles/roles.repository';
+import { getRequestLocation } from '../../../common/utils/location-context';
 
 /** Rol por defecto asignado a los empleados creados como usuarios del sistema. */
 const DEFAULT_EMPLOYEE_ROLE = 'user';
@@ -48,6 +49,11 @@ export class PayrollEmployeesService {
       throw new BadRequestException('Los empleados temporales requieren tarifa diaria');
     }
 
+    const employeeLocationId =
+      (await this.employeesRepository.findUserDefaultLocationId(userId)) ??
+      getRequestLocation()?.locationId ??
+      null;
+
     return this.employeesRepository.create({
       employeeType: dto.employeeType ?? EmployeeType.REGULAR,
       monthlySalary: dto.monthlySalary,
@@ -83,6 +89,9 @@ export class PayrollEmployeesService {
       emergencyContactPhone: dto.emergencyContactPhone,
       user: { connect: { id: userId } },
       ...(dto.cargoId && { cargo: { connect: { id: dto.cargoId } } }),
+      // Sede del empleado: la predeterminada de su usuario, o la sede activa
+      // de quien lo crea. Es opcional (docs/PLAN_SEDES.md §5).
+      ...(employeeLocationId && { location: { connect: { id: employeeLocationId } } }),
     });
   }
 

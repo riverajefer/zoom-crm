@@ -1,187 +1,118 @@
-import { Test, TestingModule } from '@nestjs/testing';
-import { ConsecutivesRepository } from './consecutives.repository';
-import { PrismaService } from '../../database/prisma.service';
-import {
-  createMockPrismaService,
-  MockPrismaService,
-} from '../../database/prisma.service.mock';
+import { ConsecutivesRepository, formatNumber } from './consecutives.repository';
 
-// ---------------------------------------------------------------------------
-// Suite
-// ---------------------------------------------------------------------------
+/**
+ * Numeración por sede y sin año (solo Zoom, docs/PLAN_SEDES.md §3).
+ */
 describe('ConsecutivesRepository', () => {
+  const LOC = { id: 'loc-125', code: '125' };
+  let prisma: any;
   let repository: ConsecutivesRepository;
-  let prisma: MockPrismaService;
 
-  const CURRENT_YEAR = new Date().getFullYear();
-
-  beforeEach(async () => {
-    prisma = createMockPrismaService();
-
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        ConsecutivesRepository,
-        { provide: PrismaService, useValue: prisma },
-      ],
-    }).compile();
-
-    repository = module.get<ConsecutivesRepository>(ConsecutivesRepository);
+  beforeEach(() => {
+    prisma = {
+      $queryRaw: jest.fn(),
+      $queryRawUnsafe: jest.fn(),
+      consecutive: {
+        findUnique: jest.fn(),
+        findMany: jest.fn(),
+        update: jest.fn(),
+        upsert: jest.fn(),
+      },
+      location: { findUnique: jest.fn() },
+    };
+    repository = new ConsecutivesRepository(prisma);
   });
 
-  afterEach(() => jest.clearAllMocks());
+  describe('formatNumber', () => {
+    it('lleva la sede, el prefijo y el número relleno a 4 dígitos', () => {
+      expect(formatNumber('125', 'OP', 1)).toBe('125-OP-0001');
+      expect(formatNumber('MAT', 'CP', 42)).toBe('MAT-CP-0042');
+    });
 
-  // ---------------------------------------------------------------------------
-  // getNextNumber
-  // ---------------------------------------------------------------------------
+    it('sigue creciendo sin tope después de 9999', () => {
+      expect(formatNumber('104', 'OP', 10000)).toBe('104-OP-10000');
+    });
+  });
+
   describe('getNextNumber', () => {
-    it('should call $queryRaw with atomic INSERT ON CONFLICT and return formatted number', async () => {
-      (prisma.$queryRaw as jest.Mock).mockResolvedValue([{ last_number: 1 }]);
+    it('sin tabla de origen usa el contador de (tipo, sede) y no reinicia por año', async () => {
+      prisma.$queryRaw.mockResolvedValue([{ last_number: 7 }]);
 
-      const result = await repository.getNextNumber('ORDER', 'OP');
+      const result = await repository.getNextNumber('PRODUCTION', 'PROD', LOC);
 
-      expect(prisma.$queryRaw).toHaveBeenCalled();
-      expect(result).toBe(`OP-${CURRENT_YEAR}-0001`);
+      expect(result).toBe('125-PROD-0007');
+      const sql = prisma.$queryRaw.mock.calls[0][0].join('?');
+      expect(sql).toContain('ON CONFLICT (type, location_id)');
+      expect(sql).not.toContain('year =');
     });
 
-    it('should return formatted string with zero-padded number', async () => {
-      (prisma.$queryRaw as jest.Mock).mockResolvedValue([{ last_number: 43 }]);
+    it('con tabla de origen toma el máximo real de esa sede y ese prefijo', async () => {
+      prisma.$queryRawUnsafe.mockResolvedValue([{ last_number: 12 }]);
 
-      const result = await repository.getNextNumber('ORDER', 'OP');
-
-      expect(result).toBe(`OP-${CURRENT_YEAR}-0043`);
-    });
-
-    it('should pad numbers to 4 digits (e.g. 1 → "0001")', async () => {
-      (prisma.$queryRaw as jest.Mock).mockResolvedValue([{ last_number: 1 }]);
-
-      const result = await repository.getNextNumber('QUOTE', 'COT');
-
-      expect(result).toMatch(/COT-\d{4}-0001/);
-    });
-
-    it('should use the provided year parameter when given', async () => {
-      (prisma.$queryRaw as jest.Mock).mockResolvedValue([{ last_number: 1 }]);
-
-      const result = await repository.getNextNumber('ORDER', 'OP', 2025);
-
-      expect(result).toBe('OP-2025-0001');
-    });
-
-    it('should handle bigint values from PostgreSQL', async () => {
-      (prisma.$queryRaw as jest.Mock).mockResolvedValue([{ last_number: BigInt(7) }]);
-
-      const result = await repository.getNextNumber('ORDER', 'OP');
-
-      expect(result).toBe(`OP-${CURRENT_YEAR}-0007`);
-    });
-
-    // El contador de `consecutives` es una caché que puede quedar por detrás de
-    // los datos reales (siembra, inserción manual, restauración de backup), y
-    // entonces devolvía un número ya usado → P2002 al crear. Con `source` el
-    // incremento se toma contra el máximo real de la tabla.
-    describe('con tabla de origen (source)', () => {
-      it('should take the max from the target table instead of the counter', async () => {
-        (prisma.$queryRawUnsafe as jest.Mock).mockResolvedValue([
-          { last_number: 2780 },
-        ]);
-
-        const result = await repository.getNextNumber(
-          'ORDER',
-          'OP',
-          CURRENT_YEAR,
-          { table: 'orders', column: 'order_number' },
-        );
-
-        expect(prisma.$queryRawUnsafe).toHaveBeenCalled();
-        // El contador atómico simple no se usa cuando hay tabla de origen.
-        expect(prisma.$queryRaw).not.toHaveBeenCalled();
-        expect(result).toBe(`OP-${CURRENT_YEAR}-2780`);
+      const result = await repository.getNextNumber('ORDER', 'OP', LOC, {
+        table: 'orders',
+        column: 'order_number',
       });
 
-      it('should scope the max to the prefix and year of this consecutive', async () => {
-        (prisma.$queryRawUnsafe as jest.Mock).mockResolvedValue([
-          { last_number: 1 },
-        ]);
+      expect(result).toBe('125-OP-0012');
+      const [sql, type, prefix, locationId, pattern] = prisma.$queryRawUnsafe.mock.calls[0];
+      expect(sql).toContain('FROM "orders"');
+      expect(sql).toContain('ON CONFLICT (type, location_id)');
+      expect(sql).toContain('AS INTEGER'); // máximo numérico, no de texto
+      expect([type, prefix, locationId, pattern]).toEqual(['ORDER', 'OP', 'loc-125', '125-OP-%']);
+    });
 
-        await repository.getNextNumber('DTF_UV', 'DTF-UV', 2026, {
-          table: 'dtf_records',
-          column: 'consecutive',
-        });
+    it('limpia los nombres de tabla y columna antes de interpolarlos', async () => {
+      prisma.$queryRawUnsafe.mockResolvedValue([{ last_number: 1 }]);
 
-        const [sql, type, prefix, year, pattern] = (
-          prisma.$queryRawUnsafe as jest.Mock
-        ).mock.calls[0];
-
-        expect(type).toBe('DTF_UV');
-        expect(prefix).toBe('DTF-UV');
-        expect(year).toBe(2026);
-        // `dtf_records` guarda los dos tipos de DTF: el patrón es lo único que
-        // los separa.
-        expect(pattern).toBe('DTF-UV-2026-%');
-        expect(sql).toContain('GREATEST');
+      await repository.getNextNumber('ORDER', 'OP', LOC, {
+        table: 'orders"; DROP TABLE x; --',
+        column: 'order_number',
       });
 
-      it('should sanitize table and column names before interpolating them', async () => {
-        (prisma.$queryRawUnsafe as jest.Mock).mockResolvedValue([
-          { last_number: 1 },
-        ]);
+      expect(prisma.$queryRawUnsafe.mock.calls[0][0]).not.toContain('DROP TABLE x');
+    });
 
-        await repository.getNextNumber('ORDER', 'OP', CURRENT_YEAR, {
-          table: 'orders"; DROP TABLE users; --',
-          column: 'order_number',
-        });
+    it('acepta bigint de PostgreSQL', async () => {
+      prisma.$queryRaw.mockResolvedValue([{ last_number: BigInt(3) }]);
 
-        const [sql] = (prisma.$queryRawUnsafe as jest.Mock).mock.calls[0];
+      expect(await repository.getNextNumber('PRODUCTION', 'PROD', LOC)).toBe('125-PROD-0003');
+    });
 
-        expect(sql).not.toContain('DROP TABLE');
-        expect(sql).toContain('"ordersDROPTABLEusers"');
-      });
+    it('falla si la consulta no devuelve fila', async () => {
+      prisma.$queryRaw.mockResolvedValue([]);
 
-      it('should keep using the plain counter when the type has no source table', async () => {
-        (prisma.$queryRaw as jest.Mock).mockResolvedValue([{ last_number: 3 }]);
+      await expect(repository.getNextNumber('PRODUCTION', 'PROD', LOC)).rejects.toThrow(
+        /Failed to generate next number/,
+      );
+    });
+  });
 
-        const result = await repository.getNextNumber('PRODUCTION', 'PROD');
+  describe('syncCounterFromTable', () => {
+    it('alinea el contador de (tipo, sede) con el máximo real de esa sede', async () => {
+      prisma.$queryRawUnsafe.mockResolvedValue([{ max_num: 9 }]);
 
-        expect(prisma.$queryRaw).toHaveBeenCalled();
-        expect(prisma.$queryRawUnsafe).not.toHaveBeenCalled();
-        expect(result).toBe(`PROD-${CURRENT_YEAR}-0003`);
+      await repository.syncCounterFromTable('QUOTE', 'quotes', 'quote_number', 'COT', LOC);
+
+      expect(prisma.$queryRawUnsafe.mock.calls[0][1]).toBe('125-COT-%');
+      expect(prisma.consecutive.upsert).toHaveBeenCalledWith({
+        where: { type_locationId: { type: 'QUOTE', locationId: 'loc-125' } },
+        create: { type: 'QUOTE', prefix: 'COT', year: 0, lastNumber: 9, locationId: 'loc-125' },
+        update: { lastNumber: 9 },
       });
     });
   });
 
-  // ---------------------------------------------------------------------------
-  // findAll
-  // ---------------------------------------------------------------------------
-  describe('findAll', () => {
-    it('should return all consecutives ordered by type asc', async () => {
-      const mockData = [
-        { type: 'ORDER', prefix: 'OP', year: CURRENT_YEAR, lastNumber: 10 },
-        { type: 'QUOTE', prefix: 'COT', year: CURRENT_YEAR, lastNumber: 5 },
-      ];
-      prisma.consecutive.findMany.mockResolvedValue(mockData);
+  describe('reset y getCurrentNumber', () => {
+    it('trabajan sobre el contador de (tipo, sede)', async () => {
+      prisma.consecutive.findUnique.mockResolvedValue({ lastNumber: 5 });
 
-      const result = await repository.findAll();
+      expect(await repository.getCurrentNumber('ORDER', 'loc-125')).toBe(5);
+      await repository.reset('ORDER', 'loc-125');
 
-      expect(prisma.consecutive.findMany).toHaveBeenCalledWith({ orderBy: { type: 'asc' } });
-      expect(result).toEqual(mockData);
-    });
-  });
-
-  // ---------------------------------------------------------------------------
-  // reset
-  // ---------------------------------------------------------------------------
-  describe('reset', () => {
-    it('should update lastNumber to 0 for the given type', async () => {
-      const resetRecord = { type: 'ORDER', lastNumber: 0 };
-      prisma.consecutive.update.mockResolvedValue(resetRecord);
-
-      const result = await repository.reset('ORDER');
-
-      expect(prisma.consecutive.update).toHaveBeenCalledWith({
-        where: { type: 'ORDER' },
-        data: { lastNumber: 0 },
-      });
-      expect(result).toEqual(resetRecord);
+      const where = { type_locationId: { type: 'ORDER', locationId: 'loc-125' } };
+      expect(prisma.consecutive.findUnique).toHaveBeenCalledWith({ where });
+      expect(prisma.consecutive.update).toHaveBeenCalledWith({ where, data: { lastNumber: 0 } });
     });
   });
 });

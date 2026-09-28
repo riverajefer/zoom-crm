@@ -18,6 +18,7 @@ import { DtfStatus, PaymentMethod, Prisma } from '../../generated/prisma';
 import { isValidDtfTransition } from './dtf-status-transitions';
 import { startOfDay, endOfDay } from '../../common/utils/date-range.util';
 import { computeDtfTotalToCharge } from '../../common/utils/rounding.util';
+import { requireActiveLocationId } from '../../common/utils/location-context';
 
 @Injectable()
 export class DtfService {
@@ -86,8 +87,11 @@ export class DtfService {
       applyIva: dto.applyIva ?? false,
     });
 
+    // La DTF nace en la sede activa (docs/PLAN_SEDES.md §2).
+    const locationId = requireActiveLocationId();
     const buildData = (consecutive: string) => ({
       consecutive,
+      locationId,
       productId: dto.productId,
       clientId: dto.clientId,
       quantity,
@@ -103,7 +107,7 @@ export class DtfService {
     });
 
     try {
-      const consecutive = await this.consecutivesService.generateNumber(consecutiveType);
+      const consecutive = await this.consecutivesService.generateNumber(consecutiveType, locationId);
       return await this.dtfRepository.create(buildData(consecutive));
     } catch (error) {
       // El contador de consecutivos quedó desincronizado con los registros reales
@@ -112,8 +116,8 @@ export class DtfService {
         error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === 'P2002'
       ) {
-        await this.consecutivesService.syncCounter(consecutiveType);
-        const consecutive = await this.consecutivesService.generateNumber(consecutiveType);
+        await this.consecutivesService.syncCounter(consecutiveType, locationId);
+        const consecutive = await this.consecutivesService.generateNumber(consecutiveType, locationId);
         return await this.dtfRepository.create(buildData(consecutive));
       }
       throw error;
@@ -299,6 +303,8 @@ export class DtfService {
         }),
       },
       userId,
+      // La OP hereda la sede de la DTF (docs/PLAN_SEDES.md §2).
+      record.locationId,
     );
 
     // Transfer reference image → order item sampleImageId

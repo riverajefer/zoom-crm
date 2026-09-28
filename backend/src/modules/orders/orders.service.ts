@@ -56,6 +56,7 @@ import { PrismaService } from '../../database/prisma.service';
 import { CashMovementService } from '../cash-movement/cash-movement.service';
 import { CashMovementVoidRequestsService } from '../cash-movement-void-requests/cash-movement-void-requests.service';
 import { startOfDay, endOfDay, businessToday } from '../../common/utils/date-range.util';
+import { requireActiveLocationId, withoutLocationScope } from '../../common/utils/location-context';
 import { applyColombianRounding, roundToWholePeso, normalizeRate } from '../../common/utils/rounding.util';
 import {
   ACTIVE_PAYMENT_WHERE,
@@ -630,7 +631,11 @@ export class OrdersService {
     return order;
   }
 
-  async create(createOrderDto: CreateOrderDto, createdById: string) {
+  /**
+   * @param locationId Sede de la OP. Por defecto la sede activa; la pasa quien
+   *   crea la OP desde otro documento (una DTF), para que herede su sede.
+   */
+  async create(createOrderDto: CreateOrderDto, createdById: string, locationId?: string) {
     // Validar que tenga items
     if (!createOrderDto.items || createOrderDto.items.length === 0) {
       throw new BadRequestException('Order must have at least one item');
@@ -648,8 +653,11 @@ export class OrdersService {
       if (existing) return existing;
     }
 
+    // La OP nace en la sede activa, o en la del documento del que sale (docs/PLAN_SEDES.md §2).
+    locationId ??= requireActiveLocationId();
+
     // Generar número de orden
-    const orderNumber = await this.consecutivesService.generateNumber('ORDER');
+    const orderNumber = await this.consecutivesService.generateNumber('ORDER', locationId);
 
     // Calcular totales
     let subtotal = new Prisma.Decimal(0);
@@ -804,7 +812,7 @@ export class OrdersService {
         paymentData.pendingCashEntry = !activeSession && movesCash;
 
         if (activeSession && movesCash) {
-          const receiptNumber = await this.consecutivesService.generateNumber('CASH_RECEIPT');
+          const receiptNumber = await this.consecutivesService.generateNumber('CASH_RECEIPT', locationId);
           paymentData.cashMovement = {
             create: {
               cashSessionId: activeSession.id,
@@ -858,6 +866,7 @@ export class OrdersService {
           balance,
           notes: createOrderDto.notes,
           notesImageId: createOrderDto.notesImageId,
+          location: { connect: { id: locationId } },
           client: { connect: { id: createOrderDto.clientId } },
           createdBy: { connect: { id: createdById } },
           ...(createOrderDto.commercialChannelId && {
@@ -937,15 +946,15 @@ export class OrdersService {
 
         if (isOrderNumberCollision) {
           // Sincronizar el contador de consecutivos y generar un nuevo número de orden
-          await this.consecutivesService.syncCounter('ORDER');
-          currentOrderNumber = await this.consecutivesService.generateNumber('ORDER');
+          await this.consecutivesService.syncCounter('ORDER', locationId);
+          currentOrderNumber = await this.consecutivesService.generateNumber('ORDER', locationId);
           continue;
         }
 
         if (isReceiptNumberCollision) {
           // Sincronizar el contador de CASH_RECEIPT; los nuevos receiptNumbers
           // se generarán automáticamente al inicio del siguiente intento (buildPayments).
-          await this.consecutivesService.syncCounter('CASH_RECEIPT');
+          await this.consecutivesService.syncCounter('CASH_RECEIPT', locationId);
           continue;
         }
 
@@ -1432,7 +1441,7 @@ export class OrdersService {
 
               if (activeSession) {
                 const receiptNumber =
-                  await this.consecutivesService.generateNumber('CASH_RECEIPT');
+                  await this.consecutivesService.generateNumber('CASH_RECEIPT', oldOrder.locationId);
                 const movement = await tx.cashMovement.create({
                   data: {
                     cashSessionId: activeSession.id,
@@ -2204,7 +2213,7 @@ export class OrdersService {
       // cliente sobrepagó la orden de origen.
       let cashMovementId: string | undefined = undefined;
       if (activeSession && movesCash) {
-        const receiptNumber = await this.consecutivesService.generateNumber('CASH_RECEIPT');
+        const receiptNumber = await this.consecutivesService.generateNumber('CASH_RECEIPT', order.locationId);
         const movement = await tx.cashMovement.create({
           data: {
             cashSessionId: activeSession.id,
@@ -2633,7 +2642,7 @@ export class OrdersService {
         orderNumber: order.orderNumber,
         userId,
         generateReceiptNumber: () =>
-          this.consecutivesService.generateNumber('CASH_RECEIPT'),
+          this.consecutivesService.generateNumber('CASH_RECEIPT', order.locationId),
       });
 
       // Reajustar el consumo de saldo a favor si el pago editado lo usa (o dejó

@@ -11,6 +11,8 @@ export interface AuditContext {
    * `location-context.ts`, no directamente.
    */
   location?: RequestLocation;
+  /** `withoutLocationScope`: el código que corre adentro ve todas las sedes. */
+  locationBypass?: boolean;
 }
 
 /** Ver `location-context.ts` y docs/PLAN_SEDES.md §15.1. */
@@ -21,6 +23,11 @@ export interface RequestLocation {
   all: boolean;
   /** Sedes que el usuario puede operar. */
   permittedIds: string[];
+  /**
+   * Tiene `view_all_locations` (admin, soporte, contabilidad): opera en
+   * cualquier sede, así que la sede activa solo le filtra los listados.
+   */
+  viewAll?: boolean;
 }
 
 /**

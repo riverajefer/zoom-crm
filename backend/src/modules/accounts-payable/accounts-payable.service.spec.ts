@@ -8,6 +8,14 @@ import { StorageService } from '../storage/storage.service';
 import { createMockPrismaService } from '../../database/prisma.service.mock';
 import { AccountPayableStatus, Prisma } from '../../generated/prisma';
 
+// Solo Zoom: los documentos nacen en la sede activa del request, que en un
+// test unitario no existe (docs/PLAN_SEDES.md §2).
+jest.mock('../../common/utils/location-context', () => ({
+  ...jest.requireActual('../../common/utils/location-context'),
+  requireActiveLocationId: jest.fn(() => 'loc-125'),
+}));
+
+
 /**
  * Stub de una cuenta por pagar (CP). Los montos se guardan como number para
  * simplificar; el servicio los envuelve con Number() antes de operar.
@@ -138,11 +146,16 @@ describe('AccountsPayableService', () => {
         dueDate: '2026-09-01',
       } as any;
 
+      consecutives.generateNumber.mockResolvedValueOnce('125-CP-0001');
+
       await service.create(dto, 'user-1');
 
+      // Solo Zoom: numeración común por sede, en la sede activa (docs/PLAN_SEDES.md §3).
+      expect(consecutives.generateNumber).toHaveBeenCalledWith('ACCOUNT_PAYABLE', 'loc-125');
       expect(repository.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          apNumber: expect.stringMatching(/^CP-\d{4}-001$/),
+          apNumber: '125-CP-0001',
+          location: { connect: { id: 'loc-125' } },
           totalAmount: 50000,
           paidAmount: 0,
           balance: 50000,
@@ -274,20 +287,6 @@ describe('AccountsPayableService', () => {
       } as any;
 
       await expect(service.create(dto, 'user-1')).rejects.toThrow(/no está incluido en el periodo/);
-    });
-  });
-
-  describe('generateApNumber', () => {
-    it('inicia en 001 cuando no hay CP previas', async () => {
-      repository.getLastApNumber!.mockResolvedValue(null as any);
-      const year = new Date().getFullYear();
-      await expect(service.generateApNumber()).resolves.toBe(`CP-${year}-001`);
-    });
-
-    it('incrementa la secuencia del último número', async () => {
-      const year = new Date().getFullYear();
-      repository.getLastApNumber!.mockResolvedValue({ apNumber: `CP-${year}-007` } as any);
-      await expect(service.generateApNumber()).resolves.toBe(`CP-${year}-008`);
     });
   });
 

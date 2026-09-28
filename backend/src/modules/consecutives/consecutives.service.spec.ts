@@ -1,154 +1,90 @@
-import { Test, TestingModule } from '@nestjs/testing';
+import { NotFoundException } from '@nestjs/common';
 import { ConsecutivesService } from './consecutives.service';
-import { ConsecutivesRepository } from './consecutives.repository';
 
-const mockConsecutivesRepository = {
-  getNextNumber: jest.fn(),
-  findAll: jest.fn(),
-  reset: jest.fn(),
-  syncCounterFromTable: jest.fn(),
-};
-
+/**
+ * Numeración por sede y sin año (solo Zoom, docs/PLAN_SEDES.md §3).
+ */
 describe('ConsecutivesService', () => {
+  let repository: any;
   let service: ConsecutivesService;
 
-  beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        ConsecutivesService,
-        { provide: ConsecutivesRepository, useValue: mockConsecutivesRepository },
-      ],
-    }).compile();
-
-    service = module.get<ConsecutivesService>(ConsecutivesService);
+  beforeEach(() => {
+    repository = {
+      getNextNumber: jest.fn().mockResolvedValue('125-OP-0001'),
+      syncCounterFromTable: jest.fn(),
+      findLocationCode: jest.fn().mockResolvedValue('125'),
+      findAll: jest.fn(),
+      reset: jest.fn(),
+    };
+    service = new ConsecutivesService(repository);
   });
 
-  afterEach(() => {
-    jest.clearAllMocks();
+  it.each([
+    ['ORDER', 'OP', 'orders'],
+    ['QUOTE', 'COT', 'quotes'],
+    ['WORK_ORDER', 'OT', 'work_orders'],
+    ['PRODUCTION_ORDER', 'OPROD', 'production_orders'],
+    ['EXPENSE', 'OG', 'expense_orders'],
+    ['ACCOUNT_PAYABLE', 'CP', 'accounts_payable'],
+    ['CASH_RECEIPT', 'RC', 'cash_movements'],
+    ['DTF_UV', 'DTF-UV', 'dtf_records'],
+  ] as const)('%s usa el prefijo %s y la tabla %s, en la sede pedida', async (type, prefix, table) => {
+    await service.generateNumber(type, 'loc-125');
+
+    expect(repository.getNextNumber).toHaveBeenCalledWith(
+      type,
+      prefix,
+      { id: 'loc-125', code: '125' },
+      expect.objectContaining({ table }),
+    );
   });
 
-  // ─────────────────────────────────────────────
-  // generateNumber
-  // ─────────────────────────────────────────────
-  describe('generateNumber', () => {
-    it('should call repository with correct prefix for ORDER type', async () => {
-      const currentYear = new Date().getFullYear();
-      mockConsecutivesRepository.getNextNumber.mockResolvedValue(`OP-${currentYear}-0001`);
+  it('PRODUCTION no tiene tabla: usa solo el contador', async () => {
+    await service.generateNumber('PRODUCTION', 'loc-125');
 
-      const result = await service.generateNumber('ORDER');
-
-      expect(mockConsecutivesRepository.getNextNumber).toHaveBeenCalledWith(
-        'ORDER',
-        'OP',
-        currentYear,
-        { table: 'orders', column: 'order_number' },
-      );
-      expect(result).toBe(`OP-${currentYear}-0001`);
-    });
-
-    it('should call repository with correct prefix for PRODUCTION type', async () => {
-      const currentYear = new Date().getFullYear();
-      mockConsecutivesRepository.getNextNumber.mockResolvedValue(`PROD-${currentYear}-0001`);
-
-      const result = await service.generateNumber('PRODUCTION');
-
-      expect(mockConsecutivesRepository.getNextNumber).toHaveBeenCalledWith(
-        'PRODUCTION',
-        'PROD',
-        currentYear,
-        // Tipo heredado sin tabla: se genera solo contra el contador.
-        undefined,
-      );
-      expect(result).toBe(`PROD-${currentYear}-0001`);
-    });
-
-    it('should call repository with correct prefix for EXPENSE type', async () => {
-      const currentYear = new Date().getFullYear();
-      mockConsecutivesRepository.getNextNumber.mockResolvedValue(`OG-${currentYear}-0001`);
-
-      const result = await service.generateNumber('EXPENSE');
-
-      expect(mockConsecutivesRepository.getNextNumber).toHaveBeenCalledWith(
-        'EXPENSE',
-        'OG',
-        currentYear,
-        { table: 'expense_orders', column: 'og_number' },
-      );
-      expect(result).toBe(`OG-${currentYear}-0001`);
-    });
-
-    it('should call repository with correct prefix for QUOTE type', async () => {
-      const currentYear = new Date().getFullYear();
-      mockConsecutivesRepository.getNextNumber.mockResolvedValue(`COT-${currentYear}-0001`);
-
-      const result = await service.generateNumber('QUOTE');
-
-      expect(mockConsecutivesRepository.getNextNumber).toHaveBeenCalledWith(
-        'QUOTE',
-        'COT',
-        currentYear,
-        { table: 'quotes', column: 'quote_number' },
-      );
-      expect(result).toBe(`COT-${currentYear}-0001`);
-    });
-
-    it('should pass the current calendar year to the repository', async () => {
-      const currentYear = new Date().getFullYear();
-      mockConsecutivesRepository.getNextNumber.mockResolvedValue(`OP-${currentYear}-0005`);
-
-      await service.generateNumber('ORDER');
-
-      const callArgs = mockConsecutivesRepository.getNextNumber.mock.calls[0];
-      expect(callArgs[2]).toBe(currentYear);
-    });
-
-    it('should return the formatted string from the repository unchanged', async () => {
-      const formatted = 'COT-2026-0042';
-      mockConsecutivesRepository.getNextNumber.mockResolvedValue(formatted);
-
-      const result = await service.generateNumber('QUOTE');
-
-      expect(result).toBe(formatted);
-    });
+    expect(repository.getNextNumber).toHaveBeenCalledWith('PRODUCTION', 'PROD', { id: 'loc-125', code: '125' }, undefined);
   });
 
-  // ─────────────────────────────────────────────
-  // findAll
-  // ─────────────────────────────────────────────
-  describe('findAll', () => {
-    it('should delegate to repository.findAll', async () => {
-      const mockData = [
-        { type: 'ORDER', prefix: 'OP', year: 2026, lastNumber: 5 },
-        { type: 'QUOTE', prefix: 'COT', year: 2026, lastNumber: 2 },
-      ];
-      mockConsecutivesRepository.findAll.mockResolvedValue(mockData);
+  it('cachea el código de la sede', async () => {
+    await service.generateNumber('ORDER', 'loc-125');
+    await service.generateNumber('QUOTE', 'loc-125');
 
-      const result = await service.findAll();
-
-      expect(mockConsecutivesRepository.findAll).toHaveBeenCalledTimes(1);
-      expect(result).toEqual(mockData);
-    });
+    expect(repository.findLocationCode).toHaveBeenCalledTimes(1);
   });
 
-  // ─────────────────────────────────────────────
-  // reset
-  // ─────────────────────────────────────────────
-  describe('reset', () => {
-    it('should delegate reset to the repository with the given type', async () => {
-      mockConsecutivesRepository.reset.mockResolvedValue({ type: 'ORDER', lastNumber: 0 });
+  it('una sede que no existe es 404', async () => {
+    repository.findLocationCode.mockResolvedValue(null);
 
-      const result = await service.reset('ORDER');
+    await expect(service.generateNumber('ORDER', 'loc-x')).rejects.toThrow(NotFoundException);
+  });
 
-      expect(mockConsecutivesRepository.reset).toHaveBeenCalledWith('ORDER');
-      expect(result).toMatchObject({ type: 'ORDER', lastNumber: 0 });
-    });
+  it('syncCounter sincroniza el contador de esa sede', async () => {
+    await service.syncCounter('QUOTE', 'loc-125');
 
-    it('should pass the exact type string to the repository', async () => {
-      mockConsecutivesRepository.reset.mockResolvedValue({});
+    expect(repository.syncCounterFromTable).toHaveBeenCalledWith(
+      'QUOTE',
+      'quotes',
+      'quote_number',
+      'COT',
+      { id: 'loc-125', code: '125' },
+    );
+  });
 
-      await service.reset('QUOTE');
+  it('syncWorkOrderCounter es el syncCounter de OT', async () => {
+    await service.syncWorkOrderCounter('loc-125');
 
-      expect(mockConsecutivesRepository.reset).toHaveBeenCalledWith('QUOTE');
-    });
+    expect(repository.syncCounterFromTable).toHaveBeenCalledWith(
+      'WORK_ORDER',
+      'work_orders',
+      'work_order_number',
+      'OT',
+      { id: 'loc-125', code: '125' },
+    );
+  });
+
+  it('reset delega con la sede', async () => {
+    await service.reset('ORDER', 'loc-125');
+
+    expect(repository.reset).toHaveBeenCalledWith('ORDER', 'loc-125');
   });
 });

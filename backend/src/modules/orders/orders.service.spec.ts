@@ -27,6 +27,14 @@ import { PrismaService } from '../../database/prisma.service';
 import { Prisma, OrderStatus, PaymentMethod, EditRequestStatus } from '../../generated/prisma';
 import { startOfDay, endOfDay, businessToday } from '../../common/utils/date-range.util';
 
+// Solo Zoom: los documentos nacen en la sede activa del request, que en un
+// test unitario no existe (docs/PLAN_SEDES.md §2).
+jest.mock('../../common/utils/location-context', () => ({
+  ...jest.requireActual('../../common/utils/location-context'),
+  requireActiveLocationId: jest.fn(() => 'loc-125'),
+}));
+
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Mock collaborators
 // ─────────────────────────────────────────────────────────────────────────────
@@ -986,7 +994,7 @@ describe('OrdersService', () => {
     it('should generate order number via consecutivesService.generateNumber', async () => {
       await service.create(baseCreateDto, 'user-1');
 
-      expect(mockConsecutivesService.generateNumber).toHaveBeenCalledWith('ORDER');
+      expect(mockConsecutivesService.generateNumber).toHaveBeenCalledWith('ORDER', 'loc-125');
     });
 
     it('should calculate correct subtotal (qty * unitPrice), tax (19%), and total', async () => {

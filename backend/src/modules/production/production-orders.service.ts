@@ -98,13 +98,15 @@ export class ProductionOrdersService {
     if (!template) throw new NotFoundException(`Plantilla con id ${dto.templateId} no encontrada`);
     if (!template.isActive) throw new BadRequestException('La plantilla está desactivada');
 
-    const oprodNumber = await this.consecutivesService.generateNumber('PRODUCTION_ORDER');
+    // La OPROD hereda la sede de su OT, que la hereda de la OP (docs/PLAN_SEDES.md §2).
+    const oprodNumber = await this.consecutivesService.generateNumber('PRODUCTION_ORDER', workOrder.locationId);
 
     // Create everything in a transaction
     return this.prisma.$transaction(async (tx) => {
       const order = await tx.productionOrder.create({
         data: {
           oprodNumber,
+          locationId: workOrder.locationId,
           templateId: dto.templateId,
           workOrderId: dto.workOrderId,
           notes: dto.notes,

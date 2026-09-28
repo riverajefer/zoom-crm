@@ -18,6 +18,7 @@ import { WorkOrderStatus, WorkOrderTimeEntryType } from '../../generated/prisma'
 const mockOrder = {
   id: 'order-1',
   orderNumber: 'OP-2026-001',
+  locationId: 'loc-125',
   status: 'CONFIRMED',
   items: [
     { id: 'oi-1', description: 'Camiseta talla M' },
@@ -118,7 +119,7 @@ describe('WorkOrdersService', () => {
     it('should create a work order with DRAFT status by default', async () => {
       const result = await service.create(createDto as any, 'user-1');
 
-      expect(mockConsecutivesService.generateNumber).toHaveBeenCalledWith('WORK_ORDER');
+      expect(mockConsecutivesService.generateNumber).toHaveBeenCalledWith('WORK_ORDER', 'loc-125');
       expect(mockWorkOrdersRepository.create).toHaveBeenCalledWith(
         expect.objectContaining({
           workOrderNumber: 'OT-2026-001',

@@ -156,19 +156,19 @@ describe('ProductionOrdersService', () => {
     });
 
     it('should throw NotFoundException if template not found', async () => {
-      mockPrisma.workOrder.findUnique.mockResolvedValue({ id: 'wo1' });
+      mockPrisma.workOrder.findUnique.mockResolvedValue({ id: 'wo1', locationId: 'loc-125' });
       mockRepo.findTemplateWithComponents.mockResolvedValue(null);
       await expect(service.create(dto, 'u1')).rejects.toThrow(NotFoundException);
     });
 
     it('should throw BadRequestException if template is inactive', async () => {
-      mockPrisma.workOrder.findUnique.mockResolvedValue({ id: 'wo1' });
+      mockPrisma.workOrder.findUnique.mockResolvedValue({ id: 'wo1', locationId: 'loc-125' });
       mockRepo.findTemplateWithComponents.mockResolvedValue({ id: 't1', isActive: false, components: [] });
       await expect(service.create(dto, 'u1')).rejects.toThrow(BadRequestException);
     });
 
     it('should create order with components and steps in transaction', async () => {
-      mockPrisma.workOrder.findUnique.mockResolvedValue({ id: 'wo1' });
+      mockPrisma.workOrder.findUnique.mockResolvedValue({ id: 'wo1', locationId: 'loc-125' });
       mockRepo.findTemplateWithComponents.mockResolvedValue({
         id: 't1', isActive: true,
         components: [
@@ -191,7 +191,7 @@ describe('ProductionOrdersService', () => {
 
       const result = await service.create(dto, 'u1');
 
-      expect(mockConsecutives.generateNumber).toHaveBeenCalledWith('PRODUCTION_ORDER');
+      expect(mockConsecutives.generateNumber).toHaveBeenCalledWith('PRODUCTION_ORDER', 'loc-125');
       expect(txMock.productionOrder.create).toHaveBeenCalledWith({
         data: expect.objectContaining({ oprodNumber: 'OPROD-001', templateId: 't1', workOrderId: 'wo1' }),
       });
@@ -209,7 +209,7 @@ describe('ProductionOrdersService', () => {
     });
 
     it('should mark despacho phase as BLOCKED', async () => {
-      mockPrisma.workOrder.findUnique.mockResolvedValue({ id: 'wo1' });
+      mockPrisma.workOrder.findUnique.mockResolvedValue({ id: 'wo1', locationId: 'loc-125' });
       mockRepo.findTemplateWithComponents.mockResolvedValue({
         id: 't1', isActive: true,
         components: [{

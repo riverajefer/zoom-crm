@@ -12,6 +12,14 @@ import { OrdersService } from '../orders/orders.service';
 import { CreditBalanceService } from '../credit-balance/credit-balance.service';
 import { DtfStatus, PaymentMethod, Prisma } from '../../generated/prisma';
 
+// Solo Zoom: los documentos nacen en la sede activa del request, que en un
+// test unitario no existe (docs/PLAN_SEDES.md §2).
+jest.mock('../../common/utils/location-context', () => ({
+  ...jest.requireActual('../../common/utils/location-context'),
+  requireActiveLocationId: jest.fn(() => 'loc-125'),
+}));
+
+
 const mockDtfRepository = {
   findByIdRaw: jest.fn(),
   create: jest.fn(),
@@ -38,6 +46,7 @@ const mockConsecutivesService = { generateNumber: jest.fn(), syncCounter: jest.f
 const makeRecord = (overrides = {}) => ({
   id: 'dtf-1',
   consecutive: 'DTF-TEXTIL-2026-0001',
+  locationId: 'loc-104',
   status: DtfStatus.COMPLETADA,
   clientId: 'client-1',
   productId: 'product-1',
@@ -101,6 +110,7 @@ describe('DtfService.convertToOrder', () => {
         },
       }),
       'user-1',
+      'loc-104', // la OP hereda la sede de la DTF
     );
   });
 
@@ -130,6 +140,7 @@ describe('DtfService.convertToOrder', () => {
         }),
       }),
       'user-1',
+      'loc-104', // la OP hereda la sede de la DTF
     );
   });
 

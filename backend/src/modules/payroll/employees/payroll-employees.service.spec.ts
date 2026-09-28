@@ -16,6 +16,7 @@ describe('PayrollEmployeesService', () => {
     findAll: jest.fn(),
     findById: jest.fn(),
     findByUserId: jest.fn(),
+    findUserDefaultLocationId: jest.fn().mockResolvedValue(null),
     create: jest.fn(),
     update: jest.fn(),
     delete: jest.fn(),

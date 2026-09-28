@@ -3,6 +3,7 @@ import { Prisma } from '../../generated/prisma';
 import { PrismaService } from '../../database/prisma.service';
 import { FilterInventoryMovementsDto } from './dto';
 import { clampPageSize, MAX_PAGE_SIZE } from '../../common/dto/pagination.dto';
+import { getRequestLocation } from '../../common/utils/location-context';
 
 @Injectable()
 export class InventoryRepository {
@@ -41,7 +42,8 @@ export class InventoryRepository {
   ) {
     const client = tx ?? this.prisma;
     return client.inventoryMovement.create({
-      data,
+      // Entradas y ajustes a mano: la sede activa de quien los registra (§2).
+      data: { locationId: getRequestLocation()?.locationId ?? null, ...data },
       select: this.movementSelect,
     });
   }

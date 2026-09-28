@@ -253,6 +253,8 @@ export class WorkOrdersRepository {
     workOrderNumber: string;
     orderId: string;
     advisorId: string;
+    /** Sede de la OP de la que nace (docs/PLAN_SEDES.md §2). */
+    locationId: string;
     designerId?: string;
     fileName?: string;
     attachmentId?: string;

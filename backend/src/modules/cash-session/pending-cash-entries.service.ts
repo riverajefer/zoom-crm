@@ -94,7 +94,7 @@ export class PendingCashEntriesService {
         paymentMethod: true,
         paymentDate: true,
         cashMovementId: true,
-        order: { select: { orderNumber: true, id: true } },
+        order: { select: { orderNumber: true, id: true, locationId: true } },
       },
       orderBy: { paymentDate: 'asc' },
     });
@@ -114,8 +114,10 @@ export class PendingCashEntriesService {
         continue;
       }
 
-      const receiptNumber =
-        await this.consecutivesService.generateNumber('CASH_RECEIPT');
+      const receiptNumber = await this.consecutivesService.generateNumber(
+        'CASH_RECEIPT',
+        payment.order.locationId,
+      );
 
       const fecha = payment.paymentDate.toISOString().slice(0, 10);
       const movement = await tx.cashMovement.create({

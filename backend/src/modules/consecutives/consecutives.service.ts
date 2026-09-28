@@ -1,7 +1,17 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { ConsecutivesRepository } from './consecutives.repository';
 
-type ConsecutiveType = 'ORDER' | 'PRODUCTION' | 'EXPENSE' | 'QUOTE' | 'WORK_ORDER' | 'PRODUCTION_ORDER' | 'CASH_RECEIPT' | 'DTF_TEXTIL' | 'DTF_UV';
+type ConsecutiveType =
+  | 'ORDER'
+  | 'PRODUCTION'
+  | 'EXPENSE'
+  | 'QUOTE'
+  | 'WORK_ORDER'
+  | 'PRODUCTION_ORDER'
+  | 'CASH_RECEIPT'
+  | 'DTF_TEXTIL'
+  | 'DTF_UV'
+  | 'ACCOUNT_PAYABLE';
 
 /**
  * Dónde vive realmente cada consecutivo. Es la fuente de verdad del número:
@@ -24,17 +34,41 @@ const CONSECUTIVE_SOURCES: Record<
   CASH_RECEIPT: { table: 'cash_movements', column: 'receipt_number' },
   DTF_TEXTIL: { table: 'dtf_records', column: 'consecutive' },
   DTF_UV: { table: 'dtf_records', column: 'consecutive' },
+  ACCOUNT_PAYABLE: { table: 'accounts_payable', column: 'ap_number' },
 };
 
+/**
+ * Mapeo de tipos a prefijos. Centraliza la lógica de prefijos.
+ */
+const PREFIXES: Record<ConsecutiveType, string> = {
+  ORDER: 'OP',
+  PRODUCTION: 'PROD',
+  EXPENSE: 'OG',
+  QUOTE: 'COT',
+  WORK_ORDER: 'OT',
+  PRODUCTION_ORDER: 'OPROD',
+  CASH_RECEIPT: 'RC',
+  DTF_TEXTIL: 'DTF-TEXTIL',
+  DTF_UV: 'DTF-UV',
+  ACCOUNT_PAYABLE: 'CP',
+};
+
+/**
+ * Numeración de documentos. En Zoom cada sede lleva la suya y no se reinicia
+ * por año: `{sede}-{prefijo}-{número}`, por ejemplo `125-OP-0001`
+ * (docs/PLAN_SEDES.md §3). Quien genera un número pasa la sede del documento.
+ */
 @Injectable()
 export class ConsecutivesService {
+  /** Los códigos de sede no cambian: se cachean. */
+  private readonly locationCodes = new Map<string, string>();
+
   constructor(
     private readonly consecutivesRepository: ConsecutivesRepository,
   ) {}
 
   /**
-   * Genera el siguiente número consecutivo para un tipo dado
-   * Auto-resuelve el prefijo según el tipo
+   * Genera el siguiente número consecutivo de un tipo en una sede.
    *
    * El número se calcula contra el máximo real de la tabla destino, así que no
    * puede devolver uno ya usado aunque el contador esté desincronizado. Sin
@@ -42,17 +76,14 @@ export class ConsecutivesService {
    * (abonos, movimientos de caja, órdenes de producción) generan el número
    * dentro de una transacción, donde no hay forma de reintentar.
    *
-   * @param type - Tipo de consecutivo (ORDER, PRODUCTION, EXPENSE, QUOTE)
-   * @returns Número formateado (ej: "OP-2026-0001", "COT-2026-0001")
+   * @returns Número formateado (ej: "125-OP-0001", "104-COT-0042")
    */
-  async generateNumber(type: ConsecutiveType): Promise<string> {
-    const prefix = this.getPrefixForType(type);
-    const currentYear = new Date().getFullYear();
-
+  async generateNumber(type: ConsecutiveType, locationId: string): Promise<string> {
+    const location = await this.resolveLocation(locationId);
     return this.consecutivesRepository.getNextNumber(
       type,
-      prefix,
-      currentYear,
+      PREFIXES[type],
+      location,
       CONSECUTIVE_SOURCES[type] ?? undefined,
     );
   }
@@ -61,8 +92,7 @@ export class ConsecutivesService {
    * Sincroniza el contador con los datos reales de la tabla correspondiente.
    * Se usa para recuperarse de desincronizaciones cuando falla la creación por número duplicado.
    */
-  async syncCounter(type: ConsecutiveType): Promise<void> {
-    const prefix = this.getPrefixForType(type);
+  async syncCounter(type: ConsecutiveType, locationId: string): Promise<void> {
     const config = CONSECUTIVE_SOURCES[type];
     if (!config) return;
 
@@ -70,7 +100,8 @@ export class ConsecutivesService {
       type,
       config.table,
       config.column,
-      prefix,
+      PREFIXES[type],
+      await this.resolveLocation(locationId),
     );
   }
 
@@ -82,43 +113,29 @@ export class ConsecutivesService {
   }
 
   /**
-   * Reinicia el contador de un tipo específico
+   * Reinicia el contador de un tipo en una sede
    */
-  async reset(type: ConsecutiveType) {
-    return this.consecutivesRepository.reset(type);
+  async reset(type: ConsecutiveType, locationId: string) {
+    return this.consecutivesRepository.reset(type, locationId);
   }
 
   /**
-   * Sincroniza el contador con los datos reales de la tabla correspondiente.
-   * Se usa para recuperarse de desincronizaciones.
+   * Sincroniza el contador de OT con los datos reales de la tabla.
    */
-  async syncWorkOrderCounter(): Promise<void> {
-    return this.consecutivesRepository.syncCounterFromTable(
-      'WORK_ORDER',
-      'work_orders',
-      'work_order_number',
-      'OT',
-    );
+  async syncWorkOrderCounter(locationId: string): Promise<void> {
+    return this.syncCounter('WORK_ORDER', locationId);
   }
 
-  /**
-   * Mapeo de tipos a prefijos
-   * Centraliza la lógica de prefijos
-   */
-  private getPrefixForType(type: ConsecutiveType): string {
-    const prefixMap: Record<ConsecutiveType, string> = {
-      ORDER: 'OP',
-      PRODUCTION: 'PROD',
-      EXPENSE: 'OG',
-      QUOTE: 'COT',
-      WORK_ORDER: 'OT',
-      PRODUCTION_ORDER: 'OPROD',
-      CASH_RECEIPT: 'RC',
-      DTF_TEXTIL: 'DTF-TEXTIL',
-      DTF_UV: 'DTF-UV',
-    };
-
-    return prefixMap[type];
+  private async resolveLocation(locationId: string): Promise<{ id: string; code: string }> {
+    let code = this.locationCodes.get(locationId);
+    if (!code) {
+      const found = await this.consecutivesRepository.findLocationCode(locationId);
+      if (!found) {
+        throw new NotFoundException(`Sede ${locationId} no encontrada`);
+      }
+      code = found;
+      this.locationCodes.set(locationId, code);
+    }
+    return { id: locationId, code };
   }
 }
-

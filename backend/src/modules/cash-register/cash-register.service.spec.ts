@@ -4,6 +4,14 @@ import { CashRegisterService } from './cash-register.service';
 import { CashRegisterRepository } from './cash-register.repository';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 
+// Solo Zoom: los documentos nacen en la sede activa del request, que en un
+// test unitario no existe (docs/PLAN_SEDES.md §2).
+jest.mock('../../common/utils/location-context', () => ({
+  ...jest.requireActual('../../common/utils/location-context'),
+  requireActiveLocationId: jest.fn(() => 'loc-125'),
+}));
+
+
 const registerStub = (overrides: Record<string, any> = {}) => ({
   id: 'reg-1',
   name: 'Caja Principal',
@@ -77,7 +85,7 @@ describe('CashRegisterService', () => {
       repository.create.mockResolvedValue(registerStub({ id: 'reg-new' }));
       const result = await service.create(dto, 'user-1');
       expect(result.id).toBe('reg-new');
-      expect(repository.create).toHaveBeenCalledWith(dto);
+      expect(repository.create).toHaveBeenCalledWith(dto, 'loc-125');
     });
   });
 

@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { Prisma, QuoteStatus } from '../../generated/prisma';
 import { clampPageSize, MAX_PAGE_SIZE } from '../../common/dto/pagination.dto';
+import { LOCATION_SUMMARY_SELECT } from '../../common/constants/location-select';
 
 @Injectable()
 export class QuotesRepository {
@@ -10,6 +11,8 @@ export class QuotesRepository {
   private readonly selectFields = {
     id: true,
     quoteNumber: true,
+    locationId: true,
+    location: { select: LOCATION_SUMMARY_SELECT },
     clientId: true,
     quoteDate: true,
     validUntil: true,

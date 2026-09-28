@@ -43,6 +43,7 @@ import {
   businessToday,
   startOfDay,
 } from '../../common/utils/date-range.util';
+import { requireActiveLocationId } from '../../common/utils/location-context';
 
 @Injectable()
 export class AccountsPayableService {
@@ -116,7 +117,9 @@ export class AccountsPayableService {
   }
 
   async create(dto: CreateAccountPayableDto, createdById: string) {
-    const apNumber = await this.generateApNumber();
+    // La CP nace en la sede activa: un local o la Matriz (docs/PLAN_SEDES.md §14).
+    const locationId = requireActiveLocationId();
+    const apNumber = await this.consecutivesService.generateNumber('ACCOUNT_PAYABLE', locationId);
 
     if (dto.expenseOrderId) {
       const existing = await this.repository.findByExpenseOrderId(dto.expenseOrderId);
@@ -137,6 +140,7 @@ export class AccountsPayableService {
 
     return this.repository.create({
       apNumber,
+      location: { connect: { id: locationId } },
       expenseType: { connect: { id: dto.expenseTypeId } },
       expenseSubcategory: { connect: { id: dto.expenseSubcategoryId } },
       description: dto.description ?? '',
@@ -507,7 +511,7 @@ export class AccountsPayableService {
 
     await this.assertPayableAmount(ap, dto.amount);
 
-    return this.executePayment(id, ap.apNumber, ap.paidAmount, ap.totalAmount, dto, registeredById);
+    return this.executePayment(id, ap.apNumber, ap.locationId, ap.paidAmount, ap.totalAmount, dto, registeredById);
   }
 
   async registerPaymentFromAuthRequest(
@@ -533,6 +537,7 @@ export class AccountsPayableService {
     return this.executePayment(
       id,
       ap.apNumber,
+      ap.locationId,
       ap.paidAmount,
       ap.totalAmount,
       dto,
@@ -545,6 +550,8 @@ export class AccountsPayableService {
   private async executePayment(
     id: string,
     apNumber: string,
+    /** Sede de la CP: el recibo de caja se numera en ella. */
+    locationId: string,
     paidAmount: unknown,
     totalAmount: unknown,
     dto: Pick<RegisterPaymentDto, 'amount' | 'paymentMethod' | 'paymentDate' | 'reference' | 'notes' | 'bankEntity' | 'receiptFileId' | 'receiptFileId2'> & { cashSessionId?: string },
@@ -575,7 +582,7 @@ export class AccountsPayableService {
         throw new BadRequestException('La sesión de caja indicada no está activa o no existe');
       }
 
-      const receiptNumber = await this.consecutivesService.generateNumber('CASH_RECEIPT');
+      const receiptNumber = await this.consecutivesService.generateNumber('CASH_RECEIPT', locationId);
       const cashMovement = await this.prisma.cashMovement.create({
         data: {
           amount: dto.amount,
@@ -708,19 +715,6 @@ export class AccountsPayableService {
     return this.repository.getSummary();
   }
 
-  async generateApNumber(): Promise<string> {
-    const year = new Date().getFullYear();
-    const last = await this.repository.getLastApNumber(year);
-
-    let sequence = 1;
-    if (last?.apNumber) {
-      const parts = last.apNumber.split('-');
-      sequence = parseInt(parts[2], 10) + 1;
-    }
-
-    return `CP-${year}-${String(sequence).padStart(3, '0')}`;
-  }
-
   async findByExpenseOrderId(expenseOrderId: string) {
     return this.repository.findByExpenseOrderId(expenseOrderId);
   }
@@ -777,6 +771,7 @@ export class AccountsPayableService {
     const expenseOrder = await this.prisma.expenseOrder.findUnique({
       where: { id: expenseOrderId },
       select: {
+        locationId: true,
         expenseTypeId: true,
         expenseSubcategoryId: true,
         applyIva: true,
@@ -789,12 +784,15 @@ export class AccountsPayableService {
 
     if (!expenseOrder) throw new BadRequestException(`No se encontró la Orden de Gasto ${expenseOrderId}`);
 
-    const apNumber = await this.generateApNumber();
+    // La CP hereda la sede de su OG (docs/PLAN_SEDES.md §2). Antes tenía su
+    // propio generador (`CP-{año}-001`); ahora usa la numeración común.
+    const apNumber = await this.consecutivesService.generateNumber('ACCOUNT_PAYABLE', expenseOrder.locationId);
     const dueDate = new Date();
     dueDate.setDate(dueDate.getDate() + 30);
 
     return this.repository.create({
       apNumber,
+      location: { connect: { id: expenseOrder.locationId } },
       expenseType: { connect: { id: expenseOrder.expenseTypeId } },
       expenseSubcategory: { connect: { id: expenseOrder.expenseSubcategoryId } },
       description,

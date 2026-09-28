@@ -343,6 +343,12 @@ Todavía **no toca documentos**: al terminar, la app funciona como hoy, pero ya 
 
 ### Fase 2 · Sede en los documentos y numeración nueva
 
+> **2a hecha** (2026-09-28): migración `location_scope` (sede obligatoria en los 8 documentos, opcional en empleado, asistencia e inventario; filas previas al 125), extensión `location-scope` que filtra por la sede activa, numeración `{sede}-{prefijo}-{número}` sin año (la CP deja su generador propio), herencia de sede (OP desde COT o DTF, OT y OPROD desde su OP, CP desde su OG), recibos de caja en la sede del documento o de la caja, y saldo a favor entre sedes con `withoutLocationScope`.
+>
+> **Ajuste al diseño**: a quien tiene `view_all_locations` la sede activa **solo le filtra los listados**; el acceso por id y las escrituras no. El admin aprueba solicitudes de todas las sedes desde su bandeja, y sin esto una aprobación de otra sede le respondía 404.
+>
+> **Falta la 2b**: notificaciones por sede, sockets, alerta de cliente duplicado con sede, dashboard mensual por sede, frontend y prueba en el navegador.
+
 **Punto de no retorno con High.** Los dos bloques salen juntos: un documento con sede y numeración vieja sería un estado intermedio sin sentido.
 
 - **`locationId`** en las entidades del §2 (`Quote`, `Order`, `WorkOrder`, `ProductionOrder`, `ExpenseOrder`, `AccountPayable`, `CashRegister`, `DtfRecord`, `Employee`, `AttendanceRecord`) y en `InventoryMovement`.

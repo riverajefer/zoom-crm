@@ -9,6 +9,14 @@ import { NotFoundException, BadRequestException, ForbiddenException } from '@nes
 import { CreateExpenseOrderDto, UpdateExpenseOrderDto } from './dto';
 import { AccountsPayableService } from '../accounts-payable/accounts-payable.service';
 
+// Solo Zoom: los documentos nacen en la sede activa del request, que en un
+// test unitario no existe (docs/PLAN_SEDES.md §2).
+jest.mock('../../common/utils/location-context', () => ({
+  ...jest.requireActual('../../common/utils/location-context'),
+  requireActiveLocationId: jest.fn(() => 'loc-125'),
+}));
+
+
 describe('ExpenseOrdersService', () => {
   let service: ExpenseOrdersService;
   let repository: jest.Mocked<ExpenseOrdersRepository>;
@@ -345,7 +353,7 @@ describe('ExpenseOrdersService', () => {
       const result = await service.create(createDto, createdById);
 
       expect(prisma.expenseSubcategory.findFirst).toHaveBeenCalled();
-      expect(consecutivesService.generateNumber).toHaveBeenCalledWith('EXPENSE');
+      expect(consecutivesService.generateNumber).toHaveBeenCalledWith('EXPENSE', 'loc-125');
       expect(repository.create).toHaveBeenCalled();
       expect(result).toEqual({ id: 'order-1', ogNumber: 'OG-001', items: [{ total: 20 }] });
     });

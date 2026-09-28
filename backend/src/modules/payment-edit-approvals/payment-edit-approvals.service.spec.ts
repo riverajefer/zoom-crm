@@ -33,6 +33,8 @@ describe('PaymentEditApprovalsService', () => {
       },
       order: {
         findUnique: jest.fn(),
+        // Solo Zoom: el recibo de caja se numera en la sede de la OP.
+        findUniqueOrThrow: jest.fn().mockResolvedValue({ locationId: 'loc-125' }),
         update: jest.fn(),
       },
       payment: {

@@ -18,6 +18,7 @@ import { QuoteStatus, OrderStatus, ProspectStatus, Prisma } from '../../generate
 import { isValidQuoteTransition, getValidNextQuoteStatuses } from './quote-status-transitions';
 import { PrismaService } from '../../database/prisma.service';
 import { startOfDay, endOfDay } from '../../common/utils/date-range.util';
+import { requireActiveLocationId } from '../../common/utils/location-context';
 
 @Injectable()
 export class QuotesService {
@@ -135,9 +136,11 @@ export class QuotesService {
     // El contador `consecutives` puede quedar por detrás de los datos reales
     // (p. ej. tras sembrar cotizaciones), y entonces `generateNumber` devuelve
     // un número ya usado → P2002. Mismo patrón que órdenes, OT y DTF.
+    // La COT nace en la sede activa (docs/PLAN_SEDES.md §2).
+    const locationId = requireActiveLocationId();
     const MAX_RETRIES = 3;
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-      const quoteNumber = await this.consecutivesService.generateNumber('QUOTE');
+      const quoteNumber = await this.consecutivesService.generateNumber('QUOTE', locationId);
 
       try {
         return await this.quotesRepository.create({
@@ -151,6 +154,7 @@ export class QuotesService {
           tax,
           total,
           notes: createQuoteDto.notes,
+          location: { connect: { id: locationId } },
           client: { connect: { id: createQuoteDto.clientId } },
           createdBy: { connect: { id: createdById } },
           ...(createQuoteDto.commercialChannelId && {
@@ -169,7 +173,7 @@ export class QuotesService {
 
         if (isUniqueViolation && attempt < MAX_RETRIES - 1) {
           // Realinea el contador con el máximo real de la tabla y reintenta.
-          await this.consecutivesService.syncCounter('QUOTE');
+          await this.consecutivesService.syncCounter('QUOTE', locationId);
           continue;
         }
         throw error;
@@ -379,13 +383,14 @@ export class QuotesService {
 
     // Start transaction to create order and link to quote
     return this.prisma.$transaction(async (tx) => {
-      // 1. Generate order number
-      const orderNumber = await this.consecutivesService.generateNumber('ORDER');
+      // 1. Generate order number. La OP hereda la sede de la COT (§2).
+      const orderNumber = await this.consecutivesService.generateNumber('ORDER', quote.locationId);
 
       // 2. Create Order based on Quote
       const newOrder = await tx.order.create({
         data: {
           orderNumber,
+          locationId: quote.locationId,
           clientId: quote.clientId,
           orderDate: new Date(),
           subtotal: quote.subtotal,

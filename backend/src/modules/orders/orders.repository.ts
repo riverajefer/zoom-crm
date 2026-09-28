@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { Prisma, OrderStatus, EditRequestStatus } from '../../generated/prisma';
 import { clampPageSize, MAX_REPORT_PAGE_SIZE } from '../../common/dto/pagination.dto';
+import { LOCATION_SUMMARY_SELECT } from '../../common/constants/location-select';
 
 /**
  * Resuelve el filtro de estado. Las pantallas de ventas piden `excludeAnulado`
@@ -58,6 +59,8 @@ export class OrdersRepository {
   private readonly selectFields = {
     id: true,
     orderNumber: true,
+    locationId: true,
+    location: { select: LOCATION_SUMMARY_SELECT },
     clientId: true,
     orderDate: true,
     deliveryDate: true,

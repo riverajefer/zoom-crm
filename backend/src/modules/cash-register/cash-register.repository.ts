@@ -40,9 +40,10 @@ export class CashRegisterRepository {
     return this.prisma.cashRegister.findUnique({ where: { name } });
   }
 
-  async create(dto: CreateCashRegisterDto) {
+  async create(dto: CreateCashRegisterDto, locationId: string) {
     return this.prisma.cashRegister.create({
       data: {
+        locationId,
         name: dto.name,
         description: dto.description,
         isActive: dto.isActive ?? true,

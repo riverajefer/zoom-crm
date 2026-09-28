@@ -105,11 +105,13 @@ export class WorkOrdersService {
     // 4. Generate work order number and create (with retry on unique constraint)
     const MAX_RETRIES = 3;
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-      const workOrderNumber = await this.consecutivesService.generateNumber('WORK_ORDER');
+      // La OT hereda la sede de su OP (docs/PLAN_SEDES.md §2).
+      const workOrderNumber = await this.consecutivesService.generateNumber('WORK_ORDER', order.locationId);
 
       try {
         return await this.workOrdersRepository.create({
           workOrderNumber,
+          locationId: order.locationId,
           orderId: dto.orderId,
           advisorId,
           designerId: dto.designerId,
@@ -123,7 +125,7 @@ export class WorkOrdersService {
         const isUniqueViolation = error?.code === 'P2002';
         if (isUniqueViolation && attempt < MAX_RETRIES - 1) {
           // Sync the counter with actual DB values and retry
-          await this.consecutivesService.syncWorkOrderCounter();
+          await this.consecutivesService.syncWorkOrderCounter(order.locationId);
           continue;
         }
         throw error;

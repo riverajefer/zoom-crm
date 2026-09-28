@@ -169,6 +169,7 @@ describe('WorkOrdersRepository', () => {
 
       const data = {
         workOrderNumber: 'OT-2026-001',
+        locationId: 'loc-125',
         orderId: 'order-1',
         advisorId: 'user-1',
         status: WorkOrderStatus.DRAFT,
@@ -188,6 +189,7 @@ describe('WorkOrdersRepository', () => {
         expect.objectContaining({
           data: expect.objectContaining({
             workOrderNumber: 'OT-2026-001',
+            locationId: 'loc-125',
             orderId: 'order-1',
             items: expect.objectContaining({ create: expect.any(Array) }),
           }),
@@ -201,6 +203,7 @@ describe('WorkOrdersRepository', () => {
 
       await repository.create({
         workOrderNumber: 'OT-001',
+        locationId: 'loc-125',
         orderId: 'order-1',
         advisorId: 'user-1',
         status: WorkOrderStatus.DRAFT,

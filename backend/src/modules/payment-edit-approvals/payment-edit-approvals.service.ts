@@ -447,8 +447,14 @@ export class PaymentEditApprovalsService
         orderId: request.orderId,
         orderNumber: request.order.orderNumber,
         userId: reviewerId,
-        generateReceiptNumber: () =>
-          this.consecutivesService.generateNumber('CASH_RECEIPT'),
+        // El recibo se numera en la sede de la OP (docs/PLAN_SEDES.md §3).
+        generateReceiptNumber: async () => {
+          const { locationId } = await tx.order.findUniqueOrThrow({
+            where: { id: request.orderId },
+            select: { locationId: true },
+          });
+          return this.consecutivesService.generateNumber('CASH_RECEIPT', locationId);
+        },
       });
 
       // 4. Reajustar el consumo de saldo a favor (el monto o el método pudieron cambiar)

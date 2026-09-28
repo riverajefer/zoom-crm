@@ -7,6 +7,7 @@ import { CreateSupplyDto, UpdateSupplyDto } from './dto';
 import { SuppliesRepository } from './supplies.repository';
 import { PrismaService } from '../../../database/prisma.service';
 import { InventoryMovementType, Prisma } from '../../../generated/prisma';
+import { getRequestLocation } from '../../../common/utils/location-context';
 
 @Injectable()
 export class SuppliesService {
@@ -127,6 +128,7 @@ export class SuppliesService {
             referenceType: 'MANUAL',
             reason: 'Carga inicial al crear el insumo',
             performedById: createdById,
+            locationId: getRequestLocation()?.locationId ?? null,
           },
         });
       }

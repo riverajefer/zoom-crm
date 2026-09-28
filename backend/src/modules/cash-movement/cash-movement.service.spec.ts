@@ -227,7 +227,7 @@ describe('CashMovementService', () => {
     });
 
     it('crea un movimiento simple (sin orden asociada)', async () => {
-      prisma.cashSession.findUnique.mockResolvedValue({ id: 'cs1', status: 'OPEN' });
+      prisma.cashSession.findUnique.mockResolvedValue({ id: 'cs1', status: 'OPEN', cashRegister: { locationId: 'loc-125' } });
       prisma.cashMovement.create.mockResolvedValueOnce({ id: 'cm-new' });
       repository.findById.mockResolvedValue(openMovement({ id: 'cm-new' }));
 
@@ -239,7 +239,7 @@ describe('CashMovementService', () => {
     });
 
     it('crea el Payment y actualiza el saldo cuando el movimiento es de una ORDER', async () => {
-      prisma.cashSession.findUnique.mockResolvedValue({ id: 'cs1', status: 'OPEN' });
+      prisma.cashSession.findUnique.mockResolvedValue({ id: 'cs1', status: 'OPEN', cashRegister: { locationId: 'loc-125' } });
       prisma.cashMovement.create.mockResolvedValueOnce({ id: 'cm-new' });
       prisma.order.findUnique.mockResolvedValue({
         id: 'o1',
@@ -266,7 +266,7 @@ describe('CashMovementService', () => {
     });
 
     it('rechaza si el monto excede el saldo de la orden', async () => {
-      prisma.cashSession.findUnique.mockResolvedValue({ id: 'cs1', status: 'OPEN' });
+      prisma.cashSession.findUnique.mockResolvedValue({ id: 'cs1', status: 'OPEN', cashRegister: { locationId: 'loc-125' } });
       prisma.cashMovement.create.mockResolvedValueOnce({ id: 'cm-new' });
       prisma.order.findUnique.mockResolvedValue({
         id: 'o1',
@@ -283,7 +283,7 @@ describe('CashMovementService', () => {
     });
 
     it('lanza NotFound si la orden referenciada no existe', async () => {
-      prisma.cashSession.findUnique.mockResolvedValue({ id: 'cs1', status: 'OPEN' });
+      prisma.cashSession.findUnique.mockResolvedValue({ id: 'cs1', status: 'OPEN', cashRegister: { locationId: 'loc-125' } });
       prisma.cashMovement.create.mockResolvedValueOnce({ id: 'cm-new' });
       prisma.order.findUnique.mockResolvedValue(null);
 

@@ -3,6 +3,7 @@ import { Prisma, AccountPayableStatus } from '../../generated/prisma';
 import { PrismaService } from '../../database/prisma.service';
 import { FilterAccountPayableDto, InstallmentItemDto } from './dto';
 import { clampPageSize, MAX_EXPORT_PAGE_SIZE } from '../../common/dto/pagination.dto';
+import { LOCATION_SUMMARY_SELECT } from '../../common/constants/location-select';
 
 @Injectable()
 export class AccountsPayableRepository {
@@ -11,6 +12,8 @@ export class AccountsPayableRepository {
   private readonly selectFields = {
     id: true,
     apNumber: true,
+    locationId: true,
+    location: { select: LOCATION_SUMMARY_SELECT },
     expenseType: { select: { id: true, name: true } },
     expenseSubcategory: { select: { id: true, name: true } },
     status: true,

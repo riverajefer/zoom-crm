@@ -51,7 +51,7 @@ describe('LocationContextInterceptor', () => {
   it('sin header usa la sede predeterminada y la deja en el contexto del request', async () => {
     const { request, stored } = await run('u-apoyo');
 
-    expect(stored).toEqual({ locationId: 'l-125', all: false, permittedIds: ['l-119', 'l-125'] });
+    expect(stored).toEqual({ locationId: 'l-125', all: false, permittedIds: ['l-119', 'l-125'], viewAll: false });
     expect(request.location).toEqual(stored);
   });
 
@@ -72,7 +72,7 @@ describe('LocationContextInterceptor', () => {
     await expect(run('u-apoyo', 'all')).rejects.toThrow(ForbiddenException);
 
     const { stored } = await run('u-admin', 'all');
-    expect(stored).toEqual({ locationId: null, all: true, permittedIds: ACTIVE });
+    expect(stored).toEqual({ locationId: null, all: true, permittedIds: ACTIVE, viewAll: true });
   });
 
   it('con view_all_locations cualquier sede activa está permitida', async () => {
@@ -90,7 +90,7 @@ describe('LocationContextInterceptor', () => {
   it('un usuario sin sedes queda sin sede activa (la fase 2 decidirá qué puede hacer)', async () => {
     const { stored } = await run('u-sin-sede');
 
-    expect(stored).toEqual({ locationId: null, all: false, permittedIds: [] });
+    expect(stored).toEqual({ locationId: null, all: false, permittedIds: [], viewAll: false });
   });
 
   it('sin usuario (ruta pública) no consulta nada', async () => {

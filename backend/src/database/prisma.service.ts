@@ -3,6 +3,7 @@ import { PrismaClient } from '../generated/prisma';
 import { getAuditContext } from '../common/utils/audit-context';
 import { withAuditLog } from './audit-log.extension';
 import { auditRecordIdExtension } from './audit-record-id.extension';
+import { locationScopeExtension } from './location-scope.extension';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
 
@@ -67,7 +68,9 @@ export class PrismaService
     // `withAuditLog` escribe el AuditLog con el cliente que recibe: así esa escritura
     // pasa por ella y los modelos con llave compuesta no pierden el log. Dentro de una
     // transacción interactiva los logs se escriben después del commit.
-    const extended = withAuditLog(this.$extends(auditRecordIdExtension), {
+    // `locationScopeExtension` va primera para que toda consulta pase por ella,
+    // incluidas las lecturas previas que hace la auditoría (docs/PLAN_SEDES.md §15.1).
+    const extended = withAuditLog(this.$extends(locationScopeExtension).$extends(auditRecordIdExtension), {
       // Obtener contexto para los registros de auditoría
       getContext: () => {
         const context = getAuditContext();

@@ -77,7 +77,7 @@ Locales 104, 119, 125 y la Matriz (`Location`, módulo `/sedes`; `/locations` ya
 
 - **Datos de contacto** (dirección, ciudad, teléfonos, email, sitio web): marcados `PENDIENTE` con `TODO(zoom)` en `frontend/src/utils/pdfConstants.ts` y en los 4 `generate*Pdf.ts`, que duplican esos datos con literales propios. Salen impresos en todos los PDF.
 - **WhatsApp / Meta**: aplazado. Los nombres de las plantillas están quemados en `backend/src/modules/whatsapp/whatsapp.service.ts` y el prefijo de la URL del botón "Ver detalle" vive dentro de la plantilla en Meta.
-- **Sedes**: plan y decisiones en [docs/PLAN_SEDES.md](./docs/PLAN_SEDES.md). El modelo aún no tiene concepto de sede. Se agregará `locationId` solo en Zoom, con scoping centralizado en los guards. `findActiveCashSession()` ya acepta `cashRegisterId` para cuando exista. El primer commit con `locationId` es el punto de no retorno para reconverger con High.
+- **Sedes**: plan y decisiones en [docs/PLAN_SEDES.md](./docs/PLAN_SEDES.md). Desde la fase 2 los documentos tienen `locationId` y la extensión `database/location-scope.extension.ts` los filtra por la sede activa: **un servicio nuevo no filtra a mano**, y lo que deba cruzar sedes va dentro de `withoutLocationScope()`. Todo documento nuevo lleva la sede explícita (`requireActiveLocationId()` o la del documento padre) y su número sale de `ConsecutivesService.generateNumber(tipo, sede)`. Pendiente fase 3: `findActiveCashSession()` todavía no filtra por la caja de la sede.
 
 ---
 

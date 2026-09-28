@@ -2174,6 +2174,16 @@ async function main() {
     where: { username: 'adminsistema' },
   });
 
+  // Documentos demo repartidos entre los locales, para probar el filtro por
+  // sede con datos en cada uno (docs/PLAN_SEDES.md §11). La migración
+  // `add_locations` crea las sedes.
+  const demoSedes = await prisma.location.findMany({ select: { id: true, code: true } });
+  const demoSedeId = (code: string) => {
+    const sede = demoSedes.find((l) => l.code === code);
+    if (!sede) throw new Error(`Falta la sede ${code}: corre las migraciones`);
+    return sede.id;
+  };
+
   // Obtener canales de venta y áreas de producción para las órdenes
   const channelWhatsApp = await prisma.commercialChannel.findFirst({ where: { name: 'WhatsApp' } });
   const channelCorporativo = await prisma.commercialChannel.findFirst({ where: { name: 'Clientes Corporativos' } });
@@ -2188,12 +2198,13 @@ async function main() {
   // Orden 1: CONFIRMED con IVA, canal WhatsApp, items con áreas de producción
   if (client1 && tarjetasProduct && bannerProduct && adminUserForOrders) {
     const existingOrder1 = await prisma.order.findFirst({
-      where: { orderNumber: 'OP-2026-0001' },
+      where: { orderNumber: '104-OP-0001' },
     });
     if (!existingOrder1) {
       const order1 = await prisma.order.create({
         data: {
-          orderNumber: 'OP-2026-0001',
+          orderNumber: '104-OP-0001',
+          locationId: demoSedeId('104'),
           orderDate: new Date('2026-01-15'),
           deliveryDate: new Date('2026-05-25'),
           status: 'CONFIRMED',
@@ -2273,12 +2284,13 @@ async function main() {
   // Orden 2: IN_PRODUCTION con IVA, factura electrónica, canal Corporativo, áreas de producción
   if (client2 && sellosProduct && tarjetasProduct && adminUserForOrders) {
     const existingOrder2 = await prisma.order.findFirst({
-      where: { orderNumber: 'OP-2026-0002' },
+      where: { orderNumber: '119-OP-0001' },
     });
     if (!existingOrder2) {
       const order2 = await prisma.order.create({
         data: {
-          orderNumber: 'OP-2026-0002',
+          orderNumber: '119-OP-0001',
+          locationId: demoSedeId('119'),
           orderDate: new Date('2026-01-18'),
           deliveryDate: new Date('2026-04-28'),
           status: 'IN_PRODUCTION',
@@ -2370,12 +2382,13 @@ async function main() {
   // Orden 3: SIN IVA — canal Tienda Física, área de producción Promocionales + Costura
   if (client1 && adminUserForOrders) {
     const existingOrder3 = await prisma.order.findFirst({
-      where: { orderNumber: 'OP-2026-0003' },
+      where: { orderNumber: '125-OP-0001' },
     });
     if (!existingOrder3) {
       const order3 = await prisma.order.create({
         data: {
-          orderNumber: 'OP-2026-0003',
+          orderNumber: '125-OP-0001',
+          locationId: demoSedeId('125'),
           orderDate: new Date('2026-01-20'),
           deliveryDate: new Date('2026-03-30'),
           status: 'READY',
@@ -2440,7 +2453,8 @@ async function main() {
   if (client1 && client2 && tarjetasProduct && bannerProduct && adminUserForOrders) {
     const quotesToCreateData = [
       {
-        quoteNumber: 'COT-2026-0001',
+        quoteNumber: '104-COT-0001',
+        locationId: demoSedeId('104'),
         clientId: client1.id,
         quoteDate: new Date('2026-02-01'),
         validUntil: new Date('2026-03-01'),
@@ -2464,7 +2478,8 @@ async function main() {
         ]
       },
       {
-        quoteNumber: 'COT-2026-0002',
+        quoteNumber: '119-COT-0001',
+        locationId: demoSedeId('119'),
         clientId: client2.id,
         quoteDate: new Date('2026-02-05'),
         validUntil: new Date('2026-03-05'),
@@ -2527,71 +2542,11 @@ async function main() {
   } // fin del catálogo de ejemplo y los datos de demostración
 
   // ============================================
-  // 14. Crear Consecutivos Iniciales
+  // 14. Consecutivos
   // ============================================
-  console.log('\n🔢 Creating initial consecutives...');
-
-  const consecutivesData = [
-    {
-      type: 'ORDER',
-      prefix: 'OP',
-      year: new Date().getFullYear(),
-      lastNumber: 3,
-    },
-    {
-      type: 'PRODUCTION',
-      prefix: 'PROD',
-      year: new Date().getFullYear(),
-      lastNumber: 0,
-    },
-    {
-      type: 'EXPENSE',
-      prefix: 'GAS',
-      year: new Date().getFullYear(),
-      lastNumber: 0,
-    },
-    {
-      type: 'QUOTE',
-      prefix: 'COT',
-      year: new Date().getFullYear(),
-      lastNumber: 2,
-    },
-    {
-      type: 'WORK_ORDER',
-      prefix: 'OT',
-      year: new Date().getFullYear(),
-      lastNumber: 0,
-    },
-    {
-      type: 'CASH_RECEIPT',
-      prefix: 'RC',
-      year: new Date().getFullYear(),
-      lastNumber: 0,
-    },
-    {
-      type: 'DTF_TEXTIL',
-      prefix: 'DTF-TEXTIL',
-      year: new Date().getFullYear(),
-      lastNumber: 0,
-    },
-    {
-      type: 'DTF_UV',
-      prefix: 'DTF-UV',
-      year: new Date().getFullYear(),
-      lastNumber: 0,
-    },
-  ];
-
-  for (const consecutive of consecutivesData) {
-    await prisma.consecutive.upsert({
-      where: { type: consecutive.type },
-      update: {
-        lastNumber: consecutive.lastNumber,
-      },
-      create: consecutive,
-    });
-    console.log(`  ✓ Consecutive: ${consecutive.type} (${consecutive.prefix})`);
-  }
+  // No se siembran: en Zoom el número se calcula contra el máximo real de cada
+  // tabla, con un contador por (tipo, sede) que se crea al primer uso
+  // (docs/PLAN_SEDES.md §3).
 
   // ============================================
   // 18. Crear Áreas de Producción

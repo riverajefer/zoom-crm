@@ -6,6 +6,7 @@ import {
 import { CashRegisterRepository } from './cash-register.repository';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { CreateCashRegisterDto, UpdateCashRegisterDto } from './dto';
+import { requireActiveLocationId } from '../../common/utils/location-context';
 
 @Injectable()
 export class CashRegisterService {
@@ -34,7 +35,9 @@ export class CashRegisterService {
       );
     }
 
-    const register = await this.repository.create(dto);
+    // La caja pertenece a la sede activa (docs/PLAN_SEDES.md §4). La fase 3
+    // deja una caja por sede.
+    const register = await this.repository.create(dto, requireActiveLocationId());
 
     setImmediate(() => {
       this.auditLogsService

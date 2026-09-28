@@ -146,9 +146,12 @@ async function main() {
     const paidAmount = (opts.payments ?? []).reduce((s, p) => s + p.amount, 0);
     const balance = opts.totalAmount - paidAmount;
 
+    // Las CP demo van a la Matriz, dueña de los gastos comunes (docs/PLAN_SEDES.md §14).
+    const matriz = await prisma.location.findUniqueOrThrow({ where: { code: 'MAT' }, select: { id: true } });
     const ap = await prisma.accountPayable.create({
       data: {
         apNumber: opts.apNumber,
+        locationId: matriz.id,
         expenseTypeId: opts.expenseTypeId,
         expenseSubcategoryId: opts.expenseSubcategoryId,
         status: opts.status,

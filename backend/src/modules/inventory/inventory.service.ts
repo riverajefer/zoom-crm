@@ -68,6 +68,11 @@ export class InventoryService {
     tx: Prisma.TransactionClient,
   ): Promise<LowStockAlert[]> {
     // Obtener todos los insumos de la OT con sus cantidades
+    const { locationId: workOrderLocationId } = await tx.workOrder.findUniqueOrThrow({
+      where: { id: workOrderId },
+      select: { locationId: true },
+    });
+
     const supplies = await tx.workOrderItemSupply.findMany({
       where: {
         workOrderItem: { workOrderId },
@@ -104,6 +109,8 @@ export class InventoryService {
       // respecto a la bodega, y la alerta de mínimo lo hace visible.
       await tx.inventoryMovement.create({
         data: {
+          // Qué sede consumió el insumo: la de la OT (docs/PLAN_SEDES.md §2).
+          locationId: workOrderLocationId,
           supplyId: ws.supplyId,
           type: InventoryMovementType.EXIT,
           quantity: qty,

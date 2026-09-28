@@ -13,6 +13,14 @@ import { StorageService } from '../storage/storage.service';
 import { PrismaService } from '../../database/prisma.service';
 import { QuoteStatus, OrderStatus, ProspectStatus, Prisma } from '../../generated/prisma';
 
+// Solo Zoom: los documentos nacen en la sede activa del request, que en un
+// test unitario no existe (docs/PLAN_SEDES.md §2).
+jest.mock('../../common/utils/location-context', () => ({
+  ...jest.requireActual('../../common/utils/location-context'),
+  requireActiveLocationId: jest.fn(() => 'loc-125'),
+}));
+
+
 // ─────────────────────────────────────────────────────────────────────────────
 // MOCKS
 // ─────────────────────────────────────────────────────────────────────────────
@@ -89,6 +97,7 @@ const mockPrismaService = {
 const mockQuote = {
   id: 'quote-1',
   quoteNumber: 'COT-001',
+  locationId: 'loc-119',
   clientId: 'client-1',
   quoteDate: new Date(),
   validUntil: new Date(),
@@ -376,7 +385,7 @@ describe('QuotesService', () => {
 
       const result = await service.create(createQuoteDto, 'user-1');
 
-      expect(mockConsecutivesService.generateNumber).toHaveBeenCalledWith('QUOTE');
+      expect(mockConsecutivesService.generateNumber).toHaveBeenCalledWith('QUOTE', 'loc-125');
       expect(mockQuotesRepository.create).toHaveBeenCalledWith(
         expect.objectContaining({
           quoteNumber: 'COT-001',
@@ -407,7 +416,7 @@ describe('QuotesService', () => {
 
       const result = await service.create(createQuoteDto, 'user-1');
 
-      expect(mockConsecutivesService.syncCounter).toHaveBeenCalledWith('QUOTE');
+      expect(mockConsecutivesService.syncCounter).toHaveBeenCalledWith('QUOTE', 'loc-125');
       expect(mockConsecutivesService.generateNumber).toHaveBeenCalledTimes(2);
       expect(mockQuotesRepository.create).toHaveBeenCalledTimes(2);
       // El reintento debe usar el número nuevo, no repetir el que falló.
@@ -1067,7 +1076,7 @@ describe('QuotesService', () => {
 
       await service.convertToOrder('quote-1', 'user-1');
 
-      expect(mockConsecutivesService.generateNumber).toHaveBeenCalledWith('ORDER');
+      expect(mockConsecutivesService.generateNumber).toHaveBeenCalledWith('ORDER', 'loc-119');
       expect(txMock.order.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({

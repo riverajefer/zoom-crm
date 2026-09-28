@@ -277,6 +277,8 @@ export class ProductionRepository {
 
   createOrder(data: {
     oprodNumber: string;
+    /** Sede de la OT de la que nace (docs/PLAN_SEDES.md §2). */
+    locationId: string;
     templateId: string;
     workOrderId: string;
     status?: ProductionOrderStatus;

@@ -3,6 +3,7 @@ import { PrismaService } from '../../database/prisma.service';
 import { ExpenseOrderStatus } from '../../generated/prisma';
 import { FilterExpenseOrdersDto } from './dto';
 import { clampPageSize, MAX_PAGE_SIZE } from '../../common/dto/pagination.dto';
+import { LOCATION_SUMMARY_SELECT } from '../../common/constants/location-select';
 
 @Injectable()
 export class ExpenseOrdersRepository {
@@ -11,6 +12,8 @@ export class ExpenseOrdersRepository {
   private readonly selectFields = {
     id: true,
     ogNumber: true,
+    locationId: true,
+    location: { select: LOCATION_SUMMARY_SELECT },
     status: true,
     observations: true,
     areaOrMachine: true,
@@ -205,6 +208,8 @@ export class ExpenseOrdersRepository {
     reteIVARate?: number;
     status: ExpenseOrderStatus;
     createdById: string;
+    /** Sede de la OG: una sede o la Matriz (docs/PLAN_SEDES.md §14). */
+    locationId: string;
     idempotencyKey?: string;
     authorizedById?: string;
     authorizedAt?: Date;

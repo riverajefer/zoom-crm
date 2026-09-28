@@ -74,6 +74,14 @@ export class PayrollEmployeesRepository {
     });
   }
 
+  async findUserDefaultLocationId(userId: string): Promise<string | null> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { defaultLocationId: true },
+    });
+    return user?.defaultLocationId ?? null;
+  }
+
   async create(data: Prisma.EmployeeCreateInput) {
     return this.prisma.employee.create({
       data,

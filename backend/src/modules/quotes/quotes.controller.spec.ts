@@ -20,6 +20,8 @@ const mockQuotesService = {
   create: jest.fn(),
   findAll: jest.fn(),
   findOne: jest.fn(),
+  findOneForView: jest.fn(),
+  lookupInOtherLocations: jest.fn(),
   update: jest.fn(),
   remove: jest.fn(),
   convertToOrder: jest.fn(),
@@ -198,16 +200,16 @@ describe('QuotesController', () => {
   // ─────────────────────────────────────────────
   describe('findOne', () => {
     it('should return a single quote', async () => {
-      mockQuotesService.findOne.mockResolvedValue(mockQuote);
+      mockQuotesService.findOneForView.mockResolvedValue(mockQuote);
 
       const result = await controller.findOne('quote-1');
 
-      expect(service.findOne).toHaveBeenCalledWith('quote-1');
+      expect(service.findOneForView).toHaveBeenCalledWith('quote-1');
       expect(result).toEqual(mockQuote);
     });
 
     it('should propagate NotFoundException from service', async () => {
-      mockQuotesService.findOne.mockRejectedValue(
+      mockQuotesService.findOneForView.mockRejectedValue(
         new NotFoundException('Quote with ID non-existent not found'),
       );
 

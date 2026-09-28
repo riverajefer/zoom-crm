@@ -13,6 +13,9 @@ export const ALL_LOCATIONS = 'all';
 /** Permiso que habilita cualquier sede y la vista "Todas". */
 export const VIEW_ALL_LOCATIONS_PERMISSION = 'view_all_locations';
 
+/** Permiso que habilita el modo consulta de documentos de otra sede. */
+export const READ_OTHER_LOCATIONS_PERMISSION = 'read_other_locations';
+
 /** Código que el frontend reconoce para pedir que se elija una sede. */
 export const LOCATION_REQUIRED = 'LOCATION_REQUIRED';
 

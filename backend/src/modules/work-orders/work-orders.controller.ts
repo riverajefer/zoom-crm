@@ -11,6 +11,7 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
+import { LocationLookupDto } from '../../common/dto/location-lookup.dto';
 import {
   ApiTags,
   ApiOperation,
@@ -50,6 +51,14 @@ export class WorkOrdersController {
     return this.workOrdersService.findAll(filters);
   }
 
+  // Antes de `@Get(':id')`: si no, `lookup` se tomaría como un id.
+  @Get('lookup')
+  @RequirePermissions('read_work_orders', 'read_other_locations')
+  @ApiOperation({ summary: 'Buscar OT en las otras sedes, agrupadas por sede (modo consulta)' })
+  lookup(@Query() { q }: LocationLookupDto) {
+    return this.workOrdersService.lookupInOtherLocations(q);
+  }
+
   @Get(':id')
   @RequirePermissions('read_work_orders')
   @ApiOperation({ summary: 'Obtener detalle de una OT' })
@@ -57,7 +66,7 @@ export class WorkOrdersController {
   @ApiResponse({ status: 200, description: 'OT obtenida correctamente' })
   @ApiResponse({ status: 404, description: 'OT no encontrada' })
   findOne(@Param('id') id: string) {
-    return this.workOrdersService.findOne(id);
+    return this.workOrdersService.findOneForView(id);
   }
 
   @Post()

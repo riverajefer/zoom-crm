@@ -5,6 +5,12 @@ import {
 } from '@nestjs/common';
 import { Prisma, WorkOrderStatus, WorkOrderTimeEntryType } from '../../generated/prisma';
 import { PrismaService } from '../../database/prisma.service';
+import {
+  findForView,
+  lookupInOtherLocations,
+  LOOKUP_MIN_QUERY_LENGTH,
+} from '../../common/utils/location-consulta';
+import { LOCATION_SUMMARY_SELECT } from '../../common/constants/location-select';
 import { ConsecutivesService } from '../consecutives/consecutives.service';
 import { WorkOrdersRepository } from './work-orders.repository';
 import { InventoryService } from '../inventory/inventory.service';
@@ -148,6 +154,51 @@ export class WorkOrdersService {
       throw new NotFoundException(`OT con id ${id} no encontrada`);
     }
     return workOrder;
+  }
+
+  /** Detalle para la pantalla, con modo consulta para otra sede. Ver `OrdersService.findOneForView`. */
+  async findOneForView(id: string) {
+    const workOrder = await findForView(this.prisma, 'WorkOrder', () =>
+      this.workOrdersRepository.findById(id),
+    );
+    if (!workOrder) {
+      throw new NotFoundException(`OT con id ${id} no encontrada`);
+    }
+    return workOrder;
+  }
+
+  /** OT de las otras sedes que coinciden con la búsqueda. Ver `OrdersService.lookupInOtherLocations`. */
+  async lookupInOtherLocations(q: string) {
+    const search = q.trim();
+    if (search.length < LOOKUP_MIN_QUERY_LENGTH) return [];
+    const where: Prisma.WorkOrderWhereInput = {
+      OR: [
+        { workOrderNumber: { contains: search, mode: 'insensitive' } },
+        { order: { orderNumber: { contains: search, mode: 'insensitive' } } },
+        { order: { client: { name: { contains: search, mode: 'insensitive' } } } },
+      ],
+    };
+    return lookupInOtherLocations(where, {
+      count: (w) =>
+        this.prisma.workOrder.groupBy({ by: ['locationId'], where: w, _count: { _all: true } }),
+      find: (w, take) =>
+        this.prisma.workOrder.findMany({
+          where: w,
+          select: {
+            id: true,
+            workOrderNumber: true,
+            status: true,
+            createdAt: true,
+            order: {
+              select: { id: true, orderNumber: true, client: { select: { id: true, name: true } } },
+            },
+            locationId: true,
+            location: { select: LOCATION_SUMMARY_SELECT },
+          },
+          orderBy: { createdAt: 'desc' },
+          take,
+        }),
+    });
   }
 
   async update(id: string, dto: UpdateWorkOrderDto) {

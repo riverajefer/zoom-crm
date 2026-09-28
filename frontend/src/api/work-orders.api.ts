@@ -1,6 +1,8 @@
 import axiosInstance from './axios';
+import type { SedeLookupGroup } from '../types/sede.types';
 import {
   WorkOrder,
+  WorkOrderLookupItem,
   WorkOrdersListResponse,
   CreateWorkOrderDto,
   UpdateWorkOrderDto,
@@ -19,6 +21,14 @@ export const workOrdersApi = {
    */
   getAll: async (params?: FilterWorkOrdersDto): Promise<WorkOrdersListResponse> => {
     const response = await axiosInstance.get<WorkOrdersListResponse>('/work-orders', { params });
+    return response.data;
+  },
+
+  /** OT de las otras sedes que coinciden con la búsqueda (modo consulta). */
+  lookup: async (q: string): Promise<SedeLookupGroup<WorkOrderLookupItem>[]> => {
+    const response = await axiosInstance.get<SedeLookupGroup<WorkOrderLookupItem>[]>('/work-orders/lookup', {
+      params: { q },
+    });
     return response.data;
   },
 

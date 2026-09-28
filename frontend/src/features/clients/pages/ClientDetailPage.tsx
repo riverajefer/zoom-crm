@@ -41,7 +41,12 @@ import { RequestClientAdvisorButton } from '../components/RequestClientAdvisorBu
 import { useAuthStore } from '../../../store/authStore';
 import { PERMISSIONS } from '../../../utils/constants';
 import { formatCurrency, formatDate } from '../../../utils/formatters';
-import { ClientOrderHistory } from '../../../types';
+import { ClientOrderHistory, ClientQuoteHistory } from '../../../types';
+import { useLocationStore } from '../../../store/locationStore';
+import { groupBySede } from '../../sedes/utils/groupBySede';
+import { SedeGroupHeader } from '../../sedes/components/SedeGroupHeader';
+import { QuoteStatusChip } from '../../quotes/components/QuoteStatusChip';
+import type { QuoteStatus } from '../../../types/quote.types';
 
 const ORDER_STATUS_LABELS: Record<string, string> = {
   DRAFT: 'Borrador',
@@ -131,6 +136,21 @@ const ClientDetailPage: React.FC = () => {
     return orders;
   }, [stats?.orders, orderFilter]);
 
+  // Los clientes son comunes: sus OP y COT llegan de todas las sedes que el
+  // usuario puede consultar, y se muestran agrupadas, la sede activa primero.
+  // Lo de otra sede se abre en modo consulta (docs/PLAN_SEDES.md §8).
+  const activeLocationId = useLocationStore((s) => s.activeLocationId);
+  const canViewAll = useLocationStore((s) => s.canViewAll);
+  const orderGroups = React.useMemo(
+    () => groupBySede(filteredOrders, activeLocationId),
+    [filteredOrders, activeLocationId],
+  );
+  const quoteGroups = React.useMemo(
+    () => groupBySede(stats?.quotes ?? [], activeLocationId),
+    [stats?.quotes, activeLocationId],
+  );
+  const isConsultaSede = (sedeId: string | undefined) => !canViewAll && sedeId !== activeLocationId;
+
   if (isLoading) {
     return <LoadingSpinner />;
   }
@@ -165,6 +185,47 @@ const ClientDetailPage: React.FC = () => {
       </Box>
     </Box>
   );
+
+  const quoteColumns = [
+    {
+      field: 'quoteNumber',
+      headerName: 'COT',
+      width: 160,
+      renderCell: (params: GridRenderCellParams<ClientQuoteHistory>) => (
+        <Button
+          variant='text'
+          size='small'
+          sx={{ p: 0, minWidth: 0, fontWeight: 'bold' }}
+          onClick={() => navigate(`/quotes/${params.row.id}`)}
+        >
+          {params.value}
+        </Button>
+      ),
+    },
+    {
+      field: 'quoteDate',
+      headerName: 'Fecha',
+      width: 150,
+      valueGetter: (value: string) => formatDate(value),
+    },
+    {
+      field: 'status',
+      headerName: 'Estado',
+      width: 160,
+      renderCell: (params: GridRenderCellParams<ClientQuoteHistory>) => (
+        <QuoteStatusChip status={params.value as QuoteStatus} />
+      ),
+    },
+    {
+      field: 'total',
+      headerName: 'Total',
+      flex: 1,
+      minWidth: 140,
+      align: 'right' as const,
+      headerAlign: 'right' as const,
+      valueGetter: (value: number) => formatCurrency(value),
+    },
+  ];
 
   const orderColumns = [
     {
@@ -745,18 +806,77 @@ const ClientDetailPage: React.FC = () => {
                 </ToggleButtonGroup>
               </Stack>
               <Divider sx={{ mb: 2 }} />
-              <DataTable
-                rows={filteredOrders}
-                columns={orderColumns}
-                loading={statsLoading}
-                searchPlaceholder='Buscar en historial...'
-                density='compact'
-                pageSize={20}
-                pageSizeOptions={[20, 50, 100]}
-              />
+              {orderGroups.length === 0 ? (
+                <DataTable
+                  rows={filteredOrders}
+                  columns={orderColumns}
+                  loading={statsLoading}
+                  searchPlaceholder='Buscar en historial...'
+                  density='compact'
+                  pageSize={20}
+                  pageSizeOptions={[20, 50, 100]}
+                />
+              ) : (
+                <Stack spacing={3}>
+                  {orderGroups.map((group) => (
+                    <Box key={group.sede?.id ?? 'sin-sede'}>
+                      <SedeGroupHeader
+                        sede={group.sede}
+                        count={group.rows.length}
+                        unit='OP'
+                        isActive={group.sede?.id === activeLocationId}
+                        consulta={isConsultaSede(group.sede?.id)}
+                      />
+                      <DataTable
+                        rows={group.rows}
+                        columns={orderColumns}
+                        loading={statsLoading}
+                        toolbar={false}
+                        density='compact'
+                        pageSize={10}
+                        pageSizeOptions={[10, 20, 50]}
+                      />
+                    </Box>
+                  ))}
+                </Stack>
+              )}
             </CardContent>
           </Card>
         </Grid>
+
+        {quoteGroups.length > 0 && (
+          <Grid item xs={12}>
+            <Card>
+              <CardContent>
+                <Typography variant='h6' sx={{ mb: 2 }}>
+                  Cotizaciones del cliente
+                </Typography>
+                <Divider sx={{ mb: 2 }} />
+                <Stack spacing={3}>
+                  {quoteGroups.map((group) => (
+                    <Box key={group.sede?.id ?? 'sin-sede'}>
+                      <SedeGroupHeader
+                        sede={group.sede}
+                        count={group.rows.length}
+                        unit='COT'
+                        isActive={group.sede?.id === activeLocationId}
+                        consulta={isConsultaSede(group.sede?.id)}
+                      />
+                      <DataTable
+                        rows={group.rows}
+                        columns={quoteColumns}
+                        toolbar={false}
+                        density='compact'
+                        pageSize={10}
+                        pageSizeOptions={[10, 20, 50]}
+                      />
+                    </Box>
+                  ))}
+                </Stack>
+              </CardContent>
+            </Card>
+          </Grid>
+        )}
       </Grid>
     </Box>
   );

@@ -12,6 +12,7 @@ import {
   UseInterceptors,
   UploadedFile,
 } from '@nestjs/common';
+import { LocationLookupDto } from '../../common/dto/location-lookup.dto';
 import { Request } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { QuotesService } from './quotes.service';
@@ -56,11 +57,19 @@ export class QuotesController {
     return this.quotesService.findAll(filters, req.user.id);
   }
 
+  // Antes de `@Get(':id')`: si no, `lookup` se tomaría como un id.
+  @Get('lookup')
+  @RequirePermissions('read_quotes', 'read_other_locations')
+  @ApiOperation({ summary: 'Buscar COT en las otras sedes, agrupadas por sede (modo consulta)' })
+  lookup(@Query() { q }: LocationLookupDto) {
+    return this.quotesService.lookupInOtherLocations(q);
+  }
+
   @Get(':id')
   @RequirePermissions('read_quotes')
   @ApiOperation({ summary: 'Obtener detalle de una cotización' })
   findOne(@Param('id') id: string) {
-    return this.quotesService.findOne(id);
+    return this.quotesService.findOneForView(id);
   }
 
   @Patch(':id')

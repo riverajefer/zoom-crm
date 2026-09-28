@@ -20,6 +20,30 @@ export interface Sede {
   updatedAt?: string;
 }
 
+/** La sede que viaja con cada documento (OP, COT, OT…). */
+export type SedeSummary = Pick<Sede, 'id' | 'code' | 'name' | 'type' | 'color' | 'address' | 'phone'>;
+
+/**
+ * Cómo llega un documento a su detalle: completo, o en modo consulta (solo
+ * lectura) porque es de otra sede. Ver docs/PLAN_SEDES.md §8.
+ */
+export type AccessMode = 'full' | 'consulta';
+
+/** Sede y modo de acceso que traen los detalles de OP, COT y OT. */
+export interface LocatedDocument {
+  locationId?: string;
+  location?: SedeSummary;
+  accessMode?: AccessMode;
+}
+
+/** Resultados de `GET …/lookup`: documentos de otra sede, agrupados por sede. */
+export interface SedeLookupGroup<T> {
+  location: Pick<Sede, 'id' | 'code' | 'name' | 'color' | 'phone'>;
+  /** Cuántos coinciden en esa sede; `items` trae solo las primeras filas. */
+  total: number;
+  items: T[];
+}
+
 /** Sedes del usuario que llegan con el login y con `/auth/me`. */
 export interface UserSedes {
   locations: Sede[];

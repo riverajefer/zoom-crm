@@ -2,6 +2,7 @@ import { Client } from './client.types';
 import type { User } from './user.types';
 import { CommercialChannel } from './commercialChannel.types';
 import { Product } from './product.types';
+import type { LocatedDocument } from './sede.types';
 
 export enum QuoteStatus {
   DRAFT = 'DRAFT',
@@ -68,7 +69,7 @@ export interface QuoteItem {
   updatedAt: string;
 }
 
-export interface Quote {
+export interface Quote extends LocatedDocument {
   id: string;
   quoteNumber: string;
   clientId: string;
@@ -136,4 +137,14 @@ export interface FilterQuotesDto {
   limit?: number;
   createdById?: string;
   search?: string;
+}
+
+/** COT de otra sede en `GET /quotes/lookup` (docs/PLAN_SEDES.md §8). */
+export interface QuoteLookupItem {
+  id: string;
+  quoteNumber: string;
+  status: QuoteStatus;
+  quoteDate: string;
+  total: string;
+  client: { id: string; name: string };
 }

@@ -381,6 +381,12 @@ Todavía **no toca documentos**: al terminar, la app funciona como hoy, pero ya 
 
 ### Fase 4 · Experiencia multisede
 
+> **4a hecha** (2026-09-28, probada en el navegador con `asesor.apoyo` contra `zoom_seedtest`): **modo consulta** de OP, COT y OT. El `GET :id` de las tres usa `findOneForView`: si el documento no está en la sede activa y el usuario tiene `read_other_locations`, lo busca en todas y lo devuelve con `accessMode: 'consulta'`, dejando una fila `CONSULTA` en `audit_logs`. Lo que escribe sigue usando `findOne` con el filtro, así que un documento ajeno no existe para ningún endpoint que modifica (404). En el frontend, una envoltura por ruta (`OrderDetailRoute`, `QuoteDetailRoute`, `WorkOrderDetailRoute`) carga el documento y, si llega en consulta, muestra una **vista de solo lectura aparte** en vez de la página completa: esa página pide de entrada pagos, aprobaciones y rentabilidad, que para un documento ajeno responden 404, y ocultar una por una las acciones de una página de 3.700 líneas era frágil. La vista tiene el banner fijo con el color y el teléfono de la sede, "Cambiar al Local X" si el usuario la tiene permitida, resumen, ítems, documentos relacionados (que también se abren en consulta) y el PDF. **Búsqueda en otras sedes**: `GET /orders/lookup`, `/quotes/lookup` y `/work-orders/lookup` (con `read_other_locations`), agrupados por sede; los listados muestran debajo de la tabla "No está en el Local 125, pero hay resultados en otras sedes" cuando la búsqueda no encuentra nada en la sede activa. **Ficha del cliente**: OP y COT de todas las sedes que el usuario puede consultar, agrupadas por sede, la activa primero.
+>
+> El seed da `read_other_locations` a los roles `user` y `caja`. En una base ya sembrada (staging) hay que dárselo desde la pantalla de Roles a los roles de sede.
+>
+> Pendiente para la 4b: la vista "Todas" agrupada del admin. Las OPROD relacionadas no salen en la vista de consulta de la OP (la OP no las trae).
+
 - **Modo consulta** de OP, COT y OT de otra sede (§8): banner, acciones ocultas, "Cambiar al Local X", `GET …/lookup`, registro en `AuditLog`.
 - **Ficha del cliente** con COT y OP agrupadas por sede.
 - **Vista "Todas" agrupada** para el admin (§6.2): grupos por sede, máximo 10 filas por grupo, selector rápido, tablero con un carril por sede, "¿En qué sede se crea?".

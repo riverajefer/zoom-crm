@@ -53,6 +53,12 @@ import { InitialPaymentDto } from './dto/create-order.dto';
 import { CashSessionStatus, EditRequestStatus, OrderStatus, PaymentMethod, Prisma, WorkOrderStatus } from '../../generated/prisma';
 import { isValidTransition, getValidNextStatuses } from './order-status-transitions';
 import { PrismaService } from '../../database/prisma.service';
+import {
+  findForView,
+  lookupInOtherLocations,
+  LOOKUP_MIN_QUERY_LENGTH,
+} from '../../common/utils/location-consulta';
+import { LOCATION_SUMMARY_SELECT } from '../../common/constants/location-select';
 import { CashMovementService } from '../cash-movement/cash-movement.service';
 import { CashMovementVoidRequestsService } from '../cash-movement-void-requests/cash-movement-void-requests.service';
 import { startOfDay, endOfDay, businessToday } from '../../common/utils/date-range.util';
@@ -629,6 +635,61 @@ export class OrdersService {
       throw new NotFoundException(`Order with ID ${id} not found`);
     }
     return order;
+  }
+
+  /**
+   * Detalle para la pantalla: una OP de otra sede se devuelve en modo consulta
+   * si el usuario tiene `read_other_locations` (docs/PLAN_SEDES.md §8). Solo
+   * para `GET /orders/:id`; lo que escribe usa `findOne`.
+   */
+  async findOneForView(id: string) {
+    const order = await findForView(this.prisma, 'Order', () => this.ordersRepository.findById(id));
+    if (!order) {
+      throw new NotFoundException(`Order with ID ${id} not found`);
+    }
+    if (order.accessMode === 'consulta') {
+      // La vista de consulta enlaza la COT de la que salió (también en consulta).
+      const quote = await withoutLocationScope(() =>
+        this.prisma.quote.findFirst({
+          where: { orderId: id },
+          select: { id: true, quoteNumber: true, status: true },
+        }),
+      );
+      return { ...order, quote };
+    }
+    return order;
+  }
+
+  /**
+   * OP de las otras sedes que coinciden con la búsqueda, agrupadas por sede,
+   * para el aviso debajo del listado (docs/PLAN_SEDES.md §8). Busca en los
+   * mismos campos que el listado.
+   */
+  async lookupInOtherLocations(q: string) {
+    const search = q.trim();
+    if (search.length < LOOKUP_MIN_QUERY_LENGTH) return [];
+    const where: Prisma.OrderWhereInput = { OR: buildOrderSearchFilter(search) };
+    return lookupInOtherLocations(where, {
+      count: (w) =>
+        this.prisma.order.groupBy({ by: ['locationId'], where: w, _count: { _all: true } }),
+      find: (w, take) =>
+        this.prisma.order.findMany({
+          where: w,
+          select: {
+            id: true,
+            orderNumber: true,
+            status: true,
+            orderDate: true,
+            total: true,
+            balance: true,
+            client: { select: { id: true, name: true } },
+            locationId: true,
+            location: { select: LOCATION_SUMMARY_SELECT },
+          },
+          orderBy: { orderDate: 'desc' },
+          take,
+        }),
+    });
   }
 
   /**

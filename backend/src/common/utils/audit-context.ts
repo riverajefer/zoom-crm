@@ -28,6 +28,11 @@ export interface RequestLocation {
    * cualquier sede, así que la sede activa solo le filtra los listados.
    */
   viewAll?: boolean;
+  /**
+   * Tiene `read_other_locations`: puede abrir en modo consulta (solo lectura)
+   * una OP, COT u OT de otra sede. Ver docs/PLAN_SEDES.md §8.
+   */
+  readOther?: boolean;
 }
 
 /**

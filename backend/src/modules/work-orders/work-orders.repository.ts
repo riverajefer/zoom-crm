@@ -3,6 +3,7 @@ import { PrismaService } from '../../database/prisma.service';
 import { Prisma, WorkOrderStatus, WorkOrderTimeEntryType } from '../../generated/prisma';
 import { FilterWorkOrdersDto } from './dto';
 import { clampPageSize, MAX_PAGE_SIZE } from '../../common/dto/pagination.dto';
+import { LOCATION_SUMMARY_SELECT } from '../../common/constants/location-select';
 
 @Injectable()
 export class WorkOrdersRepository {
@@ -12,6 +13,8 @@ export class WorkOrdersRepository {
     id: true,
     workOrderNumber: true,
     status: true,
+    locationId: true,
+    location: { select: LOCATION_SUMMARY_SELECT },
     fileName: true,
     attachment: {
       select: {

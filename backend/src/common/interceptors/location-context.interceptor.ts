@@ -11,6 +11,7 @@ import { PrismaService } from '../../database/prisma.service';
 import {
   ALL_LOCATIONS,
   LOCATION_HEADER,
+  READ_OTHER_LOCATIONS_PERMISSION,
   RequestLocation,
   setRequestLocation,
   VIEW_ALL_LOCATIONS_PERMISSION,
@@ -68,15 +69,21 @@ export class LocationContextInterceptor implements NestInterceptor {
         role: {
           select: {
             permissions: {
-              where: { permission: { name: VIEW_ALL_LOCATIONS_PERMISSION } },
-              select: { permissionId: true },
+              where: {
+                permission: {
+                  name: { in: [VIEW_ALL_LOCATIONS_PERMISSION, READ_OTHER_LOCATIONS_PERMISSION] },
+                },
+              },
+              select: { permission: { select: { name: true } } },
             },
           },
         },
       },
     });
 
-    const viewAll = (user?.role.permissions.length ?? 0) > 0;
+    const granted = new Set((user?.role.permissions ?? []).map((p) => p.permission.name));
+    const viewAll = granted.has(VIEW_ALL_LOCATIONS_PERMISSION);
+    const readOther = granted.has(READ_OTHER_LOCATIONS_PERMISSION);
     const permittedIds = viewAll
       ? (
           await this.prisma.location.findMany({
@@ -89,19 +96,19 @@ export class LocationContextInterceptor implements NestInterceptor {
 
     if (requested === ALL_LOCATIONS) {
       if (!viewAll) this.deny('No tienes acceso a la vista de todas las sedes');
-      return { locationId: null, all: true, permittedIds, viewAll };
+      return { locationId: null, all: true, permittedIds, viewAll, readOther };
     }
 
     if (requested) {
       if (!permittedIds.includes(requested)) this.deny('No tienes acceso a esa sede');
-      return { locationId: requested, all: false, permittedIds, viewAll };
+      return { locationId: requested, all: false, permittedIds, viewAll, readOther };
     }
 
     const fallback =
       user?.defaultLocationId && permittedIds.includes(user.defaultLocationId)
         ? user.defaultLocationId
         : (permittedIds[0] ?? null);
-    return { locationId: fallback, all: false, permittedIds, viewAll };
+    return { locationId: fallback, all: false, permittedIds, viewAll, readOther };
   }
 
   private deny(message: string): never {

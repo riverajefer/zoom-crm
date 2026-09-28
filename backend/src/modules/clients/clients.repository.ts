@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { Prisma } from '../../generated/prisma';
+import { LOCATION_SUMMARY_SELECT } from '../../common/constants/location-select';
+import { getRequestLocation, withoutLocationScope } from '../../common/utils/location-context';
 
 @Injectable()
 export class ClientsRepository {
@@ -440,10 +442,38 @@ export class ClientsRepository {
   /**
    * Get consolidated financial stats + order history for a client
    */
+  /**
+   * Los clientes son comunes a las sedes: quien puede ver las otras sedes
+   * (`read_other_locations`, o el admin con `view_all_locations`) recibe las
+   * OP y COT de todas, cada una con su sede, y la ficha las agrupa. El resto
+   * solo las de su sede activa (docs/PLAN_SEDES.md §8).
+   */
   async findClientStats(id: string) {
+    const location = getRequestLocation();
+    const acrossLocations = !!(location?.readOther || location?.viewAll);
+    return acrossLocations
+      ? withoutLocationScope(() => this.queryClientStats(id))
+      : this.queryClientStats(id);
+  }
+
+  private async queryClientStats(id: string) {
+    const quotes = await this.prisma.quote.findMany({
+      where: { clientId: id },
+      select: {
+        id: true,
+        quoteNumber: true,
+        quoteDate: true,
+        total: true,
+        status: true,
+        location: { select: LOCATION_SUMMARY_SELECT },
+      },
+      orderBy: { quoteDate: 'desc' },
+    });
+
     const orders = await this.prisma.order.findMany({
       where: { clientId: id },
       select: {
+        location: { select: LOCATION_SUMMARY_SELECT },
         id: true,
         orderNumber: true,
         orderDate: true,
@@ -503,6 +533,15 @@ export class ClientsRepository {
         balance: Number(o.balance),
         status: o.status,
         advisor: o.createdBy,
+        location: o.location,
+      })),
+      quotes: quotes.map((q) => ({
+        id: q.id,
+        quoteNumber: q.quoteNumber,
+        quoteDate: q.quoteDate,
+        total: Number(q.total),
+        status: q.status,
+        location: q.location,
       })),
     };
   }

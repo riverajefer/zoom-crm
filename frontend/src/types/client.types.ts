@@ -2,6 +2,8 @@
  * Types for Clients module
  */
 
+import type { SedeSummary } from './sede.types';
+
 export type PersonType = 'NATURAL' | 'EMPRESA';
 
 export interface ClientAdvisorUser {
@@ -114,6 +116,8 @@ export type ClientListResponse = Client[];
 
 export interface ClientOrderHistory {
   id: string;
+  /** Sede de la OP: la ficha agrupa por sede (docs/PLAN_SEDES.md §8). */
+  location?: SedeSummary;
   orderNumber: string;
   orderDate: string;
   total: number;
@@ -135,6 +139,16 @@ export interface ClientStats {
   saldoAFavor: number;
   lastOrderDate: string | null;
   orders: ClientOrderHistory[];
+  quotes?: ClientQuoteHistory[];
+}
+
+export interface ClientQuoteHistory {
+  id: string;
+  quoteNumber: string;
+  quoteDate: string;
+  total: number;
+  status: string;
+  location?: SedeSummary;
 }
 
 export interface UploadClientRowError {

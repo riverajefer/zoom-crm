@@ -1,3 +1,5 @@
+import type { LocatedDocument } from './sede.types';
+
 // ============================================================
 // ENUMS
 // ============================================================
@@ -68,7 +70,7 @@ export interface AdvancePaymentApproval {
   } | null;
 }
 
-export interface Order {
+export interface Order extends LocatedDocument {
   id: string;
   orderNumber: string;
   orderDate: string;
@@ -163,6 +165,8 @@ export interface Order {
   items: OrderItem[];
   payments: Payment[];
   discounts: OrderDiscount[];
+  /** COT de la que salió; solo llega en modo consulta (docs/PLAN_SEDES.md §8). */
+  quote?: { id: string; quoteNumber: string; status: string } | null;
   /** OT activa (no cancelada) vinculada a esta orden, si existe */
   workOrders?: {
     id: string;
@@ -790,4 +794,15 @@ export interface OrderAdvisor {
   firstName: string;
   lastName: string;
   username: string;
+}
+
+/** OP de otra sede en `GET /orders/lookup` (docs/PLAN_SEDES.md §8). */
+export interface OrderLookupItem {
+  id: string;
+  orderNumber: string;
+  status: OrderStatus;
+  orderDate: string;
+  total: string;
+  balance: string;
+  client: { id: string; name: string };
 }

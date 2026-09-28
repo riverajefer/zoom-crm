@@ -54,7 +54,7 @@ const SupplyFormPage = lazyWithRetry(() => import('../features/portfolio/supplie
 // Orders
 const OrdersListPage = lazyWithRetry(() => import('../features/orders/pages/OrdersListPage'));
 const OrderFormPage = lazyWithRetry(() => import('../features/orders/pages/OrderFormPage'));
-const OrderDetailPage = lazyWithRetry(() => import('../features/orders/pages/OrderDetailPage'));
+const OrderDetailRoute = lazyWithRetry(() => import('../features/orders/pages/OrderDetailRoute'));
 const PendingPaymentOrdersPage = lazyWithRetry(() => import('../features/orders/pages/PendingPaymentOrdersPage'));
 const StatusChangeRequestsPage = lazyWithRetry(() => import('../features/orders/pages/StatusChangeRequestsPage'));
 const ProfitabilityPage = lazyWithRetry(() => import('../features/orders/pages/ProfitabilityPage'));
@@ -75,13 +75,13 @@ const ProspectMetricsPage = lazyWithRetry(() =>
 );
 const QuotesListPage = lazyWithRetry(() => import('../features/quotes/pages/QuotesListPage'));
 const QuoteFormPage = lazyWithRetry(() => import('../features/quotes/pages/QuoteFormPage'));
-const QuoteDetailPage = lazyWithRetry(() => import('../features/quotes/pages/QuoteDetailPage'));
+const QuoteDetailRoute = lazyWithRetry(() => import('../features/quotes/pages/QuoteDetailRoute'));
 const NotificationsPage = lazyWithRetry(() => import('../features/notifications/pages/NotificationsPage'));
 const CompanyPage = lazyWithRetry(() => import('../features/company/pages/CompanyPage'));
 // Work Orders
 const WorkOrdersListPage = lazyWithRetry(() => import('../features/work-orders/pages/WorkOrdersListPage'));
 const WorkOrderFormPage = lazyWithRetry(() => import('../features/work-orders/pages/WorkOrderFormPage'));
-const WorkOrderDetailPage = lazyWithRetry(() => import('../features/work-orders/pages/WorkOrderDetailPage'));
+const WorkOrderDetailRoute = lazyWithRetry(() => import('../features/work-orders/pages/WorkOrderDetailRoute'));
 // Expense Types & Subcategories
 const ExpenseTypesListPage = lazyWithRetry(() => import('../features/expense-types/pages/ExpenseTypesListPage'));
 const ExpenseTypeFormPage = lazyWithRetry(() => import('../features/expense-types/pages/ExpenseTypeFormPage'));
@@ -760,7 +760,7 @@ const RoutesConfig: FC = () => {
             <AuthGuard>
               <MainLayout>
                 <PermissionGuard permission={PERMISSIONS.READ_ORDERS}>
-                  <OrderDetailPage />
+                  <OrderDetailRoute />
                 </PermissionGuard>
               </MainLayout>
             </AuthGuard>
@@ -856,7 +856,7 @@ const RoutesConfig: FC = () => {
           element={
             <AuthGuard>
               <MainLayout>
-                <QuoteDetailPage />
+                <QuoteDetailRoute />
               </MainLayout>
             </AuthGuard>
           }
@@ -1113,7 +1113,7 @@ const RoutesConfig: FC = () => {
             <AuthGuard>
               <MainLayout>
                 <PermissionGuard permission={PERMISSIONS.READ_WORK_ORDERS}>
-                  <WorkOrderDetailPage />
+                  <WorkOrderDetailRoute />
                 </PermissionGuard>
               </MainLayout>
             </AuthGuard>

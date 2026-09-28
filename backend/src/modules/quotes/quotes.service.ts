@@ -6,6 +6,12 @@ import {
 import { QuotesRepository } from './quotes.repository';
 import { ConsecutivesService } from '../consecutives/consecutives.service';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
+import {
+  findForView,
+  lookupInOtherLocations,
+  LOOKUP_MIN_QUERY_LENGTH,
+} from '../../common/utils/location-consulta';
+import { LOCATION_SUMMARY_SELECT } from '../../common/constants/location-select';
 import { StorageService } from '../storage/storage.service';
 import {
   CreateQuoteDto,
@@ -88,6 +94,47 @@ export class QuotesService {
       throw new NotFoundException(`Quote with ID ${id} not found`);
     }
     return quote;
+  }
+
+  /** Detalle para la pantalla, con modo consulta para otra sede. Ver `OrdersService.findOneForView`. */
+  async findOneForView(id: string) {
+    const quote = await findForView(this.prisma, 'Quote', () => this.quotesRepository.findById(id));
+    if (!quote) {
+      throw new NotFoundException(`Quote with ID ${id} not found`);
+    }
+    return quote;
+  }
+
+  /** COT de las otras sedes que coinciden con la búsqueda. Ver `OrdersService.lookupInOtherLocations`. */
+  async lookupInOtherLocations(q: string) {
+    const search = q.trim();
+    if (search.length < LOOKUP_MIN_QUERY_LENGTH) return [];
+    const where: Prisma.QuoteWhereInput = {
+      OR: [
+        { quoteNumber: { contains: search, mode: 'insensitive' } },
+        { client: { name: { contains: search, mode: 'insensitive' } } },
+      ],
+    };
+    return lookupInOtherLocations(where, {
+      count: (w) =>
+        this.prisma.quote.groupBy({ by: ['locationId'], where: w, _count: { _all: true } }),
+      find: (w, take) =>
+        this.prisma.quote.findMany({
+          where: w,
+          select: {
+            id: true,
+            quoteNumber: true,
+            status: true,
+            quoteDate: true,
+            total: true,
+            client: { select: { id: true, name: true } },
+            locationId: true,
+            location: { select: LOCATION_SUMMARY_SELECT },
+          },
+          orderBy: { quoteDate: 'desc' },
+          take,
+        }),
+    });
   }
 
   async create(createQuoteDto: CreateQuoteDto, createdById: string) {

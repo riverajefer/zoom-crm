@@ -716,6 +716,8 @@ async function main() {
     'read_users',
     'read_roles',
     'read_orders',
+    // Modo consulta de OP, COT y OT de otra sede (docs/PLAN_SEDES.md §8)
+    'read_other_locations',
     // Attendance (User)
     'use_attendance',
     // Comments (User)
@@ -732,6 +734,7 @@ async function main() {
     'approve_refunds',
     'execute_refunds',
     'read_orders',
+    'read_other_locations',
     'read_clients',
     'read_users',
     'read_roles',

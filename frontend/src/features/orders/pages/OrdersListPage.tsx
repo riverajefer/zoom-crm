@@ -65,7 +65,8 @@ import type {
   OrderStatus,
   FilterOrdersDto,
 } from '../../../types/order.types';
-import { ORDER_STATUS_OPTIONS } from '../../../types/order.types';
+import { ORDER_STATUS_CONFIG, ORDER_STATUS_OPTIONS, type OrderLookupItem } from '../../../types/order.types';
+import { OtherSedesLookupHint } from '../../sedes/components/OtherSedesLookupHint';
 import type { Client } from '../../../types/client.types';
 import { parseDateFilter, toDateFilterOrUndefined } from '../../../utils/dateFilters';
 
@@ -982,6 +983,18 @@ export const OrdersListPage: React.FC = () => {
           if (alert === 'due-today') return 'row-due-today';
           return '';
         }}
+      />
+
+      <OtherSedesLookupHint<OrderLookupItem>
+        type='OP'
+        search={filters.search}
+        localTotal={ordersQuery.isFetching ? undefined : ordersQuery.data?.meta.total}
+        lookup={ordersApi.lookup}
+        describe={(o) => ({
+          number: o.orderNumber,
+          detail: `${o.client.name} · ${ORDER_STATUS_CONFIG[o.status]?.label ?? o.status} · saldo ${formatCurrency(o.balance)}`,
+          path: `/orders/${o.id}`,
+        })}
       />
 
       {/* Confirm Delete Dialog */}

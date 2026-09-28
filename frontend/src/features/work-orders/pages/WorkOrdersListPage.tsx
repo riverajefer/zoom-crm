@@ -24,7 +24,8 @@ import { useWorkOrders } from '../hooks';
 import { WorkOrderStatusChip } from '../components';
 import { useAuthStore } from '../../../store/authStore';
 import { PERMISSIONS, ROUTES } from '../../../utils/constants';
-import { WorkOrderStatus } from '../../../types/work-order.types';
+import { WorkOrderStatus, WORK_ORDER_STATUS_CONFIG, type WorkOrderLookupItem } from '../../../types/work-order.types';
+import { OtherSedesLookupHint } from '../../sedes/components/OtherSedesLookupHint';
 import type { WorkOrder, FilterWorkOrdersDto } from '../../../types/work-order.types';
 import { ExportDialog } from '../../../components/common/ExportDialog';
 import { fetchAllPages } from '../../../utils/excelExport';
@@ -294,6 +295,18 @@ export const WorkOrdersListPage = () => {
         onSearchChange={(value) => handleFilterChange('search', value)}
         serverSideSearch
         onRowClick={handleView}
+      />
+
+      <OtherSedesLookupHint<WorkOrderLookupItem>
+        type="OT"
+        search={filters.search}
+        localTotal={workOrdersQuery.isFetching ? undefined : workOrdersQuery.data?.meta?.total}
+        lookup={workOrdersApi.lookup}
+        describe={(w) => ({
+          number: w.workOrderNumber,
+          detail: `${w.order.orderNumber} · ${w.order.client.name} · ${WORK_ORDER_STATUS_CONFIG[w.status]?.label ?? w.status}`,
+          path: `/work-orders/${w.id}`,
+        })}
       />
 
       <ConfirmDialog

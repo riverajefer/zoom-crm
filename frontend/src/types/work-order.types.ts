@@ -1,3 +1,5 @@
+import type { LocatedDocument } from './sede.types';
+
 export enum WorkOrderStatus {
   DRAFT = 'DRAFT',
   CONFIRMED = 'CONFIRMED',
@@ -79,7 +81,7 @@ export interface WorkOrderTimeEntry {
   } | null;
 }
 
-export interface WorkOrder {
+export interface WorkOrder extends LocatedDocument {
   id: string;
   workOrderNumber: string;
   status: WorkOrderStatus;
@@ -239,4 +241,13 @@ export interface WorkOrdersListResponse {
     limit: number;
     totalPages: number;
   };
+}
+
+/** OT de otra sede en `GET /work-orders/lookup` (docs/PLAN_SEDES.md §8). */
+export interface WorkOrderLookupItem {
+  id: string;
+  workOrderNumber: string;
+  status: WorkOrderStatus;
+  createdAt: string;
+  order: { id: string; orderNumber: string; client: { id: string; name: string } };
 }

@@ -3,14 +3,22 @@ import {
   Quote, 
   CreateQuoteDto, 
   UpdateQuoteDto, 
-  FilterQuotesDto 
+  FilterQuotesDto,
+  QuoteLookupItem,
 } from '../types/quote.types';
+import type { SedeLookupGroup } from '../types/sede.types';
 import { ApiResponse, PaginatedMetaResponse } from '../types/api.types';
 import { Order } from '../types/order.types';
 
 export const quotesApi = {
   findAll: async (params?: FilterQuotesDto) => {
     const { data } = await axios.get<PaginatedMetaResponse<Quote>>('/quotes', { params });
+    return data;
+  },
+
+  /** COT de las otras sedes que coinciden con la búsqueda (modo consulta). */
+  lookup: async (q: string) => {
+    const { data } = await axios.get<SedeLookupGroup<QuoteLookupItem>[]>('/quotes/lookup', { params: { q } });
     return data;
   },
 

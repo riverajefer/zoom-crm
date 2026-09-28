@@ -15,6 +15,7 @@ import {
   UseInterceptors,
   UploadedFile,
 } from '@nestjs/common';
+import { LocationLookupDto } from '../../common/dto/location-lookup.dto';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
   ApiTags,
@@ -178,6 +179,14 @@ export class OrdersController {
     });
   }
 
+  // Antes de `@Get(':id')`: si no, `lookup` se tomaría como un id.
+  @Get('lookup')
+  @RequirePermissions('read_orders', 'read_other_locations')
+  @ApiOperation({ summary: 'Buscar OP en las otras sedes, agrupadas por sede (modo consulta)' })
+  lookup(@Query() { q }: LocationLookupDto) {
+    return this.ordersService.lookupInOtherLocations(q);
+  }
+
   @Get(':id')
   @RequirePermissions('read_orders')
   @ApiOperation({ summary: 'Get order by ID' })
@@ -185,7 +194,7 @@ export class OrdersController {
   @ApiResponse({ status: 200, description: 'Order found' })
   @ApiResponse({ status: 404, description: 'Order not found' })
   findOne(@Param('id') id: string) {
-    return this.ordersService.findOne(id);
+    return this.ordersService.findOneForView(id);
   }
 
   @Get(':id/profitability')

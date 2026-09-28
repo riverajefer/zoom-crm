@@ -34,7 +34,8 @@ import { useUsers } from '../../users/hooks/useUsers';
 import { QuoteStatusChip, ChangeQuoteStatusDialog } from '../components';
 import { QuoteKanbanBoard } from '../components/kanban/QuoteKanbanBoard';
 import type { Quote, QuoteStatus, FilterQuotesDto } from '../../../types/quote.types';
-import { QuoteStatus as QStatus } from '../../../types/quote.types';
+import { QuoteStatus as QStatus, QUOTE_STATUS_CONFIG, type QuoteLookupItem } from '../../../types/quote.types';
+import { OtherSedesLookupHint } from '../../sedes/components/OtherSedesLookupHint';
 import { ExportDialog } from '../../../components/common/ExportDialog';
 import { fetchAllPages } from '../../../utils/excelExport';
 import { QUOTE_EXPORT_COLUMNS } from '../utils/quoteExportColumns';
@@ -411,6 +412,17 @@ export const QuotesListPage: React.FC = () => {
             serverSideSearch
             searchPlaceholder="Buscar por número o cliente..."
             emptyMessage="No se encontraron cotizaciones"
+          />
+          <OtherSedesLookupHint<QuoteLookupItem>
+            type="COT"
+            search={filters.search}
+            localTotal={quotesQuery.isFetching ? undefined : quotesQuery.data?.meta.total}
+            lookup={quotesApi.lookup}
+            describe={(q) => ({
+              number: q.quoteNumber,
+              detail: `${q.client.name} · ${QUOTE_STATUS_CONFIG[q.status]?.label ?? q.status} · ${formatCurrency(q.total)}`,
+              path: `/quotes/${q.id}`,
+            })}
           />
         </>
       ) : (

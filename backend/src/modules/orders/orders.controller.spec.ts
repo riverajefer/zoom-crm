@@ -10,6 +10,8 @@ import { CanEditOrderGuard } from '../../common/guards/can-edit-order.guard';
 const mockOrdersService = {
   findAll: jest.fn(),
   findOne: jest.fn(),
+  findOneForView: jest.fn(),
+  lookupInOtherLocations: jest.fn(),
   create: jest.fn(),
   update: jest.fn(),
   updateStatus: jest.fn(),
@@ -54,11 +56,19 @@ describe('OrdersController', () => {
     });
   });
 
+  describe('lookup', () => {
+    it('should delegate to ordersService.lookupInOtherLocations', async () => {
+      mockOrdersService.lookupInOtherLocations.mockResolvedValue([]);
+      await controller.lookup({ q: '119-OP' });
+      expect(mockOrdersService.lookupInOtherLocations).toHaveBeenCalledWith('119-OP');
+    });
+  });
+
   describe('findOne', () => {
-    it('should delegate to ordersService.findOne', async () => {
-      mockOrdersService.findOne.mockResolvedValue({ id: 'order-1' });
+    it('should delegate to ordersService.findOneForView', async () => {
+      mockOrdersService.findOneForView.mockResolvedValue({ id: 'order-1' });
       const result = await controller.findOne('order-1');
-      expect(mockOrdersService.findOne).toHaveBeenCalledWith('order-1');
+      expect(mockOrdersService.findOneForView).toHaveBeenCalledWith('order-1');
       expect(result).toEqual({ id: 'order-1' });
     });
   });

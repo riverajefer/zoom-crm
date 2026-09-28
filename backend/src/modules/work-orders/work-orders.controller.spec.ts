@@ -10,6 +10,8 @@ import { WorkOrderStatus } from '../../generated/prisma';
 const mockWorkOrdersService = {
   findAll: jest.fn(),
   findOne: jest.fn(),
+  findOneForView: jest.fn(),
+  lookupInOtherLocations: jest.fn(),
   create: jest.fn(),
   update: jest.fn(),
   updateStatus: jest.fn(),
@@ -68,12 +70,12 @@ describe('WorkOrdersController', () => {
   // findOne
   // ─────────────────────────────────────────
   describe('findOne', () => {
-    it('should delegate to workOrdersService.findOne with id', async () => {
-      mockWorkOrdersService.findOne.mockResolvedValue(mockWorkOrder);
+    it('should delegate to workOrdersService.findOneForView with id', async () => {
+      mockWorkOrdersService.findOneForView.mockResolvedValue(mockWorkOrder);
 
       const result = await controller.findOne('wo-1');
 
-      expect(mockWorkOrdersService.findOne).toHaveBeenCalledWith('wo-1');
+      expect(mockWorkOrdersService.findOneForView).toHaveBeenCalledWith('wo-1');
       expect(result).toEqual(mockWorkOrder);
     });
   });

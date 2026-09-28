@@ -1,6 +1,8 @@
 import axiosInstance from './axios';
+import type { SedeLookupGroup } from '../types/sede.types';
 import type {
   Order,
+  OrderLookupItem,
   OrdersListResponse,
   CreateOrderDto,
   UpdateOrderDto,
@@ -61,6 +63,17 @@ export const ordersApi = {
     const { data } = await axiosInstance.get<OrderAdvisor[]>(
       `${BASE_URL}/advisors`,
     );
+    return data;
+  },
+
+  /**
+   * OP de las otras sedes que coinciden con la búsqueda, agrupadas por sede
+   * (modo consulta, docs/PLAN_SEDES.md §8).
+   */
+  lookup: async (q: string): Promise<SedeLookupGroup<OrderLookupItem>[]> => {
+    const { data } = await axiosInstance.get<SedeLookupGroup<OrderLookupItem>[]>(`${BASE_URL}/lookup`, {
+      params: { q },
+    });
     return data;
   },
 

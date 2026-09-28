@@ -11,7 +11,10 @@ export type OrderAuthEventType =
   | 'PAYMENT_EDIT'
   | 'PAYMENT_VOID'
   | 'EDIT_REQUEST'
-  | 'REFUND';
+  | 'REFUND'
+  // Solo Zoom: anulación / entrega a crédito y cambio de asesor.
+  | 'STATUS_CHANGE'
+  | 'ADVISOR_CHANGE';
 
 export type OrderAuthEventStatus =
   | 'PENDING'
@@ -46,6 +49,8 @@ export interface OrderAuthHistoryEvent {
    * revisión: nadie aprobó nada, alguien lo hizo.
    */
   direct?: boolean;
+  /** Estado al que se pidió o se hizo el cambio (solo `STATUS_CHANGE`). */
+  requestedStatus?: string;
   /**
    * Valor de venta anulado (solo `REFUND`); null si fue un simple saldo a favor.
    * Devolver un excedente y dar de baja un trabajo se leen muy distinto.

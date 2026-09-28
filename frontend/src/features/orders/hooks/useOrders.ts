@@ -104,8 +104,9 @@ export const useOrders = (filters?: FilterOrdersDto) => {
 
   // Mutation: Cambiar estado
   const updateStatusMutation = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: OrderStatus }) =>
-      ordersApi.updateStatus(id, status),
+    // `reason`: obligatorio cuando el admin anula o entrega a crédito directamente.
+    mutationFn: ({ id, status, reason }: { id: string; status: OrderStatus; reason?: string }) =>
+      reason ? ordersApi.updateStatus(id, status, { reason }) : ordersApi.updateStatus(id, status),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ordersKeys.lists() });
       queryClient.invalidateQueries({ queryKey: ordersKeys.dashboardSummaries() });
@@ -193,18 +194,25 @@ export const useOrder = (id: string) => {
   // Mutation: Cambiar estado
   const updateStatusMutation = useMutation({
     // Al anular, `retainedAmount` es lo que se queda la empresa de lo pagado.
+    // `reason`: obligatorio cuando el admin anula o entrega a crédito directamente.
     mutationFn: (
-      change: OrderStatus | { status: OrderStatus; retainedAmount?: number },
+      change:
+        | OrderStatus
+        | { status: OrderStatus; retainedAmount?: number; reason?: string },
     ) =>
       typeof change === 'string'
         ? ordersApi.updateStatus(id, change)
         : ordersApi.updateStatus(id, change.status, {
             retainedAmount: change.retainedAmount,
+            reason: change.reason,
           }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ordersKeys.detail(id) });
       queryClient.invalidateQueries({ queryKey: ordersKeys.lists() });
       queryClient.invalidateQueries({ queryKey: ordersKeys.dashboardSummaries() });
+      // Una anulación o entrega a crédito directa del admin queda en el
+      // historial de autorizaciones (docs/PLAN_SEDES.md §6.3).
+      queryClient.invalidateQueries({ queryKey: ['order-authorization-history', id] });
       enqueueSnackbar('Estado actualizado correctamente', {
         variant: 'success',
       });

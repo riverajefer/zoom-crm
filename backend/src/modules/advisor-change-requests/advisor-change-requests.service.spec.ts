@@ -168,10 +168,24 @@ describe('AdvisorChangeRequestsService', () => {
             reviewedById: 'admin-1',
             currentAdvisorId: 'advisor-old',
             requestedAdvisorId: 'advisor-new',
+            isDirect: true,
           }),
         }),
       );
       expect(result.status).toBe('APPROVED');
+    });
+
+    // Solo Zoom (docs/PLAN_SEDES.md §6.3)
+    it('exige motivo: sin solicitud, es lo único que explica el cambio', async () => {
+      prisma.user.findUnique.mockResolvedValueOnce(ADMIN);
+      await expect(
+        service.changeAdvisorDirectly('admin-1', {
+          orderId: 'order-1',
+          requestedAdvisorId: 'advisor-new',
+          reason: '  ',
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(prisma.order.update).not.toHaveBeenCalled();
     });
 
     it('forbids non-admins', async () => {
@@ -193,6 +207,7 @@ describe('AdvisorChangeRequestsService', () => {
         service.changeAdvisorDirectly('admin-1', {
           orderId: 'order-1',
           requestedAdvisorId: 'advisor-old',
+          reason: 'motivo',
         }),
       ).rejects.toBeInstanceOf(BadRequestException);
     });

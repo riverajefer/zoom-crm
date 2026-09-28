@@ -29,6 +29,8 @@ import {
   Person as PersonIcon,
   CurrencyExchange as CurrencyExchangeIcon,
   ReceiptLong as ReceiptLongIcon,
+  SwapHoriz as SwapHorizIcon,
+  ManageAccounts as ManageAccountsIcon,
 } from '@mui/icons-material';
 import { ordersApi } from '../../../api/orders.api';
 import { storageApi } from '../../../api/storage.api';
@@ -115,7 +117,52 @@ const TYPE_CONFIG: Record<
     icon: <CurrencyExchangeIcon fontSize="small" />,
     verb: 'Solicitó autorización para una devolución',
   },
+  STATUS_CHANGE: {
+    label: 'Cambio de estado',
+    icon: <SwapHorizIcon fontSize="small" />,
+    verb: 'Solicitó autorización para cambiar el estado',
+  },
+  ADVISOR_CHANGE: {
+    label: 'Cambio de asesor',
+    icon: <ManageAccountsIcon fontSize="small" />,
+    verb: 'Solicitó cambiar el asesor',
+  },
 };
+
+/**
+ * Qué se hizo, cuando quien podía aprobar lo hizo sin solicitud (solo Zoom,
+ * docs/PLAN_SEDES.md §6.3). No "solicitó" nada: lo hizo.
+ */
+const directVerb = (event: OrderAuthHistoryEvent): string => {
+  switch (event.type) {
+    case 'PAYMENT_VOID':
+      return 'Anuló un pago';
+    case 'PAYMENT_EDIT':
+      return 'Editó un pago';
+    case 'DISCOUNT':
+      return 'Aplicó un descuento';
+    case 'EDIT_REQUEST':
+      return 'Editó la orden directamente';
+    case 'ADVISOR_CHANGE':
+      return 'Cambió el asesor';
+    case 'STATUS_CHANGE':
+      return event.requestedStatus === 'ANULADO'
+        ? 'Anuló la orden'
+        : event.requestedStatus === 'DELIVERED_ON_CREDIT'
+          ? 'Entregó la orden a crédito'
+          : 'Cambió el estado';
+    default:
+      return TYPE_CONFIG[event.type].verb;
+  }
+};
+
+/** Verbo de una solicitud de cambio de estado, según el estado pedido. */
+const statusRequestVerb = (event: OrderAuthHistoryEvent): string =>
+  event.requestedStatus === 'ANULADO'
+    ? 'Solicitó anular la orden'
+    : event.requestedStatus === 'DELIVERED_ON_CREDIT'
+      ? 'Solicitó entregar la orden a crédito'
+      : TYPE_CONFIG.STATUS_CHANGE.verb;
 
 /**
  * Estado de una devolución tal como se lee.
@@ -290,10 +337,12 @@ export const OrderAuthHistory: React.FC<OrderAuthHistoryProps> = ({
                 event.type === 'PAYMENT_VOID' ||
                 event.type === 'DISCOUNT' ||
                 event.type === 'REFUND');
-            // Caja anulando con la caja abierta no "solicitó" nada: lo hizo.
-            const verbText =
-              event.type === 'PAYMENT_VOID' && event.direct
-                ? 'Anuló un pago'
+            // Caja anulando con la caja abierta, o quien podía aprobar haciéndolo
+            // directamente, no "solicitó" nada: lo hizo.
+            const verbText = event.direct
+              ? directVerb(event)
+              : event.type === 'STATUS_CHANGE'
+                ? statusRequestVerb(event)
                 : typeCfg.verb;
             const titleNode = (
               <>
@@ -312,6 +361,20 @@ export const OrderAuthHistory: React.FC<OrderAuthHistoryProps> = ({
                 {event.type === 'CLIENT_OWNERSHIP' && event.advisor
                   ? ` para ${userName(event.advisor)}`
                   : ''}
+                {event.type === 'ADVISOR_CHANGE' && event.advisor
+                  ? ` a ${userName(event.advisor)}`
+                  : ''}
+                {event.type === 'STATUS_CHANGE' &&
+                  event.requestedStatus === 'ANULADO' &&
+                  event.amount != null &&
+                  parseFloat(event.amount) > 0 && (
+                    <>
+                      {', reteniendo '}
+                      <Box component="span" sx={{ fontWeight: 800, color: 'primary.main' }}>
+                        {formatCurrency(event.amount)}
+                      </Box>
+                    </>
+                  )}
                 {event.type === 'REFUND' && event.reversedAmount && (
                   <>
                     {', anulando '}
@@ -333,6 +396,11 @@ export const OrderAuthHistory: React.FC<OrderAuthHistoryProps> = ({
             if (event.type === 'PAYMENT_VOID' && event.direct) {
               // No hubo revisión: quien lo hizo tenía permiso de anular directo.
               reviewLine = `Anulado sin aprobación — tiene permiso de anulación directa${
+                event.reviewedAt ? ` · ${formatDateTime(event.reviewedAt)}` : ''
+              }`;
+            } else if (event.direct) {
+              // Quien podía aprobar lo hizo sin solicitud: queda con su nombre y el motivo.
+              reviewLine = `Hecho directamente, sin solicitud — ${userName(event.requestedBy)}${
                 event.reviewedAt ? ` · ${formatDateTime(event.reviewedAt)}` : ''
               }`;
             } else if (event.status !== 'PENDING') {

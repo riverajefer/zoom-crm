@@ -72,6 +72,10 @@ const mockStatusChangeRequestsService = {
   findApprovedRequest: jest.fn(),
   consumeApprovedRequest: jest.fn(),
   closePendingRequestsForReachedStatus: jest.fn().mockResolvedValue(0),
+  // Acciones directas del admin (docs/PLAN_SEDES.md §6.3). La exigencia del
+  // motivo se prueba en su servicio; aquí solo devuelve el motivo recibido.
+  assertDirectReason: jest.fn((reason?: string) => reason?.trim() || 'Motivo de prueba'),
+  recordDirectChange: jest.fn().mockResolvedValue({ id: 'direct-1' }),
 };
 
 const mockAdvancePaymentApprovalsService = {
@@ -140,7 +144,7 @@ const mockPrisma = {
   orderDiscount: {
     findUnique: jest.fn(),
     findFirst: jest.fn(),
-    findMany: jest.fn(),
+    findMany: jest.fn().mockResolvedValue([]),
     create: jest.fn(),
     delete: jest.fn(),
   },
@@ -176,10 +180,15 @@ const mockPrisma = {
   advancePaymentApproval: { findMany: jest.fn().mockResolvedValue([]) },
   discountApproval: { findMany: jest.fn().mockResolvedValue([]) },
   clientOwnershipAuthRequest: { findMany: jest.fn().mockResolvedValue([]) },
-  paymentEditApproval: { findMany: jest.fn().mockResolvedValue([]) },
+  paymentEditApproval: {
+    findMany: jest.fn().mockResolvedValue([]),
+    create: jest.fn().mockResolvedValue({ id: 'pea-direct' }),
+  },
   orderEditRequest: { findMany: jest.fn().mockResolvedValue([]) },
   cashMovementVoidRequest: { findMany: jest.fn().mockResolvedValue([]) },
   refundRequest: { findMany: jest.fn().mockResolvedValue([]) },
+  orderStatusChangeRequest: { findMany: jest.fn().mockResolvedValue([]) },
+  advisorChangeRequest: { findMany: jest.fn().mockResolvedValue([]) },
   cashSession: {
     findFirst: jest.fn(),
     findMany: jest.fn(),
@@ -1943,6 +1952,59 @@ describe('OrdersService', () => {
       expect(mockStatusChangeRequestsService.consumeApprovedRequest).not.toHaveBeenCalled();
     });
 
+    // Solo Zoom (docs/PLAN_SEDES.md §6.3): lo que el admin hace sin solicitud
+    // queda registrado como solicitud aprobada, con motivo.
+    it('la anulación directa del admin exige motivo y queda registrada', async () => {
+      mockOrdersRepository.findById
+        .mockResolvedValueOnce(buildOrder({ status: OrderStatus.CONFIRMED }))
+        .mockResolvedValueOnce(buildOrder({ status: OrderStatus.ANULADO }));
+      mockPrisma.order.findUnique.mockResolvedValue(annulMoney());
+      mockStatusChangeRequestsService.requiresAuthorization.mockResolvedValue({ required: false });
+
+      await service.updateStatus('order-1', OrderStatus.ANULADO, 'admin-1', {
+        reason: 'El cliente canceló',
+      });
+
+      expect(mockStatusChangeRequestsService.assertDirectReason).toHaveBeenCalledWith('El cliente canceló');
+      expect(mockStatusChangeRequestsService.recordDirectChange).toHaveBeenCalledWith(
+        expect.objectContaining({
+          orderId: 'order-1',
+          adminId: 'admin-1',
+          currentStatus: OrderStatus.CONFIRMED,
+          requestedStatus: OrderStatus.ANULADO,
+          reason: 'El cliente canceló',
+        }),
+      );
+    });
+
+    it('sin motivo, la anulación directa no anula nada', async () => {
+      mockOrdersRepository.findById.mockResolvedValue(buildOrder({ status: OrderStatus.CONFIRMED }));
+      mockStatusChangeRequestsService.requiresAuthorization.mockResolvedValue({ required: false });
+      mockStatusChangeRequestsService.assertDirectReason.mockImplementationOnce(() => {
+        throw new BadRequestException('Indica el motivo');
+      });
+
+      await expect(
+        service.updateStatus('order-1', OrderStatus.ANULADO, 'admin-1'),
+      ).rejects.toThrow(BadRequestException);
+      expect(mockPrisma.order.update).not.toHaveBeenCalled();
+      expect(mockStatusChangeRequestsService.recordDirectChange).not.toHaveBeenCalled();
+    });
+
+    it('quien anula con una solicitud aprobada no genera un registro directo', async () => {
+      mockOrdersRepository.findById
+        .mockResolvedValueOnce(buildOrder({ status: OrderStatus.CONFIRMED }))
+        .mockResolvedValueOnce(buildOrder({ status: OrderStatus.ANULADO }));
+      mockPrisma.order.findUnique.mockResolvedValue(annulMoney());
+      mockStatusChangeRequestsService.requiresAuthorization.mockResolvedValue({ required: true, reason: 'x' });
+      mockStatusChangeRequestsService.findApprovedRequest.mockResolvedValue({ retainedAmount: null });
+
+      await service.updateStatus('order-1', OrderStatus.ANULADO, 'user-1');
+
+      expect(mockStatusChangeRequestsService.assertDirectReason).not.toHaveBeenCalled();
+      expect(mockStatusChangeRequestsService.recordDirectChange).not.toHaveBeenCalled();
+    });
+
     // Con el descuento por nómina ya aplicado, al empleado ya se le restó el
     // valor: la anulación se bloquea antes de gastar la autorización.
     it('no anula ni consume la autorización si el descuento por nómina ya se aplicó', async () => {
@@ -3350,6 +3412,64 @@ describe('OrdersService', () => {
       mockPrisma.payment.findMany.mockResolvedValue([]);
     });
 
+    // Solo Zoom (docs/PLAN_SEDES.md §6.3)
+    describe('acciones directas', () => {
+      const base = {
+        createdAt: new Date('2026-09-02T10:00:00Z'),
+        reviewedAt: new Date('2026-09-02T10:00:00Z'),
+        reviewNotes: null,
+        requestedBy: user,
+        reviewedBy: user,
+        status: 'APPROVED',
+      };
+
+      it('muestra la anulación directa del admin con su motivo', async () => {
+        mockPrisma.orderStatusChangeRequest.findMany.mockResolvedValueOnce([
+          { ...base, id: 'sc-1', reason: 'El cliente canceló', requestedStatus: 'ANULADO', retainedAmount: new Prisma.Decimal(5000), isDirect: true },
+        ]);
+
+        const [evt] = await service.getAuthorizationHistory('order-1');
+
+        expect(evt).toMatchObject({
+          type: 'STATUS_CHANGE',
+          direct: true,
+          reason: 'El cliente canceló',
+          requestedStatus: 'ANULADO',
+          amount: '5000',
+        });
+      });
+
+      it('muestra el cambio de asesor con el asesor destino', async () => {
+        const target = { ...user, id: 'u2', firstName: 'Luis' };
+        mockPrisma.advisorChangeRequest.findMany.mockResolvedValueOnce([
+          { ...base, id: 'ac-1', reason: 'Cambió de sede', requestedAdvisor: target, isDirect: true },
+        ]);
+
+        const [evt] = await service.getAuthorizationHistory('order-1');
+
+        expect(evt).toMatchObject({ type: 'ADVISOR_CHANGE', direct: true, advisor: target });
+      });
+
+      it('sintetiza el descuento aplicado sin solicitud', async () => {
+        mockPrisma.orderDiscount.findMany.mockResolvedValueOnce([
+          { id: 'd-1', amount: new Prisma.Decimal(20000), reason: 'Cliente frecuente', createdAt: base.createdAt, appliedBy: user },
+        ]);
+
+        const [evt] = await service.getAuthorizationHistory('order-1');
+
+        expect(evt).toMatchObject({
+          id: 'discount-direct-d-1',
+          type: 'DISCOUNT',
+          direct: true,
+          reason: 'Cliente frecuente',
+          reviewedBy: null,
+        });
+        expect(mockPrisma.orderDiscount.findMany).toHaveBeenCalledWith(
+          expect.objectContaining({ where: { orderId: 'order-1', approvals: { none: {} } } }),
+        );
+      });
+    });
+
     it('incluye la solicitud de anulación con su monto', async () => {
       mockPrisma.cashMovementVoidRequest.findMany.mockResolvedValue([
         {
@@ -3729,6 +3849,47 @@ describe('OrdersService', () => {
         (c: any) => c[0].data.paidAmount !== undefined,
       )[0];
       expect(Number(orderUpdate.data.paidAmount.toString())).toBe(107000);
+    });
+
+    it('la edición directa queda registrada como solicitud aprobada, con el antes y el después', async () => {
+      mockPaymentEditApprovalsService.requiresApproval.mockResolvedValue({ required: false });
+      mockPrisma.$transaction.mockImplementation((fn: any) => fn(mockPrisma));
+      mockPrisma.payment.findFirst.mockResolvedValue({
+        id: 'pay-1',
+        receiptFileId: null,
+        paymentMethod: 'CASH',
+        amount: new Prisma.Decimal(100000),
+        paymentDate: new Date('2026-09-20'),
+        reference: null,
+        notes: null,
+        bankEntity: null,
+      });
+      mockPrisma.payment.update.mockResolvedValue({
+        id: 'pay-1',
+        amount: new Prisma.Decimal(107000),
+        paymentMethod: 'TRANSFER',
+        cashMovementId: null,
+      });
+      mockPrisma.payment.findMany.mockResolvedValue([{ amount: new Prisma.Decimal(107000) }]);
+
+      await service.updatePayment(
+        'order-1',
+        'pay-1',
+        { amount: 107000, paymentMethod: 'TRANSFER', reason: ' Error de digitación ' } as any,
+        'caja-1',
+      );
+
+      expect(mockPrisma.paymentEditApproval.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          requestedById: 'caja-1',
+          reviewedById: 'caja-1',
+          status: 'APPROVED',
+          isDirect: true,
+          reason: 'Error de digitación',
+          oldPaymentMethod: 'CASH',
+          newPaymentMethod: 'TRANSFER',
+        }),
+      });
     });
 
     // El saldo a favor nunca genera movimiento de caja: ese dinero ya entró

@@ -560,9 +560,10 @@ export const OrderFormPage: React.FC = () => {
   useEffect(() => {
     if (isEdit && orderQuery.data) {
       const order = orderQuery.data;
+      // El admin también necesita una ventana abierta: la abre con un motivo
+      // desde el detalle de la orden (docs/PLAN_SEDES.md §6.3).
       const canEdit =
         order.status === 'DRAFT' ||
-        isAdmin ||
         activePermissionQuery.data !== null;
 
       if (!canEdit) {

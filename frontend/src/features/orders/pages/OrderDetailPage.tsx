@@ -111,6 +111,7 @@ import VoidPaymentDialog from '../components/VoidPaymentDialog';
 import { AdvancePaymentApprovalBadge } from '../components/AdvancePaymentApprovalBadge';
 import { StatusChangeAuthRequestDialog } from '../components/StatusChangeAuthRequestDialog';
 import { AnnulOrderDialog } from '../components/AnnulOrderDialog';
+import { DirectActionReasonDialog } from '../../../components/common/DirectActionReasonDialog';
 import { getAnnulmentAmounts } from '../utils/annulment';
 import { OrderChangeHistoryTab } from '../components/OrderChangeHistoryTab';
 import { OrderAuthHistory } from '../components/OrderAuthHistory';
@@ -312,6 +313,10 @@ export const OrderDetailPage: React.FC = () => {
   const [statusAuthDialogOpen, setStatusAuthDialogOpen] = useState(false);
   const [pendingStatus, setPendingStatus] = useState<OrderStatus | null>(null);
   const [annulDialogOpen, setAnnulDialogOpen] = useState(false);
+  // Acciones directas del admin: piden motivo (docs/PLAN_SEDES.md §6.3)
+  const [directStatus, setDirectStatus] = useState<OrderStatus | null>(null);
+  const [directEditOpen, setDirectEditOpen] = useState(false);
+  const [directEditLoading, setDirectEditLoading] = useState(false);
 
   // ── Cola de aprobación ("revisar y siguiente") ────────────────────────────
   // Las bandejas de Edición de Orden y Propiedad Cliente no tienen botón de
@@ -572,6 +577,14 @@ export const OrderDetailPage: React.FC = () => {
       return;
     }
 
+    // A los demás anular o entregar a crédito les exige una solicitud; el admin
+    // lo hace directo, pero con motivo, que queda en el historial.
+    if (isAdmin && (newStatus === 'ANULADO' || newStatus === 'DELIVERED_ON_CREDIT')) {
+      handleMenuClose();
+      setDirectStatus(newStatus);
+      return;
+    }
+
     try {
       await updateStatusMutation.mutateAsync(newStatus);
       handleMenuClose();
@@ -586,6 +599,31 @@ export const OrderDetailPage: React.FC = () => {
         }
       }
       // Otros errores ya se manejan en el hook
+    }
+  };
+
+  // Orden bloqueada: el admin edita directo, pero abre la edición con un motivo.
+  // Si ya tiene una ventana abierta, entra sin volver a pedirlo.
+  const handleEditClick = async () => {
+    if (!isAdmin || order.status === 'DRAFT') {
+      navigate(`/orders/${id}/edit`);
+      return;
+    }
+    const active = await editRequestsApi.getActivePermission(id!).catch(() => null);
+    if (active) navigate(`/orders/${id}/edit`);
+    else setDirectEditOpen(true);
+  };
+
+  const handleDirectEdit = async (reason: string) => {
+    setDirectEditLoading(true);
+    try {
+      await editRequestsApi.createDirect(id!, reason);
+      // El permiso activo quedó en caché como "ninguno": sin invalidarlo, la
+      // página de edición no lo vuelve a pedir y la ventana no arranca.
+      await queryClient.invalidateQueries({ queryKey: ['edit-requests', id] });
+      navigate(`/orders/${id}/edit`);
+    } finally {
+      setDirectEditLoading(false);
     }
   };
 
@@ -1239,7 +1277,7 @@ export const OrderDetailPage: React.FC = () => {
             <ToolbarButton
               icon={<EditIcon />}
               label='Editar'
-              onClick={() => navigate(`/orders/${id}/edit`)}
+              onClick={handleEditClick}
               tooltip='Editar Orden'
             />
           )}
@@ -3675,9 +3713,42 @@ export const OrderDetailPage: React.FC = () => {
         orderNumber={order.orderNumber}
         amounts={annulmentAmounts}
         loading={updateStatusMutation.isPending}
-        onConfirm={(retainedAmount) =>
-          updateStatusMutation.mutateAsync({ status: 'ANULADO', retainedAmount })
+        onConfirm={(retainedAmount, reason) =>
+          updateStatusMutation.mutateAsync({ status: 'ANULADO', retainedAmount, reason })
         }
+      />
+
+      {/* Dialog: anular o entregar a crédito directamente (admin), con motivo */}
+      <DirectActionReasonDialog
+        open={directStatus !== null}
+        title={
+          directStatus === 'ANULADO'
+            ? `Anular la orden ${order.orderNumber}`
+            : `Entregar a crédito la orden ${order.orderNumber}`
+        }
+        description={
+          directStatus === 'ANULADO'
+            ? 'La anulación es definitiva: la orden no admite más cambios ni pagos.'
+            : 'La orden se entrega con saldo pendiente.'
+        }
+        confirmLabel={directStatus === 'ANULADO' ? 'Anular orden' : 'Entregar a crédito'}
+        confirmColor={directStatus === 'ANULADO' ? 'error' : 'primary'}
+        loading={updateStatusMutation.isPending}
+        onClose={() => setDirectStatus(null)}
+        onConfirm={(reason) =>
+          updateStatusMutation.mutateAsync({ status: directStatus!, reason })
+        }
+      />
+
+      {/* Dialog: editar una orden bloqueada (admin), con motivo */}
+      <DirectActionReasonDialog
+        open={directEditOpen}
+        title={`Editar la orden ${order.orderNumber}`}
+        description='La orden ya no está en borrador. Tendrás 30 minutos para editarla desde que entres.'
+        confirmLabel='Editar orden'
+        loading={directEditLoading}
+        onClose={() => setDirectEditOpen(false)}
+        onConfirm={handleDirectEdit}
       />
 
       {/* Dialog: Solicitar Autorización de Cambio de Estado */}

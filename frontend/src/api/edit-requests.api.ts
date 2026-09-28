@@ -68,6 +68,18 @@ export const editRequestsApi = {
   },
 
   /**
+   * El admin abre la edición de una orden bloqueada con un motivo. Queda como
+   * solicitud aprobada directamente (docs/PLAN_SEDES.md §6.3).
+   */
+  createDirect: async (orderId: string, observations: string) => {
+    const { data } = await axiosInstance.post<OrderEditRequest>(
+      `/orders/${orderId}/edit-requests/direct`,
+      { observations },
+    );
+    return data;
+  },
+
+  /**
    * Obtener permiso activo del usuario actual
    */
   getActivePermission: async (orderId: string) => {

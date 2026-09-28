@@ -58,6 +58,7 @@ import {
   getDaysSince,
 } from '../utils/orderFormatters';
 import { useAuthStore } from '../../../store/authStore';
+import { DirectActionReasonDialog } from '../../../components/common/DirectActionReasonDialog';
 import { PERMISSIONS, ROUTES } from '../../../utils/constants';
 import type {
   Order,
@@ -195,7 +196,10 @@ export const OrdersListPage: React.FC = () => {
   );
   const [exportOpen, setExportOpen] = useState(false);
 
-  const { hasPermission } = useAuthStore();
+  const { hasPermission, user } = useAuthStore();
+  const isAdmin = user?.role?.name === 'admin';
+  // Anular o entregar a crédito directamente (admin): con motivo (docs/PLAN_SEDES.md §6.3)
+  const [directChange, setDirectChange] = useState<{ order: Order; status: OrderStatus } | null>(null);
   const canExport = hasPermission(PERMISSIONS.EXPORT_ORDERS);
 
   // Queries
@@ -259,6 +263,11 @@ export const OrdersListPage: React.FC = () => {
 
   const handleChangeStatus = async (newStatus: OrderStatus) => {
     if (!changeStatusOrder) return;
+
+    if (isAdmin && (newStatus === 'ANULADO' || newStatus === 'DELIVERED_ON_CREDIT')) {
+      setDirectChange({ order: changeStatusOrder, status: newStatus });
+      return;
+    }
 
     try {
       await updateStatusMutation.mutateAsync({
@@ -992,6 +1001,31 @@ export const OrdersListPage: React.FC = () => {
         onClose={() => setChangeStatusOrder(null)}
         onConfirm={handleChangeStatus}
         isLoading={updateStatusMutation.isPending}
+      />
+
+      <DirectActionReasonDialog
+        open={directChange !== null}
+        title={
+          directChange?.status === 'ANULADO'
+            ? `Anular la orden ${directChange?.order.orderNumber}`
+            : `Entregar a crédito la orden ${directChange?.order.orderNumber}`
+        }
+        description={
+          directChange?.status === 'ANULADO'
+            ? 'La anulación es definitiva. Si la orden tiene pagos, anúlala desde su detalle para decidir cuánto retiene la empresa.'
+            : 'La orden se entrega con saldo pendiente.'
+        }
+        confirmLabel={directChange?.status === 'ANULADO' ? 'Anular orden' : 'Entregar a crédito'}
+        confirmColor={directChange?.status === 'ANULADO' ? 'error' : 'primary'}
+        loading={updateStatusMutation.isPending}
+        onClose={() => setDirectChange(null)}
+        onConfirm={(reason) =>
+          updateStatusMutation.mutateAsync({
+            id: directChange!.order.id,
+            status: directChange!.status,
+            reason,
+          })
+        }
       />
 
       {/* Export to Excel Dialog */}

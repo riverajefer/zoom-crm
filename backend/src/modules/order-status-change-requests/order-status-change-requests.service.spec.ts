@@ -666,4 +666,35 @@ describe('OrderStatusChangeRequestsService', () => {
       );
     });
   });
+
+  // Solo Zoom (docs/PLAN_SEDES.md §6.3)
+  describe('acciones directas del admin', () => {
+    it('assertDirectReason exige un motivo no vacío', () => {
+      expect(() => service.assertDirectReason(undefined)).toThrow(BadRequestException);
+      expect(() => service.assertDirectReason('   ')).toThrow(BadRequestException);
+      expect(service.assertDirectReason('  Cliente canceló ')).toBe('Cliente canceló');
+    });
+
+    it('recordDirectChange registra una solicitud ya aprobada por el mismo admin', async () => {
+      prisma.orderStatusChangeRequest.create.mockResolvedValue({ id: 'direct-1' });
+
+      await service.recordDirectChange({
+        orderId: 'order-1',
+        adminId: 'admin-1',
+        currentStatus: OrderStatus.CONFIRMED,
+        requestedStatus: OrderStatus.DELIVERED_ON_CREDIT,
+        reason: 'Cliente de confianza',
+      });
+
+      expect(prisma.orderStatusChangeRequest.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          requestedById: 'admin-1',
+          reviewedById: 'admin-1',
+          status: EditRequestStatus.APPROVED,
+          isDirect: true,
+          reason: 'Cliente de confianza',
+        }),
+      });
+    });
+  });
 });

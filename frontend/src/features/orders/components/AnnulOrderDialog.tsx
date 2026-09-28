@@ -7,6 +7,7 @@ import {
   DialogContent,
   DialogTitle,
   Stack,
+  TextField,
 } from '@mui/material';
 import { LoadingButton } from '../../../components/common/LoadingButton';
 import { useSingleFlight } from '../../../hooks/useSingleFlight';
@@ -23,7 +24,8 @@ interface AnnulOrderDialogProps {
   orderNumber: string;
   amounts: AnnulmentAmounts;
   loading: boolean;
-  onConfirm: (retainedAmount: number) => Promise<unknown>;
+  /** `reason`: el motivo queda registrado como una anulación hecha directamente. */
+  onConfirm: (retainedAmount: number, reason: string) => Promise<unknown>;
 }
 
 /**
@@ -40,18 +42,21 @@ export const AnnulOrderDialog: React.FC<AnnulOrderDialogProps> = ({
   onConfirm,
 }) => {
   const [retained, setRetained] = useState('');
-  const invalid = isRetainedAmountInvalid(retained, amounts);
+  const [reason, setReason] = useState('');
+  const invalid = isRetainedAmountInvalid(retained, amounts) || reason.trim().length === 0;
 
   const handleClose = () => {
     if (loading) return;
     setRetained('');
+    setReason('');
     onClose();
   };
 
   const handleConfirm = useSingleFlight(async () => {
     if (invalid) return;
-    await onConfirm(parseRetainedAmount(retained));
+    await onConfirm(parseRetainedAmount(retained), reason.trim());
     setRetained('');
+    setReason('');
     onClose();
   });
 
@@ -67,6 +72,16 @@ export const AnnulOrderDialog: React.FC<AnnulOrderDialogProps> = ({
             amounts={amounts}
             value={retained}
             onChange={setRetained}
+            disabled={loading}
+          />
+          <TextField
+            label='Motivo'
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            helperText='Obligatorio. Queda en el historial de la orden como una anulación hecha directamente.'
+            multiline
+            minRows={2}
+            inputProps={{ maxLength: 500 }}
             disabled={loading}
           />
         </Stack>

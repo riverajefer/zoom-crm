@@ -115,23 +115,28 @@ describe('CanEditOrderGuard', () => {
   // ---------------------------------------------------------------------------
   // admin user
   // ---------------------------------------------------------------------------
+  // Solo Zoom (docs/PLAN_SEDES.md §6.3): el admin ya no pasa directo. Abre la
+  // edición con un motivo, que queda como solicitud aprobada, y desde ahí pasa
+  // como cualquiera con permiso activo.
   describe('when the user is an admin', () => {
-    it('should return true without checking edit permissions', async () => {
+    it('passes once he opened the edit with a reason (active permission)', async () => {
       prisma.role.findUnique.mockResolvedValue(mockAdminRole);
+      mockOrderEditRequestsService.hasActivePermission.mockResolvedValue(true);
       const ctx = makeContext({ id: 'order-1' }, mockAdminUser);
 
-      const result = await guard.canActivate(ctx);
-
-      expect(result).toBe(true);
-      expect(mockOrderEditRequestsService.hasActivePermission).not.toHaveBeenCalled();
+      await expect(guard.canActivate(ctx)).resolves.toBe(true);
+      expect(mockOrderEditRequestsService.hasActivePermission).toHaveBeenCalledWith(
+        'order-1',
+        mockAdminUser.id,
+      );
     });
 
-    it('should look up the role using user.roleId', async () => {
+    it('without an open edit is 403 asking for the reason', async () => {
       prisma.role.findUnique.mockResolvedValue(mockAdminRole);
+      mockOrderEditRequestsService.hasActivePermission.mockResolvedValue(false);
       const ctx = makeContext({ id: 'order-1' }, mockAdminUser);
 
-      await guard.canActivate(ctx);
-
+      await expect(guard.canActivate(ctx)).rejects.toThrow(/indica el motivo/);
       expect(prisma.role.findUnique).toHaveBeenCalledWith({
         where: { id: 'role-admin' },
         select: { name: true },

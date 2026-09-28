@@ -562,6 +562,47 @@ export class OrderStatusChangeRequestsService implements OnModuleInit, ApprovalR
   }
 
   /**
+   * El admin anula o entrega a crédito sin pedir permiso: a los demás esos
+   * cambios les exigen una solicitud. Se valida el motivo ANTES de aplicar el
+   * cambio, y después se registra como solicitud ya aprobada (`isDirect`) para
+   * que aparezca en el historial igual que las demás. Ver docs/PLAN_SEDES.md §6.3.
+   */
+  assertDirectReason(reason: string | undefined): string {
+    const trimmed = reason?.trim();
+    if (!trimmed) {
+      throw new BadRequestException(
+        'Indica el motivo: el cambio queda registrado como una autorización hecha directamente',
+      );
+    }
+    return trimmed;
+  }
+
+  async recordDirectChange(params: {
+    orderId: string;
+    adminId: string;
+    currentStatus: OrderStatus;
+    requestedStatus: OrderStatus;
+    reason: string;
+    retainedAmount?: Prisma.Decimal;
+  }) {
+    const now = new Date();
+    return this.prisma.orderStatusChangeRequest.create({
+      data: {
+        orderId: params.orderId,
+        requestedById: params.adminId,
+        currentStatus: params.currentStatus,
+        requestedStatus: params.requestedStatus,
+        reason: params.reason,
+        retainedAmount: params.retainedAmount,
+        status: EditRequestStatus.APPROVED,
+        reviewedById: params.adminId,
+        reviewedAt: now,
+        isDirect: true,
+      },
+    });
+  }
+
+  /**
    * Cierra las solicitudes que pedían justamente el estado al que la orden acaba
    * de llegar. Se llama cuando el cambio se hizo por fuera de la solicitud.
    *

@@ -240,6 +240,7 @@ export class OrdersController {
   ) {
     return this.ordersService.updateStatus(id, updateStatusDto.status, userId, {
       retainedAmount: updateStatusDto.retainedAmount,
+      reason: updateStatusDto.reason,
     });
   }
 

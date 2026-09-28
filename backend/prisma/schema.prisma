@@ -1073,6 +1073,9 @@ model OrderEditRequest {
   reviewedById String?   @map("reviewed_by_id")
   reviewedAt   DateTime? @map("reviewed_at")
   reviewNotes  String?   @map("review_notes")
+  // Solo Zoom: la hizo directamente quien podía aprobarla, sin pedir permiso.
+  // Queda como solicitud aprobada para que se vea igual que las demás.
+  isDirect     Boolean   @default(false) @map("is_direct")
 
   // Permiso temporal (5 minutos)
   expiresAt DateTime? @map("expires_at")
@@ -1127,6 +1130,9 @@ model OrderStatusChangeRequest {
   reviewedById String?   @map("reviewed_by_id")
   reviewedAt   DateTime? @map("reviewed_at")
   reviewNotes  String?   @map("review_notes")
+  // Solo Zoom: la hizo directamente quien podía aprobarla, sin pedir permiso.
+  // Queda como solicitud aprobada para que se vea igual que las demás.
+  isDirect     Boolean   @default(false) @map("is_direct")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -1155,6 +1161,9 @@ model AdvisorChangeRequest {
   reviewedById String?   @map("reviewed_by_id")
   reviewedAt   DateTime? @map("reviewed_at")
   reviewNotes  String?   @map("review_notes")
+  // Solo Zoom: la hizo directamente quien podía aprobarla, sin pedir permiso.
+  // Queda como solicitud aprobada para que se vea igual que las demás.
+  isDirect     Boolean   @default(false) @map("is_direct")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -1190,6 +1199,9 @@ model QuoteRestoreRequest {
   reviewedById String?   @map("reviewed_by_id")
   reviewedAt   DateTime? @map("reviewed_at")
   reviewNotes  String?   @map("review_notes")
+  // Solo Zoom: la hizo directamente quien podía aprobarla, sin pedir permiso.
+  // Queda como solicitud aprobada para que se vea igual que las demás.
+  isDirect     Boolean   @default(false) @map("is_direct")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -1713,6 +1725,9 @@ model PaymentEditApproval {
   reviewedById String?           @map("reviewed_by_id")
   reviewedAt   DateTime?         @map("reviewed_at")
   reviewNotes  String?           @map("review_notes")
+  // Solo Zoom: la hizo directamente quien podía aprobarla, sin pedir permiso.
+  // Queda como solicitud aprobada para que se vea igual que las demás.
+  isDirect     Boolean           @default(false) @map("is_direct")
   createdAt    DateTime          @default(now()) @map("created_at")
   updatedAt    DateTime          @updatedAt @map("updated_at")
 

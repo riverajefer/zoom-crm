@@ -291,6 +291,7 @@ export class QuoteRestoreRequestsService
           reviewedById: adminId,
           reviewedAt: now,
           reviewNotes: 'Restauración directa realizada por un administrador',
+          isDirect: true,
         },
         include: requestInclude,
       });

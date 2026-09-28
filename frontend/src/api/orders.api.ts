@@ -97,7 +97,8 @@ export const ordersApi = {
   updateStatus: async (
     id: string,
     status: OrderStatus,
-    options: { retainedAmount?: number } = {},
+    // `reason`: obligatorio cuando el admin anula o entrega a crédito directamente.
+    options: { retainedAmount?: number; reason?: string } = {},
   ): Promise<Order> => {
     const { data } = await axiosInstance.put<Order>(`${BASE_URL}/${id}/status`, {
       status,

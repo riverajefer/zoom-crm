@@ -16,7 +16,15 @@ import {
   ApprovalRequestRegistry,
 } from '../whatsapp/approval-request-registry';
 import { CreateEditRequestDto, ReviewEditRequestDto } from './dto';
-import { EditRequestStatus, NotificationType } from '../../generated/prisma';
+import { EditRequestStatus, NotificationType, OrderStatus } from '../../generated/prisma';
+
+/**
+ * Ventana de edición desde que se entra a la orden: 5 minutos con una
+ * solicitud aprobada, 30 cuando el admin edita directamente (§6.3).
+ */
+function editWindowMs(isDirect: boolean): number {
+  return (isDirect ? 30 : 5) * 60 * 1000;
+}
 
 @Injectable()
 export class OrderEditRequestsService implements OnModuleInit, ApprovalRequestHandler {
@@ -99,6 +107,56 @@ export class OrderEditRequestsService implements OnModuleInit, ApprovalRequestHa
   }
 
   // ─── Domain methods ───
+
+  /**
+   * El admin edita una orden bloqueada sin pedir permiso: se registra como una
+   * solicitud ya aprobada (`isDirect`), con motivo, que abre la misma ventana
+   * de edición que una aprobación (más larga: es quien decide). Sin esto su
+   * edición solo quedaba en `audit_logs`. Ver docs/PLAN_SEDES.md §6.3.
+   */
+  async createDirect(orderId: string, adminId: string, dto: CreateEditRequestDto) {
+    const [order, admin] = await Promise.all([
+      this.prisma.order.findUnique({ where: { id: orderId }, select: { id: true, status: true } }),
+      this.prisma.user.findUnique({ where: { id: adminId }, include: { role: true } }),
+    ]);
+
+    if (!order) {
+      throw new NotFoundException(`Order with id ${orderId} not found`);
+    }
+    if (admin?.role?.name !== 'admin') {
+      throw new ForbiddenException('Solo el administrador edita una orden sin solicitud');
+    }
+    if (order.status === OrderStatus.DRAFT || order.status === OrderStatus.ANULADO) {
+      throw new BadRequestException(
+        order.status === OrderStatus.DRAFT
+          ? 'Una orden en borrador se edita sin permiso'
+          : 'Una orden anulada no se puede editar',
+      );
+    }
+
+    const observations = dto.observations?.trim();
+    if (!observations) {
+      throw new BadRequestException('Indica el motivo de la edición');
+    }
+
+    // Si ya tiene una ventana abierta, no se duplica el registro.
+    const active = await this.getActivePermission(orderId, adminId);
+    if (active) return active;
+
+    const now = new Date();
+    return this.prisma.orderEditRequest.create({
+      data: {
+        orderId,
+        requestedById: adminId,
+        observations,
+        status: EditRequestStatus.APPROVED,
+        reviewedById: adminId,
+        reviewedAt: now,
+        isDirect: true,
+        expiresAt: null,
+      },
+    });
+  }
 
   /**
    * Crear solicitud de edición
@@ -423,7 +481,7 @@ export class OrderEditRequestsService implements OnModuleInit, ApprovalRequestHa
 
     if (activeRequest && !activeRequest.expiresAt) {
       // Activar temporizador de ser necesario en este primer uso
-      const expiresAt = new Date(now.getTime() + 5 * 60 * 1000); // 5 minutos
+      const expiresAt = new Date(now.getTime() + editWindowMs(activeRequest.isDirect));
       await this.prisma.orderEditRequest.update({
         where: { id: activeRequest.id },
         data: { expiresAt },
@@ -463,7 +521,7 @@ export class OrderEditRequestsService implements OnModuleInit, ApprovalRequestHa
 
     if (request && !request.expiresAt) {
       // Activar el temporizador ahora que el usuario ingresó a la orden
-      const expiresAt = new Date(now.getTime() + 5 * 60 * 1000); // 5 minutos
+      const expiresAt = new Date(now.getTime() + editWindowMs(request.isDirect));
       return this.prisma.orderEditRequest.update({
         where: { id: request.id },
         data: { expiresAt },

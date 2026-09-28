@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsNumber, IsOptional, Min } from 'class-validator';
+import { IsEnum, IsNumber, IsOptional, IsString, MaxLength, Min } from 'class-validator';
 import { OrderStatus } from '../../../generated/prisma';
 
 export class UpdateOrderStatusDto {
@@ -22,4 +22,16 @@ export class UpdateOrderStatusDto {
   @IsNumber()
   @Min(0)
   retainedAmount?: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Motivo. Obligatorio cuando el admin anula o entrega a crédito directamente ' +
+      '(a los demás esos cambios les exigen una solicitud): queda registrado como ' +
+      'una autorización hecha directamente.',
+    example: 'El cliente canceló el pedido por teléfono',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  reason?: string;
 }

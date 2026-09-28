@@ -451,4 +451,84 @@ describe('OrderEditRequestsService', () => {
       );
     });
   });
+
+  // Solo Zoom (docs/PLAN_SEDES.md §6.3)
+  describe('createDirect (edición directa del admin)', () => {
+    it('registra una solicitud aprobada con el motivo', async () => {
+      prisma.order.findUnique.mockResolvedValue(mockOrder);
+      prisma.user.findUnique.mockResolvedValue(mockAdminUser);
+      prisma.orderEditRequest.findFirst.mockResolvedValue(null);
+      prisma.orderEditRequest.create.mockResolvedValue({ id: 'direct-1' });
+
+      await service.createDirect('order-1', 'admin-1', { observations: ' Corregir cantidades ' });
+
+      expect(prisma.orderEditRequest.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          orderId: 'order-1',
+          requestedById: 'admin-1',
+          reviewedById: 'admin-1',
+          observations: 'Corregir cantidades',
+          status: EditRequestStatus.APPROVED,
+          isDirect: true,
+          expiresAt: null,
+        }),
+      });
+    });
+
+    it('solo el admin', async () => {
+      prisma.order.findUnique.mockResolvedValue(mockOrder);
+      prisma.user.findUnique.mockResolvedValue(mockNonAdminUser);
+
+      await expect(
+        service.createDirect('order-1', 'user-1', { observations: 'x' }),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('exige motivo', async () => {
+      prisma.order.findUnique.mockResolvedValue(mockOrder);
+      prisma.user.findUnique.mockResolvedValue(mockAdminUser);
+
+      await expect(
+        service.createDirect('order-1', 'admin-1', { observations: '   ' }),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.orderEditRequest.create).not.toHaveBeenCalled();
+    });
+
+    it('no aplica a borradores ni a órdenes anuladas', async () => {
+      prisma.user.findUnique.mockResolvedValue(mockAdminUser);
+      for (const status of ['DRAFT', 'ANULADO']) {
+        prisma.order.findUnique.mockResolvedValueOnce({ ...mockOrder, status });
+        await expect(
+          service.createDirect('order-1', 'admin-1', { observations: 'motivo' }),
+        ).rejects.toThrow(BadRequestException);
+      }
+    });
+
+    it('con una ventana abierta no duplica el registro', async () => {
+      prisma.order.findUnique.mockResolvedValue(mockOrder);
+      prisma.user.findUnique.mockResolvedValue(mockAdminUser);
+      const open = { id: 'direct-0', expiresAt: new Date(Date.now() + 60_000), isDirect: true };
+      prisma.orderEditRequest.findFirst.mockResolvedValue(open);
+
+      const result = await service.createDirect('order-1', 'admin-1', { observations: 'motivo' });
+
+      expect(result).toBe(open);
+      expect(prisma.orderEditRequest.create).not.toHaveBeenCalled();
+    });
+
+    it('la ventana de una edición directa es de 30 minutos (5 con solicitud)', async () => {
+      const before = Date.now();
+      prisma.orderEditRequest.findFirst.mockResolvedValueOnce({ id: 'd', expiresAt: null, isDirect: true });
+      prisma.orderEditRequest.update.mockResolvedValue({});
+      await service.hasActivePermission('order-1', 'admin-1');
+      const directExpiry = prisma.orderEditRequest.update.mock.calls[0][0].data.expiresAt.getTime();
+
+      prisma.orderEditRequest.findFirst.mockResolvedValueOnce({ id: 'n', expiresAt: null, isDirect: false });
+      await service.hasActivePermission('order-1', 'user-1');
+      const normalExpiry = prisma.orderEditRequest.update.mock.calls[1][0].data.expiresAt.getTime();
+
+      expect(directExpiry - before).toBeGreaterThanOrEqual(30 * 60 * 1000);
+      expect(normalExpiry - before).toBeLessThan(6 * 60 * 1000);
+    });
+  });
 });

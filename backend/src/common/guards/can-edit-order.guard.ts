@@ -39,16 +39,9 @@ export class CanEditOrderGuard implements CanActivate {
       return true;
     }
 
-    // Si es admin, permitir (JwtStrategy no incluye role.name, así que se busca por roleId)
-    const role = await this.prisma.role.findUnique({
-      where: { id: user.roleId },
-      select: { name: true },
-    });
-    if (role?.name === 'admin') {
-      return true;
-    }
-
-    // Si NO es admin y orden bloqueada, verificar permiso temporal
+    // Orden bloqueada: hace falta un permiso temporal. El admin ya no pasa
+    // directo: abre la edición con un motivo (POST .../edit-requests/direct), que
+    // queda registrado como solicitud aprobada (docs/PLAN_SEDES.md §6.3).
     const hasPermission =
       await this.orderEditRequestsService.hasActivePermission(
         orderId,
@@ -56,8 +49,15 @@ export class CanEditOrderGuard implements CanActivate {
       );
 
     if (!hasPermission) {
+      // JwtStrategy no incluye role.name, así que se busca por roleId
+      const role = await this.prisma.role.findUnique({
+        where: { id: user.roleId },
+        select: { name: true },
+      });
       throw new ForbiddenException(
-        'No tienes permiso para editar esta orden. Solicita permiso al administrador.',
+        role?.name === 'admin'
+          ? 'Para editar esta orden indica el motivo: queda registrado.'
+          : 'No tienes permiso para editar esta orden. Solicita permiso al administrador.',
       );
     }
 

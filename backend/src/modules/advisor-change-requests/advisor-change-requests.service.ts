@@ -242,6 +242,13 @@ export class AdvisorChangeRequestsService
   ) {
     await this.assertAdmin(adminId);
 
+    // Sin solicitud de por medio, el motivo es lo único que explica el cambio
+    // (docs/PLAN_SEDES.md §6.3).
+    const reason = dto.reason?.trim();
+    if (!reason) {
+      throw new BadRequestException('Indica el motivo del cambio de asesor');
+    }
+
     const order = await this.prisma.order.findUnique({
       where: { id: dto.orderId },
       select: { id: true, orderNumber: true, createdById: true },
@@ -288,11 +295,12 @@ export class AdvisorChangeRequestsService
           requestedById: adminId,
           currentAdvisorId: order.createdById,
           requestedAdvisorId: dto.requestedAdvisorId,
-          reason: dto.reason,
+          reason,
           status: EditRequestStatus.APPROVED,
           reviewedById: adminId,
           reviewedAt: now,
           reviewNotes: 'Cambio directo realizado por un administrador',
+          isDirect: true,
         },
         include: {
           requestedBy: { select: userSelect },

@@ -89,7 +89,11 @@ export interface AuthorizationHistoryEvent {
     | 'PAYMENT_EDIT'
     | 'PAYMENT_VOID'
     | 'EDIT_REQUEST'
-    | 'REFUND';
+    | 'REFUND'
+    // Solo Zoom: se suman al historial para que las acciones directas del
+    // admin (anular, entregar a crédito, cambiar asesor) tengan dónde verse.
+    | 'STATUS_CHANGE'
+    | 'ADVISOR_CHANGE';
   status: EditRequestStatus;
   reason: string | null;
   /** Monto asociado (anticipo, descuento, edición de pago); null si no aplica. */
@@ -102,11 +106,14 @@ export interface AuthorizationHistoryEvent {
   requestedBy: AuthHistoryUser;
   reviewedBy: AuthHistoryUser | null;
   /**
-   * El evento se ejecutó sin pasar por aprobación (solo `PAYMENT_VOID`): Caja o
-   * Contabilidad anulando con la caja abierta. Sin esta marca el timeline diría
+   * El evento se ejecutó sin pasar por aprobación: Caja o Contabilidad anulando
+   * con la caja abierta, o (solo Zoom, docs/PLAN_SEDES.md §6.3) quien podía
+   * aprobar haciéndolo directamente. Sin esta marca el timeline diría
    * "Aprobada por X" sobre algo que nadie aprobó.
    */
   direct?: boolean;
+  /** Estado al que se pidió o se hizo el cambio (solo `STATUS_CHANGE`). */
+  requestedStatus?: OrderStatus;
   /**
    * Valor de venta anulado (solo `REFUND`); null si la devolución fue de un
    * simple saldo a favor. Es lo que distingue devolver un excedente de dar de
@@ -1672,7 +1679,7 @@ export class OrdersService {
     id: string,
     status: OrderStatus,
     userId: string,
-    options: { retainedAmount?: number } = {},
+    options: { retainedAmount?: number; reason?: string } = {},
   ) {
     const order = await this.findOne(id);
 
@@ -1705,6 +1712,12 @@ export class OrdersService {
       // petición solo lo decide quien anula sin pedir permiso (admin).
       let retainedAmount = new Prisma.Decimal(options.retainedAmount ?? 0);
 
+      // Sin autorización requerida aquí solo pasa el admin: es una anulación
+      // directa y exige motivo (docs/PLAN_SEDES.md §6.3).
+      const directReason = authCheck.required
+        ? null
+        : this.statusChangeRequestsService.assertDirectReason(options.reason);
+
       if (authCheck.required) {
         const approvedRequest = await this.statusChangeRequestsService.findApprovedRequest(
           id,
@@ -1725,6 +1738,17 @@ export class OrdersService {
       }
 
       await this.annulOrder(id, retainedAmount);
+
+      if (directReason) {
+        await this.statusChangeRequestsService.recordDirectChange({
+          orderId: id,
+          adminId: userId,
+          currentStatus: order.status as OrderStatus,
+          requestedStatus: status,
+          reason: directReason,
+          retainedAmount,
+        });
+      }
 
       // La orden ya llegó al estado que se pedía, así que cualquier solicitud
       // pendiente que apuntara ahí dejó de tener algo que decidir. Sin esto se
@@ -1806,12 +1830,18 @@ export class OrdersService {
     }
 
     // Autorización para DELIVERED_ON_CREDIT (usuarios no-admin necesitan aprobación)
+    let creditDirectReason: string | null = null;
     if (status === OrderStatus.DELIVERED_ON_CREDIT) {
       const authCheck = await this.statusChangeRequestsService.requiresAuthorization(
         id,
         status,
         userId,
       );
+
+      // El admin entrega a crédito sin solicitud: exige motivo (§6.3).
+      if (!authCheck.required) {
+        creditDirectReason = this.statusChangeRequestsService.assertDirectReason(options.reason);
+      }
 
       if (authCheck.required) {
         const hasApproval = await this.statusChangeRequestsService.hasApprovedRequest(
@@ -1837,6 +1867,16 @@ export class OrdersService {
     }
 
     await this.ordersRepository.updateStatus(id, status);
+
+    if (creditDirectReason) {
+      await this.statusChangeRequestsService.recordDirectChange({
+        orderId: id,
+        adminId: userId,
+        currentStatus: order.status as OrderStatus,
+        requestedStatus: status,
+        reason: creditDirectReason,
+      });
+    }
 
     // Ver la nota en la rama de ANULADO: la solicitud que pedía este estado ya no
     // tiene nada que decidir.
@@ -2465,7 +2505,17 @@ export class OrdersService {
       // `paymentMethod` hace falta para detectar la transición desde saldo a
       // favor: ese pago no tiene movimiento de caja, así que al volverse
       // efectivo/transferencia hay que crearle uno o encolarlo.
-      select: { id: true, receiptFileId: true, paymentMethod: true },
+      select: {
+        id: true,
+        receiptFileId: true,
+        paymentMethod: true,
+        // Foto anterior para registrar la edición directa (ver abajo).
+        amount: true,
+        paymentDate: true,
+        reference: true,
+        notes: true,
+        bankEntity: true,
+      },
     });
     if (!payment) {
       throw new NotFoundException(
@@ -2540,6 +2590,36 @@ export class OrdersService {
           amount: true,
           paymentMethod: true,
           cashMovementId: true,
+        },
+      });
+
+      // Quien puede aprobar edita sin solicitud: se registra igual, ya aprobada,
+      // con el antes y el después, para que el historial de la OP la muestre
+      // como las demás (docs/PLAN_SEDES.md §6.3).
+      const now = new Date();
+      await tx.paymentEditApproval.create({
+        data: {
+          orderId,
+          paymentId,
+          requestedById: userId,
+          reason: updatePaymentDto.reason?.trim() || null,
+          oldAmount: payment.amount,
+          oldPaymentMethod: payment.paymentMethod,
+          oldPaymentDate: payment.paymentDate,
+          oldReference: payment.reference,
+          oldNotes: payment.notes,
+          oldBankEntity: payment.bankEntity,
+          oldReceiptFileId: payment.receiptFileId,
+          newAmount: updated.amount,
+          newPaymentMethod: updated.paymentMethod,
+          newPaymentDate: updatePaymentDto.paymentDate ? new Date(updatePaymentDto.paymentDate) : null,
+          newReference: updatePaymentDto.reference ?? null,
+          newNotes: updatePaymentDto.notes ?? null,
+          newBankEntity: updatePaymentDto.bankEntity ?? null,
+          status: EditRequestStatus.APPROVED,
+          reviewedById: userId,
+          reviewedAt: now,
+          isDirect: true,
         },
       });
 
@@ -3096,6 +3176,9 @@ export class OrdersService {
       voidRequests,
       voidedPayments,
       refunds,
+      statusChanges,
+      advisorChanges,
+      directDiscounts,
     ] = await Promise.all([
         this.prisma.advancePaymentApproval.findMany({
           where: { orderId },
@@ -3176,6 +3259,33 @@ export class OrdersService {
             executedBy: { select: USER_SELECT },
           },
         }),
+        this.prisma.orderStatusChangeRequest.findMany({
+          where: { orderId },
+          include: {
+            requestedBy: { select: USER_SELECT },
+            reviewedBy: { select: USER_SELECT },
+          },
+        }),
+        this.prisma.advisorChangeRequest.findMany({
+          where: { orderId },
+          include: {
+            requestedBy: { select: USER_SELECT },
+            reviewedBy: { select: USER_SELECT },
+            requestedAdvisor: { select: USER_SELECT },
+          },
+        }),
+        // Descuentos que quien puede aprobar aplicó sin solicitud: no tienen
+        // `DiscountApproval`, así que se sintetizan como los pagos anulados.
+        this.prisma.orderDiscount.findMany({
+          where: { orderId, approvals: { none: {} } },
+          select: {
+            id: true,
+            amount: true,
+            reason: true,
+            createdAt: true,
+            appliedBy: { select: USER_SELECT },
+          },
+        }),
       ]);
 
     // Un pago anulado a través de una solicitud ya quedó contado arriba; solo
@@ -3238,6 +3348,7 @@ export class OrdersService {
         reviewNotes: p.reviewNotes,
         requestedBy: p.requestedBy,
         reviewedBy: p.reviewedBy,
+        direct: p.isDirect,
       })),
       ...voidRequests.map((v) => ({
         id: v.id,
@@ -3303,6 +3414,51 @@ export class OrdersService {
         reviewNotes: e.reviewNotes,
         requestedBy: e.requestedBy,
         reviewedBy: e.reviewedBy,
+        direct: e.isDirect,
+      })),
+      ...statusChanges.map((c) => ({
+        id: c.id,
+        type: 'STATUS_CHANGE' as const,
+        status: c.status,
+        reason: c.reason,
+        amount: c.retainedAmount ? c.retainedAmount.toString() : null,
+        advisor: null,
+        createdAt: c.createdAt,
+        reviewedAt: c.reviewedAt,
+        reviewNotes: c.reviewNotes,
+        requestedBy: c.requestedBy,
+        reviewedBy: c.reviewedBy,
+        direct: c.isDirect,
+        requestedStatus: c.requestedStatus,
+      })),
+      ...advisorChanges.map((a) => ({
+        id: a.id,
+        type: 'ADVISOR_CHANGE' as const,
+        status: a.status,
+        reason: a.reason,
+        amount: null,
+        advisor: a.requestedAdvisor,
+        createdAt: a.createdAt,
+        reviewedAt: a.reviewedAt,
+        reviewNotes: a.reviewNotes,
+        requestedBy: a.requestedBy,
+        reviewedBy: a.reviewedBy,
+        direct: a.isDirect,
+      })),
+      ...directDiscounts.map((d) => ({
+        // Prefijo para no chocar con el id de una solicitud real.
+        id: `discount-direct-${d.id}`,
+        type: 'DISCOUNT' as const,
+        status: EditRequestStatus.APPROVED,
+        reason: d.reason,
+        amount: d.amount.toString(),
+        advisor: null,
+        createdAt: d.createdAt,
+        reviewedAt: d.createdAt,
+        reviewNotes: null,
+        requestedBy: d.appliedBy,
+        reviewedBy: null,
+        direct: true,
       })),
     ];
 

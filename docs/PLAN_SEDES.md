@@ -325,7 +325,7 @@ Las fases 3, 4 y 5 son independientes entre sí y pueden ir en cualquier orden d
 
 ### Fase 1 · Sedes, usuarios, roles y sede activa
 
-> **1a hecha** (2026-09-27): modelo y migración, sede activa (header + interceptor + contexto), roles `soporte` y `contabilidad`, permisos reservados, módulo `/sedes`, página oculta `/sistema/sedes`, sedes en la ficha de usuario, selector en el Topbar y usuarios de prueba. **Falta la 1b**: trazabilidad de las acciones directas del admin (§6.3).
+> **1a hecha** (2026-09-27): modelo y migración, sede activa (header + interceptor + contexto), roles `soporte` y `contabilidad`, permisos reservados, módulo `/sedes`, página oculta `/sistema/sedes`, sedes en la ficha de usuario, selector en el Topbar y usuarios de prueba. **1b hecha** (2026-09-27, probada en el navegador): anular y entregar a crédito directo exigen motivo y quedan como solicitud aprobada (`isDirect`); editar una OP bloqueada exige abrir la edición con motivo (ventana de 30 min); cambio de asesor directo con motivo obligatorio; edición directa de pagos registrada; el historial de la OP muestra cambios de estado, de asesor y descuentos directos.
 >
 > Aplazado a la fase 2: los usuarios de prueba todavía no se crean como `Employee` (la sede del empleado llega con la fase 2).
 

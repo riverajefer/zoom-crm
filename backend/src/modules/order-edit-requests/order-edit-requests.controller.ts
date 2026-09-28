@@ -51,6 +51,22 @@ export class OrderEditRequestsController {
     return this.orderEditRequestsService.create(orderId, userId, dto);
   }
 
+  /**
+   * El admin abre la edición de una orden bloqueada indicando el motivo. Queda
+   * como solicitud aprobada directamente (docs/PLAN_SEDES.md §6.3).
+   */
+  @Post('direct')
+  @RequirePermissions('update_orders')
+  @ApiOperation({ summary: 'Edición directa del admin (con motivo)' })
+  @ApiParam({ name: 'orderId', description: 'ID de la orden' })
+  async createDirect(
+    @Param('orderId') orderId: string,
+    @CurrentUser('id') userId: string,
+    @Body() dto: CreateEditRequestDto,
+  ) {
+    return this.orderEditRequestsService.createDirect(orderId, userId, dto);
+  }
+
   @Get()
   @RequirePermissions('read_orders')
   @ApiOperation({ summary: 'Listar solicitudes de edición de una orden' })

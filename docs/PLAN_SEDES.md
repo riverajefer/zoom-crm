@@ -444,7 +444,7 @@ Staging corre hoy el código anterior a las sedes (`origin/staging` @ `8856b3a`,
 
 | | **A. Reiniciar la base** (recomendado, §15.3) | **B. Conservar los datos** |
 |---|---|---|
-| Migraciones | las 129 aplican limpio sobre una base vacía | las 4 de sedes aplican limpio sobre la base vieja: los documentos previos quedan en el 125 y cada sede recibe su caja |
+| Migraciones | las 128 aplican limpio sobre una base vacía | las 4 de sedes aplican limpio sobre la base vieja: los documentos previos quedan en el 125 y cada sede recibe su caja |
 | Seed (`SEED_DEMO=true`) | 4 sedes con su caja, 13 usuarios (§11), OP y COT de demo en 104, 119 y 125 | crea los usuarios de sede y los roles nuevos, y pasa `adminsistema` a `soporte` |
 | Permisos | completos | **hay que correr `prisma:sync:permissions`**: el seed no toca los roles que ya tienen permisos, y sin eso `admin` no tiene `view_all_locations` (no ve "Todas") ni los otros 4 permisos de sedes. `caja` y `user` quedan sin `read_other_locations`: se les da desde Roles |
 | Invariantes | todas en 0 | 4 "pagos sin rastro en caja", heredados de la demo vieja |
@@ -456,13 +456,15 @@ En el ensayo aparecieron y se corrigieron en el seed dos cosas: los asesores y `
 
 1. **Respaldo** de la base de staging (Railway → Postgres → Backups), aunque se vaya a reiniciar.
 2. *Solo A*: vaciar la base de staging (Railway → Postgres → Data, o `psql` con la URL pública: `DROP SCHEMA public CASCADE; CREATE SCHEMA public;`). Así la `DATABASE_URL` no cambia.
-3. **Desplegar**: `git checkout staging && git merge --ff-only develop && git push && git checkout develop`. El backend corre `prisma migrate deploy` al arrancar; confirmar en el log que aplicó las migraciones (129 en A, 4 en B).
+3. **Desplegar**: `git checkout staging && git merge --ff-only develop && git push && git checkout develop`. El backend corre `prisma migrate deploy` al arrancar; confirmar en el log que aplicó las migraciones (128 en A, 4 en B).
 4. **Seed** desde la máquina local, con la **URL pública** de la Postgres de staging (la interna `postgres.railway.internal` no se alcanza desde afuera):
    `cd backend && DATABASE_URL='<URL pública de staging>' NODE_ENV=staging SEED_DEMO=true SEED_ADMIN_PASSWORD='<la de QA>' npm run prisma:seed`
 5. *Solo B*: `DATABASE_URL='<URL pública>' npm run prisma:sync:permissions`, y dar `read_other_locations` a `caja` y `user` desde Roles si se van a usar.
 6. **Invariantes**: `scripts/sql/invariants.sql` contra la URL pública (solo lectura). En A deben dar todas 0.
 7. **Humo**: `curl -i https://api.pruebas.zoompublicidadcrm.com/health`; entrar con `adminsistema` y con `admin.zoom` (ve "Todas" y el Dashboard por sede); entrar con `asesor.104` (solo ve el 104).
 8. **Catálogos de High** (decidido el 2026-09-29: los 10) con `npm run prisma:import:high -- --apply` y la URL pública; los JSON viven solo en local (`prisma/data/high-catalog/`, fuera de git). Ensayado sobre una base recién sembrada: entran 15 áreas de producción, 15 cargos, 2 canales, 4 tipos y 20 subcategorías de gasto, 17 categorías de productos, 271 productos, 9 insumos y 143 proveedores; se puede repetir sin duplicar y las invariantes siguen en 0. Llegan también los pendientes de proveedores (YAMAIKE fusionado con HIGH SOLUTIONS GROUP, ARTE Y DISEÑO CLISES FOTOGRABADO con FOTOGRADADO SION, HCV PUBLICIDAD duplicado por un NIT que difiere en un dígito), y "DTF TEXTIL" y "DTF UV" quedan dobles porque los de la demo están en otra categoría.
+
+> **Hecho el 2026-09-29 (camino A)**: respaldo, base vaciada, deploy de `2b10e95` (128 migraciones), seed de demo, los 10 catálogos de High y las 13 invariantes en 0. Humo por API: `admin.zoom` ve las 4 sedes y "Todas"; `asesor.104` solo ve el 104, abre en consulta una OP del 119 y "Todas" le da 403. Pendiente: apagar el TCP Proxy de la Postgres de staging cuando ya no haga falta, y rotar su contraseña (quedó expuesta en el chat de trabajo).
 
 #### Recorrido de aceptación
 

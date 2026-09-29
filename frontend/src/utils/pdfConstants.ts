@@ -8,6 +8,8 @@ export const COMPANY_INFO = {
   name: 'Zoom Publicidad',
   city: 'Bogotá',
   email: 'promocionaleszoom@gmail.com',
+  /** Sitio web, sin el protocolo: así se imprime (https://zoompublicidad.com.co/). */
+  website: 'zoompublicidad.com.co',
 } as const;
 
 /** La sede de un documento, en lo que le importa al PDF. */

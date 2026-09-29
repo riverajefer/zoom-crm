@@ -399,7 +399,7 @@ Todavía **no toca documentos**: al terminar, la app funciona como hoy, pero ya 
 
 ### Fase 5 · PDF por sede ✅
 
-> **Hecha** (2026-09-28): los PDF imprimen la dirección y el teléfono de la sede del documento, leídos de `Location` con cada documento; `COMPANY_INFO` queda con el nombre, la ciudad y el correo común. Además de los 4 generadores (OP, COT, OT, OG), también la tirilla de la OP, el recibo de caja y los reportes de caja (con la sede de la caja). Una sede sin dirección ni teléfono (la Matriz) y la nómina (común) imprimen solo la ciudad y el correo. Verificado generando en el navegador el PDF y la tirilla de `104-OP-0001` y `119-OP-0001`: cada uno sale con su dirección y su teléfono. Queda `PENDIENTE: sitio web`.
+> **Hecha** (2026-09-28): los PDF imprimen la dirección y el teléfono de la sede del documento, leídos de `Location` con cada documento; `COMPANY_INFO` queda con el nombre, la ciudad y el correo común. Además de los 4 generadores (OP, COT, OT, OG), también la tirilla de la OP, el recibo de caja y los reportes de caja (con la sede de la caja). Una sede sin dirección ni teléfono (la Matriz) y la nómina (común) imprimen solo la ciudad y el correo. Verificado generando en el navegador el PDF y la tirilla de `104-OP-0001` y `119-OP-0001`: cada uno sale con su dirección y su teléfono. El sitio web (`zoompublicidad.com.co`) se agregó después, en `COMPANY_INFO`.
 
 - Dirección y teléfono de la sede del documento, leídos de `Location` (§9). `COMPANY_INFO` queda con lo común.
 

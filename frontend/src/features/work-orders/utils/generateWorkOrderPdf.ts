@@ -3,6 +3,7 @@ import logo from '../../../assets/logo-dark.webp';
 import type { WorkOrder } from '../../../types/work-order.types';
 import { formatDate, formatDateTime } from '../../../utils/formatters';
 import {
+  COMPANY_INFO,
   pdfContactLines,
   type PdfSede,
   PDF_COLORS,
@@ -123,8 +124,7 @@ async function drawHeader(doc: jsPDF, sede: PdfSede): Promise<number> {
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
   setTextColor(doc, PDF_COLORS.linkText);
-  // TODO(zoom): sitios web reales de Zoom Publicidad
-  doc.text('PENDIENTE: sitio web', PDF_LAYOUT.pageWidth / 2, y, { align: 'center' });
+  doc.text(COMPANY_INFO.website, PDF_LAYOUT.pageWidth / 2, y, { align: 'center' });
   y += 5;
 
   doc.setFontSize(8);

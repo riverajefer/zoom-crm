@@ -125,7 +125,7 @@ Formato: fecha · qué cambió · por qué. Los cherry-pick traídos de High se 
 |---|---|---|
 | ~~Dirección, ciudad, teléfonos, email~~ | `Location` y `pdfConstants.ts` | ✅ 2026-09-28: dirección y teléfono de la sede del documento; ciudad y correo comunes en `COMPANY_INFO` |
 | ~~Lista de servicios del encabezado~~ | los 4 `generate*Pdf.ts` | ✅ se mantiene la misma lista: decidido con el cliente (2026-09-27) |
-| Sitios web del pie de página | los 4 `generate*Pdf.ts` | `PENDIENTE: sitio web` |
+| ~~Sitio web del encabezado~~ | `COMPANY_INFO.website` | ✅ 2026-09-28: `zoompublicidad.com.co` |
 | ~~Logos claro y oscuro~~ | `frontend/src/assets/logo.png`, `logo-dark.webp` | ✅ 2026-09-22 |
 | ~~Favicon~~ | `frontend/public/favicon.png` | ✅ 2026-09-22 (el camaleón) |
 | Dominio en comentarios | `cors-origins.util.ts`, `whatsapp.service.ts:419` | citan `crmhighsolutions.com`; se corrigen cuando exista el dominio |

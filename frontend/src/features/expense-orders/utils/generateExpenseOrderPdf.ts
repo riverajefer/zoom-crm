@@ -4,6 +4,7 @@ import axiosInstance from '../../../api/axios';
 import type { ExpenseOrder } from '../../../types/expense-order.types';
 import { EXPENSE_ORDER_STATUS_CONFIG, PAYMENT_METHOD_LABELS } from '../../../types/expense-order.types';
 import {
+  COMPANY_INFO,
   pdfContactLines,
   type PdfSede,
   PDF_COLORS,
@@ -168,8 +169,7 @@ async function drawHeader(doc: jsPDF, sede: PdfSede): Promise<number> {
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
   setTextColor(doc, PDF_COLORS.linkText);
-  // TODO(zoom): sitios web reales de Zoom Publicidad
-  doc.text('PENDIENTE: sitio web', PDF_LAYOUT.pageWidth / 2, y, { align: 'center' });
+  doc.text(COMPANY_INFO.website, PDF_LAYOUT.pageWidth / 2, y, { align: 'center' });
   y += 5;
 
   doc.setFontSize(8);

@@ -405,7 +405,17 @@ Todavía **no toca documentos**: al terminar, la app funciona como hoy, pero ya 
 
 **Se acepta cuando**: una OP del 104 y una del 119 imprimen cada una su dirección y su teléfono.
 
-### Fase 6 · Dashboard consolidado y reportes
+### Fase 6 · Dashboard consolidado y reportes ✅
+
+> **Hecha** (2026-09-28, verificada contra `zoom_seedtest`): página **Dashboard por sede** (`/dashboard/sedes`, en el menú para quien tiene `view_all_locations`; el endpoint `GET /dashboard/sedes` exige además `read_financial_dashboard`). Cubre todas las sedes sin importar la activa. Trae: tarjetas de ventas, recaudo (con el saldo a favor aplicado aparte), gastos, resultado y cartera, cada una con la variación contra el periodo anterior de la misma duración y una barra por sede con el código y el porcentaje de cada una; la **tabla comparativa** (una columna por sede, la Matriz y el total), donde ventas, OP y cartera llevan al listado de OP ya en esa sede y ese periodo; la **tendencia semanal** con un gráfico pequeño por sede y la misma escala; **gastos por tipo** apilados por sede; y el **consumo de insumos** por sede (salidas de inventario valoradas al costo). Las cifras cuadran, sede por sede, con el listado de OP (ventas y cantidad) y con su mini dashboard (recaudo).
+>
+> **Regla de gastos, para no contar dos veces**: toda OG crea su CP al nacer, y cuando Caja paga la OG registra la salida de caja. Por eso los gastos son las **OG pagadas por Caja** en el periodo (total de sus ítems) más los **abonos a CP que no salen de una OG**. Si en la operación las CP de una OG se pagan aparte (compras a crédito), esta regla hay que revisarla con el cliente.
+>
+> **Metas**: el resumen de ventas acepta `acrossLocations`, que suma todas las sedes para quien las ve todas o para las ventas propias. La sección de metas y el detalle del asesor lo usan: el avance contra la meta cuenta todo lo que vendió el asesor.
+>
+> **Arreglo en el camino**: los pagos, los ítems de OG y los abonos a CP no tienen sede propia, así que la extensión no los filtra. La tarjeta "Recaudo del periodo" del listado de OP sumaba los pagos de todas las sedes, y el total de gastos del dashboard financiero, las OG de todas. Ahora filtran por la sede de su documento con `locationFilter()`. No se agregaron esos modelos a la extensión: los flujos que escriben leen con `findMany` los pagos de una OP puntual, y al admin, que opera en cualquier sede, se le filtran los listados.
+>
+> Los colores de las sedes no sirven como paleta de gráfico (son claros y el 119 y el 125 se confunden): en los gráficos la sede se distingue por panel o por etiqueta, y ventas, gastos y tipos de gasto usan una paleta categórica validada para modo claro y oscuro.
 
 - Dashboard del admin (§7) con las definiciones acordadas, incluido el saldo a favor aplicado en línea aparte.
 - Consumo de insumos por sede, avance de metas por asesor (sumando todas las sedes), listados filtrables por sede y periodo.

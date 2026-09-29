@@ -88,10 +88,13 @@ export const AdvisorDetailPage: React.FC = () => {
 
   const trackingQuery = useAdvisorTracking({ month, year, advisorId });
   const { goalsQuery } = useSalesGoals({ month, year, advisorId });
+  // El avance contra la meta suma las ventas del asesor en todas las sedes
+  // (docs/PLAN_SEDES.md §10); el listado de OP de abajo es el de la sede activa.
   const summaryQuery = useSalesSummary({
     createdById: advisorId,
     orderDateFrom: monthStart,
     orderDateTo: monthEnd,
+    acrossLocations: true,
   });
 
   const { ordersQuery } = useOrders({

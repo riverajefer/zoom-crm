@@ -48,6 +48,7 @@ import {
   OrdersDashboardQueryDto,
   AdvisorTrackingQueryDto,
   VoidPaymentDto,
+  SalesSummaryQueryDto,
 } from './dto';
 import { InitialPaymentDto } from './dto/create-order.dto';
 import { CashSessionStatus, EditRequestStatus, OrderStatus, PaymentMethod, Prisma, WorkOrderStatus } from '../../generated/prisma';
@@ -62,7 +63,12 @@ import { LOCATION_SUMMARY_SELECT } from '../../common/constants/location-select'
 import { CashMovementService } from '../cash-movement/cash-movement.service';
 import { CashMovementVoidRequestsService } from '../cash-movement-void-requests/cash-movement-void-requests.service';
 import { startOfDay, endOfDay, businessToday } from '../../common/utils/date-range.util';
-import { requireActiveLocationId, withoutLocationScope } from '../../common/utils/location-context';
+import {
+  getRequestLocation,
+  locationFilter,
+  requireActiveLocationId,
+  withoutLocationScope,
+} from '../../common/utils/location-context';
 import { applyColombianRounding, roundToWholePeso, normalizeRate } from '../../common/utils/rounding.util';
 import {
   ACTIVE_PAYMENT_WHERE,
@@ -266,7 +272,8 @@ export class OrdersService {
         this.prisma.payment.aggregate({
           where: {
             paymentDate: { gte: from, lte: to },
-            order: { status: notAnulado },
+            // El pago no tiene sede: es la de su OP (docs/PLAN_SEDES.md §7).
+            order: { status: notAnulado, ...locationFilter() },
             ...ACTIVE_PAYMENT_WHERE,
           },
           _sum: { amount: true },
@@ -312,7 +319,21 @@ export class OrdersService {
     return this.ordersRepository.findAdvisorsWithOrders();
   }
 
-  async getSalesSummary(filters: FilterOrdersDto) {
+  /**
+   * Resumen de ventas por asesor. Con `acrossLocations`, suma todas las sedes:
+   * la meta es del asesor, sin importar dónde vendió (docs/PLAN_SEDES.md §5 y
+   * §10). Solo para quien ve todas las sedes o para las ventas propias; a los
+   * demás se les ignora y ven su sede, como en cualquier listado.
+   */
+  async getSalesSummary(filters: SalesSummaryQueryDto, userId?: string) {
+    const { acrossLocations, ...rest } = filters;
+    const allowed = !!getRequestLocation()?.viewAll || (!!userId && rest.createdById === userId);
+    return acrossLocations && allowed
+      ? withoutLocationScope(() => this.computeSalesSummary(rest))
+      : this.computeSalesSummary(rest);
+  }
+
+  private async computeSalesSummary(filters: FilterOrdersDto) {
     const { status, clientId, orderDateFrom, orderDateTo, productionAreaId, createdById, search, excludeAnulado } = filters;
 
     const where: Prisma.OrderWhereInput = {};

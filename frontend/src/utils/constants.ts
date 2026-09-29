@@ -226,6 +226,8 @@ export const PERMISSIONS = {
 export const ROUTES = {
   LOGIN: '/login',
   DASHBOARD: '/dashboard',
+  /** Dashboard consolidado por sede (solo Zoom, docs/PLAN_SEDES.md §7). */
+  DASHBOARD_SEDES: '/dashboard/sedes',
   USERS: '/users',
   USERS_CREATE: '/users/create',
   USERS_EDIT: '/users/:id/edit',

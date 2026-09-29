@@ -29,6 +29,9 @@ import { startOfDay, endOfDay, businessToday } from '../../common/utils/date-ran
 
 // Solo Zoom: los documentos nacen en la sede activa del request, que en un
 // test unitario no existe (docs/PLAN_SEDES.md §2).
+import { runWithAuditContext } from '../../common/utils/audit-context';
+import { getLocationScope } from '../../common/utils/location-context';
+
 jest.mock('../../common/utils/location-context', () => ({
   ...jest.requireActual('../../common/utils/location-context'),
   requireActiveLocationId: jest.fn(() => 'loc-125'),
@@ -398,6 +401,40 @@ describe('OrdersService', () => {
         discountAmount: new Prisma.Decimal(discount),
       },
       _count: { id: count },
+    });
+
+    describe('acrossLocations (metas: la venta del asesor en todas las sedes)', () => {
+      const scopes: unknown[] = [];
+      beforeEach(() => {
+        scopes.length = 0;
+        mockPrisma.order.groupBy.mockImplementation(async () => {
+          scopes.push(getLocationScope());
+          return [];
+        });
+      });
+      const asesor = { locationId: 'loc-125', all: false, permittedIds: ['loc-125'] };
+
+      it('quien ve todas las sedes suma todas, aunque tenga una sede activa', async () => {
+        await runWithAuditContext({ location: { ...asesor, viewAll: true } }, () =>
+          service.getSalesSummary({ acrossLocations: true }, 'u-admin'),
+        );
+        expect(scopes.length).toBeGreaterThan(0);
+        expect(scopes.every((s) => s === null)).toBe(true);
+      });
+
+      it('un asesor suma todas las sedes solo para sus propias ventas', async () => {
+        await runWithAuditContext({ location: asesor }, () =>
+          service.getSalesSummary({ acrossLocations: true, createdById: 'u-1' }, 'u-1'),
+        );
+        expect(scopes.every((s) => s === null)).toBe(true);
+      });
+
+      it('para las ventas de otro, se ignora y queda en su sede', async () => {
+        await runWithAuditContext({ location: asesor }, () =>
+          service.getSalesSummary({ acrossLocations: true, createdById: 'u-2' }, 'u-1'),
+        );
+        expect(scopes.every((s) => s !== null)).toBe(true);
+      });
     });
 
     /** where de la llamada a groupBy que trae el subconjunto pedido. */
@@ -774,6 +811,19 @@ describe('OrdersService', () => {
           },
         }),
       );
+    });
+
+    it('should filtrar el recaudo por la sede de la OP (el pago no tiene sede propia)', async () => {
+      await runWithAuditContext(
+        { location: { locationId: 'loc-119', all: false, permittedIds: ['loc-119'] } },
+        () => service.getDashboardSummary({ dateFrom: '2026-07-01', dateTo: '2026-07-31' }),
+      );
+
+      const [[{ where }]] = mockPrisma.payment.aggregate.mock.calls;
+      expect(where.order).toEqual({
+        status: { not: OrderStatus.ANULADO },
+        locationId: { in: ['loc-119'] },
+      });
     });
 
     it('should usar el día de hoy cuando no se envía rango', async () => {

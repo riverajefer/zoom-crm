@@ -55,6 +55,7 @@ const SupplyFormPage = lazyWithRetry(() => import('../features/portfolio/supplie
 // Orders
 const OrdersListPage = lazyWithRetry(() => import('../features/orders/pages/OrdersListPage'));
 const OrderFormPage = lazyWithRetry(() => import('../features/orders/pages/OrderFormPage'));
+const SedesDashboardPage = lazyWithRetry(() => import('../features/dashboard/pages/SedesDashboardPage'));
 const OrderDetailRoute = lazyWithRetry(() => import('../features/orders/pages/OrderDetailRoute'));
 const PendingPaymentOrdersPage = lazyWithRetry(() => import('../features/orders/pages/PendingPaymentOrdersPage'));
 const StatusChangeRequestsPage = lazyWithRetry(() => import('../features/orders/pages/StatusChangeRequestsPage'));
@@ -171,6 +172,18 @@ const RoutesConfig: FC = () => {
             <AuthGuard>
               <MainLayout>
                 <DashboardPage />
+              </MainLayout>
+            </AuthGuard>
+          }
+        />
+        <Route
+          path={PATHS.DASHBOARD_SEDES}
+          element={
+            <AuthGuard>
+              <MainLayout>
+                <PermissionGuard permission={PERMISSIONS.VIEW_ALL_LOCATIONS}>
+                  <SedesDashboardPage />
+                </PermissionGuard>
               </MainLayout>
             </AuthGuard>
           }

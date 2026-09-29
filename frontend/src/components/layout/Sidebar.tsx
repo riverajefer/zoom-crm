@@ -17,6 +17,7 @@ import {
 import { Link as RouterLink, useLocation } from 'react-router-dom';
 import MenuIcon from '@mui/icons-material/Menu';
 import DashboardIcon from '@mui/icons-material/Dashboard';
+import InsightsIcon from '@mui/icons-material/Insights';
 import SecurityIcon from '@mui/icons-material/Security';
 import VerifiedUserIcon from '@mui/icons-material/VerifiedUser';
 import HistoryIcon from '@mui/icons-material/History';
@@ -150,6 +151,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose, collapsed = fal
       icon: <DashboardIcon />,
       path: ROUTES.DASHBOARD,
       permission: null,
+    },
+    {
+      label: 'Dashboard por sede',
+      icon: <InsightsIcon />,
+      path: ROUTES.DASHBOARD_SEDES,
+      permission: PERMISSIONS.VIEW_ALL_LOCATIONS,
     },
     {
       label: 'Comercial',

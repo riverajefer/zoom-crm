@@ -481,6 +481,11 @@ export interface FilterOrdersDto {
   createdById?: string;
   /** Si true, solo órdenes con saldo pendiente por cobrar (balance > 0) */
   hasBalance?: boolean;
+  /**
+   * Solo el resumen de ventas: sumar todas las sedes. El avance de la meta de
+   * un asesor cuenta todo lo que vendió (docs/PLAN_SEDES.md §10).
+   */
+  acrossLocations?: boolean;
   /** PAID = pagadas al 100%; PENDING = con saldo pendiente */
   paymentStatus?: 'PAID' | 'PENDING';
   /** DELIVERED = ya entregadas; PENDING = aún sin entregar (sin contar anuladas) */

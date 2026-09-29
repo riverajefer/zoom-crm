@@ -45,6 +45,7 @@ import {
   OrdersDashboardQueryDto,
   AdvisorTrackingQueryDto,
   VoidPaymentDto,
+  SalesSummaryQueryDto,
 } from './dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../../common/guards/permissions.guard';
@@ -130,8 +131,8 @@ export class OrdersController {
   @RequirePermissions('read_sales_by_advisor')
   @ApiOperation({ summary: 'Get sales summary grouped by advisor' })
   @ApiResponse({ status: 200, description: 'Sales summary retrieved successfully' })
-  getSalesSummary(@Query() filters: FilterOrdersDto) {
-    return this.ordersService.getSalesSummary(filters);
+  getSalesSummary(@Query() filters: SalesSummaryQueryDto, @CurrentUser('id') userId: string) {
+    return this.ordersService.getSalesSummary(filters, userId);
   }
 
   @Get('advisor-tracking')

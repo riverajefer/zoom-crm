@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { Prisma } from '../../generated/prisma';
-import { getLocationScope } from '../../common/utils/location-context';
+import { getLocationScope, locationFilter } from '../../common/utils/location-context';
 
 @Injectable()
 export class DashboardRepository {
@@ -34,6 +34,8 @@ export class DashboardRepository {
         expenseOrder: {
           status: { in: ['AUTHORIZED', 'PAID'] },
           createdAt: { gte, lte },
+          // El ítem no tiene sede: es la de su OG.
+          ...locationFilter(),
         },
       },
     });

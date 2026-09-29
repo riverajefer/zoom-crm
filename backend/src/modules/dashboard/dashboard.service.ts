@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { DashboardRepository } from './dashboard.repository';
 import { FinancialQueryDto } from './dto/financial-query.dto';
-import { startOfDay, endOfDay, businessToday } from '../../common/utils/date-range.util';
+import { resolvePeriod } from './dashboard-period.util';
 
 @Injectable()
 export class DashboardService {
@@ -79,27 +79,8 @@ export class DashboardService {
    * servidor: la última tarde de cada mes, a partir de las 7:00 p. m., el
    * dashboard ya mostraba el mes siguiente en blanco.
    */
+
   private resolveDateRange(query: FinancialQueryDto) {
-    let gte: Date;
-    let lte: Date;
-
-    if (query.dateFrom && query.dateTo) {
-      gte = startOfDay(query.dateFrom)!;
-      lte = endOfDay(query.dateTo)!;
-    } else {
-      // Mes en curso según el calendario del negocio.
-      const [year, month] = businessToday().split('-').map(Number);
-      const ultimoDia = new Date(Date.UTC(year, month, 0)).getUTCDate();
-      const mm = String(month).padStart(2, '0');
-
-      gte = startOfDay(`${year}-${mm}-01`)!;
-      lte = endOfDay(`${year}-${mm}-${String(ultimoDia).padStart(2, '0')}`)!;
-    }
-
-    const periodMs = lte.getTime() - gte.getTime();
-    const prevLte = new Date(gte.getTime() - 1);
-    const prevGte = new Date(prevLte.getTime() - periodMs);
-
-    return { gte, lte, prevGte, prevLte };
+    return resolvePeriod(query);
   }
 }

@@ -496,10 +496,13 @@ export const SalesGoalsSection: React.FC<SalesGoalsSectionProps> = ({ advisors }
   // ventas, y una OP anulada no es una venta. Sin esto, anular una orden dejaba
   // el vendido inflado (lo comisionable no se veía afectado porque ya filtra por
   // entregadas, y de ahí que la diferencia pasara desapercibida).
+  // La meta es del asesor, sin importar la sede: el vendido suma todas las
+  // sedes aunque haya una activa (docs/PLAN_SEDES.md §10).
   const summaryQuery = useSalesSummary({
     orderDateFrom: monthStart,
     orderDateTo: monthEnd,
     excludeAnulado: true,
+    acrossLocations: true,
   });
 
   const goals = goalsQuery.data ?? [];
@@ -539,7 +542,7 @@ export const SalesGoalsSection: React.FC<SalesGoalsSectionProps> = ({ advisors }
               Metas de Ventas
             </Typography>
           }
-          subheader="Seguimiento mensual por asesor"
+          subheader="Seguimiento mensual por asesor · el vendido suma todas las sedes"
           action={
             <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', pr: 1 }}>
               {/* Selector mes */}

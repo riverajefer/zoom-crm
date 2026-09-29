@@ -77,6 +77,21 @@ export function getLocationScope(): { locationIds: string[]; listsOnly: boolean 
 }
 
 /**
+ * Filtro de sede para lo que la extensión no alcanza: totales sobre modelos
+ * sin sede propia (pagos, ítems de OG, abonos a CP), que se filtran por la sede
+ * de su documento. Se pone sobre la relación: `order: { ...locationFilter() }`.
+ * Aplica como en un listado, también a quien ve todas; en "Todas" no filtra.
+ *
+ * No se agregan esos modelos a la extensión a propósito: los flujos que
+ * escriben leen con `findMany` los pagos de un documento puntual, y al admin
+ * se le filtran los listados, así que desde otra sede leería una lista vacía.
+ */
+export function locationFilter(): { locationId?: { in: string[] } } {
+  const scope = getLocationScope();
+  return scope ? { locationId: { in: scope.locationIds } } : {};
+}
+
+/**
  * Corre `fn` sin el filtro de sede. Es la salida explícita, y con nombre, para
  * lo poco que debe cruzar sedes: el saldo a favor (que se usa en cualquier
  * sede) y el modo consulta de la fase 4. Ver docs/PLAN_SEDES.md §15.1.

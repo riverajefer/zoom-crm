@@ -53,6 +53,29 @@ export function requireActiveLocationId(): string {
   return locationId;
 }
 
+/** Código que el frontend reconoce: en la Matriz no se crean COT, OP ni DTF. */
+export const LOCATION_NOT_A_STORE = 'LOCATION_NOT_A_STORE';
+
+/**
+ * Sede en la que nace un documento de venta o producción (COT, OP, DTF): la
+ * activa, que además tiene que ser un local. La Matriz no vende ni produce
+ * (docs/PLAN_SEDES.md §14), así que ahí es un 400 con código
+ * `LOCATION_NOT_A_STORE`. Sin sede o en "Todas", lo mismo que
+ * `requireActiveLocationId`.
+ */
+export function requireStoreLocationId(): string {
+  const locationId = requireActiveLocationId();
+  if (getRequestLocation()?.locationType === 'HEADQUARTERS') {
+    throw new BadRequestException({
+      statusCode: 400,
+      error: 'Bad Request',
+      message: 'La Matriz no vende ni produce: cotizaciones, órdenes y DTF se crean en un local.',
+      code: LOCATION_NOT_A_STORE,
+    });
+  }
+  return locationId;
+}
+
 /**
  * Filtro de sede de la consulta en curso, para `location-scope.extension`.
  * `null` es sin filtro: fuera de un request (crons, listeners), antes de que

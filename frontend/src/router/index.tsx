@@ -750,7 +750,7 @@ const RoutesConfig: FC = () => {
             <AuthGuard>
               <MainLayout>
                 <PermissionGuard permission={PERMISSIONS.CREATE_ORDERS}>
-                  <RequireSedeGate>
+                  <RequireSedeGate storesOnly>
                     <OrderFormPage />
                   </RequireSedeGate>
                 </PermissionGuard>
@@ -852,7 +852,7 @@ const RoutesConfig: FC = () => {
           element={
             <AuthGuard>
               <MainLayout>
-                <RequireSedeGate>
+                <RequireSedeGate storesOnly>
                   <QuoteFormPage />
                 </RequireSedeGate>
               </MainLayout>
@@ -1673,7 +1673,7 @@ const RoutesConfig: FC = () => {
             <AuthGuard>
               <MainLayout>
                 <PermissionGuard permission={PERMISSIONS.CREATE_DTF}>
-                  <RequireSedeGate>
+                  <RequireSedeGate storesOnly>
                     <DtfFormPage />
                   </RequireSedeGate>
                 </PermissionGuard>

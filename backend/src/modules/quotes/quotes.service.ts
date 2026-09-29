@@ -24,7 +24,7 @@ import { QuoteStatus, OrderStatus, ProspectStatus, Prisma } from '../../generate
 import { isValidQuoteTransition, getValidNextQuoteStatuses } from './quote-status-transitions';
 import { PrismaService } from '../../database/prisma.service';
 import { startOfDay, endOfDay } from '../../common/utils/date-range.util';
-import { requireActiveLocationId } from '../../common/utils/location-context';
+import { requireStoreLocationId } from '../../common/utils/location-context';
 
 @Injectable()
 export class QuotesService {
@@ -184,7 +184,7 @@ export class QuotesService {
     // (p. ej. tras sembrar cotizaciones), y entonces `generateNumber` devuelve
     // un número ya usado → P2002. Mismo patrón que órdenes, OT y DTF.
     // La COT nace en la sede activa (docs/PLAN_SEDES.md §2).
-    const locationId = requireActiveLocationId();
+    const locationId = requireStoreLocationId();
     const MAX_RETRIES = 3;
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
       const quoteNumber = await this.consecutivesService.generateNumber('QUOTE', locationId);

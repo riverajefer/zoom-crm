@@ -33,6 +33,8 @@ interface SedeGroupedTableProps<T extends GridValidRowModel> {
   search: string;
   onSearchChange: (value: string) => void;
   searchPlaceholder?: string;
+  /** Documentos de venta o producción: sin el grupo de la Matriz, que no los tiene. */
+  storesOnly?: boolean;
 }
 
 /**
@@ -47,9 +49,11 @@ export function SedeGroupedTable<T extends GridValidRowModel>({
   search,
   onSearchChange,
   searchPlaceholder,
+  storesOnly = false,
   ...groupProps
 }: SedeGroupedTableProps<T>) {
-  const locations = useLocationStore((s) => s.locations);
+  const allLocations = useLocationStore((s) => s.locations);
+  const locations = storesOnly ? allLocations.filter((l) => l.type === 'STORE') : allLocations;
   const [text, setText] = useState(search);
 
   // El buscador va aparte de las tablas (sin barra propia) y espera a que se
@@ -95,7 +99,7 @@ function SedeGroup<T extends GridValidRowModel>({
   getRowId,
   onRowClick,
   getRowClassName,
-}: Omit<SedeGroupedTableProps<T>, 'search' | 'onSearchChange' | 'searchPlaceholder'> & { sede: Sede }) {
+}: Omit<SedeGroupedTableProps<T>, 'search' | 'onSearchChange' | 'searchPlaceholder' | 'storesOnly'> & { sede: Sede }) {
   const [open, setOpen] = useState(true);
   const switchSede = useSwitchSede();
   const { data, isLoading } = useQuery({

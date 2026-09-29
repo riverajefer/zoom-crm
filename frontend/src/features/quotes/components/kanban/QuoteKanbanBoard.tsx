@@ -59,7 +59,8 @@ export const QuoteKanbanBoard: React.FC<QuoteKanbanBoardProps> = ({
   // (docs/PLAN_SEDES.md §6.2). Cada carril tiene su propio arrastre: una
   // cotización no cambia de sede.
   const isAllSedes = useLocationStore((s) => s.activeLocationId === ALL_LOCATIONS);
-  const sedes = useLocationStore((s) => s.locations);
+  // Solo los locales: la Matriz no tiene cotizaciones.
+  const sedes = useLocationStore((s) => s.locations).filter((l) => l.type === 'STORE');
 
   const [filters, setFilters] = useState<BoardFilters>(initialFilters ?? {});
   const [activeQuote, setActiveQuote] = useState<Quote | null>(null);

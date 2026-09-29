@@ -2,8 +2,10 @@ import { BadRequestException } from '@nestjs/common';
 import { runWithAuditContext } from './audit-context';
 import {
   getLocationScope,
+  LOCATION_NOT_A_STORE,
   LOCATION_REQUIRED,
   requireActiveLocationId,
+  requireStoreLocationId,
   withoutLocationScope,
 } from './location-context';
 
@@ -28,6 +30,30 @@ describe('location-context', () => {
 
     it('fuera de un request también falla: quien crea sin request pasa la sede explícita', () => {
       expect(() => requireActiveLocationId()).toThrow(BadRequestException);
+    });
+  });
+
+  describe('requireStoreLocationId', () => {
+    it('en un local devuelve la sede activa', () => {
+      runWithAuditContext(
+        { location: { locationId: 'l-125', all: false, permittedIds: ['l-125'], locationType: 'STORE' } },
+        () => expect(requireStoreLocationId()).toBe('l-125'),
+      );
+    });
+
+    it('en la Matriz no se crean documentos de venta: 400 con código', () => {
+      runWithAuditContext(
+        { location: { locationId: 'l-mat', all: false, permittedIds: ['l-mat'], locationType: 'HEADQUARTERS' } },
+        () => {
+          try {
+            requireStoreLocationId();
+            fail('debía fallar');
+          } catch (e: any) {
+            expect(e).toBeInstanceOf(BadRequestException);
+            expect(e.getResponse().code).toBe(LOCATION_NOT_A_STORE);
+          }
+        },
+      );
     });
   });
 

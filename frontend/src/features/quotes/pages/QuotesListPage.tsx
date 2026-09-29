@@ -399,6 +399,7 @@ export const QuotesListPage: React.FC = () => {
           {isAllSedes ? (
             <SedeGroupedTable<Quote>
               unit="COT"
+              storesOnly
               queryKey={['quotes', filters]}
               fetchGroup={(locationId, limit) => quotesApi.findAll({ ...filters, page: 1, limit }, locationId)}
               columns={columns}

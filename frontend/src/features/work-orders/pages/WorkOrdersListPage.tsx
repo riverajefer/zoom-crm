@@ -286,6 +286,7 @@ export const WorkOrdersListPage = () => {
       {isAllSedes ? (
         <SedeGroupedTable<WorkOrder>
           unit="OT"
+          storesOnly
           queryKey={workOrdersKeys.list(filters)}
           fetchGroup={(locationId, limit) => workOrdersApi.getAll({ ...filters, page: 1, limit }, locationId)}
           columns={columns}

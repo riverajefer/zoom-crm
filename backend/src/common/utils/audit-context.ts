@@ -33,6 +33,11 @@ export interface RequestLocation {
    * una OP, COT u OT de otra sede. Ver docs/PLAN_SEDES.md §8.
    */
   readOther?: boolean;
+  /**
+   * Tipo de la sede activa: un local (`STORE`) o la Matriz (`HEADQUARTERS`),
+   * que no vende ni produce. `null` en "Todas" o sin sede.
+   */
+  locationType?: 'STORE' | 'HEADQUARTERS' | null;
 }
 
 /**

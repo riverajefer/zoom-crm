@@ -18,7 +18,7 @@ import { DtfStatus, PaymentMethod, Prisma } from '../../generated/prisma';
 import { isValidDtfTransition } from './dtf-status-transitions';
 import { startOfDay, endOfDay } from '../../common/utils/date-range.util';
 import { computeDtfTotalToCharge } from '../../common/utils/rounding.util';
-import { requireActiveLocationId } from '../../common/utils/location-context';
+import { requireStoreLocationId } from '../../common/utils/location-context';
 
 @Injectable()
 export class DtfService {
@@ -88,7 +88,7 @@ export class DtfService {
     });
 
     // La DTF nace en la sede activa (docs/PLAN_SEDES.md §2).
-    const locationId = requireActiveLocationId();
+    const locationId = requireStoreLocationId();
     const buildData = (consecutive: string) => ({
       consecutive,
       locationId,

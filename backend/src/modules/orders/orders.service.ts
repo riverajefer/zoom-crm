@@ -66,7 +66,7 @@ import { startOfDay, endOfDay, businessToday } from '../../common/utils/date-ran
 import {
   getRequestLocation,
   locationFilter,
-  requireActiveLocationId,
+  requireStoreLocationId,
   withoutLocationScope,
 } from '../../common/utils/location-context';
 import { applyColombianRounding, roundToWholePeso, normalizeRate } from '../../common/utils/rounding.util';
@@ -736,7 +736,7 @@ export class OrdersService {
     }
 
     // La OP nace en la sede activa, o en la del documento del que sale (docs/PLAN_SEDES.md §2).
-    locationId ??= requireActiveLocationId();
+    locationId ??= requireStoreLocationId();
 
     // Generar número de orden
     const orderNumber = await this.consecutivesService.generateNumber('ORDER', locationId);

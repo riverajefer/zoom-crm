@@ -18,6 +18,7 @@ import { QuoteStatus, OrderStatus, ProspectStatus, Prisma } from '../../generate
 jest.mock('../../common/utils/location-context', () => ({
   ...jest.requireActual('../../common/utils/location-context'),
   requireActiveLocationId: jest.fn(() => 'loc-125'),
+  requireStoreLocationId: jest.fn(() => 'loc-125'),
 }));
 
 

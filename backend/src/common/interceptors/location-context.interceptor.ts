@@ -63,7 +63,7 @@ export class LocationContextInterceptor implements NestInterceptor {
         defaultLocationId: true,
         locations: {
           where: { location: { isActive: true } },
-          select: { locationId: true },
+          select: { locationId: true, location: { select: { type: true } } },
           orderBy: { location: { sortOrder: 'asc' } },
         },
         role: {
@@ -84,31 +84,31 @@ export class LocationContextInterceptor implements NestInterceptor {
     const granted = new Set((user?.role.permissions ?? []).map((p) => p.permission.name));
     const viewAll = granted.has(VIEW_ALL_LOCATIONS_PERMISSION);
     const readOther = granted.has(READ_OTHER_LOCATIONS_PERMISSION);
-    const permittedIds = viewAll
-      ? (
-          await this.prisma.location.findMany({
-            where: { isActive: true },
-            select: { id: true },
-            orderBy: { sortOrder: 'asc' },
-          })
-        ).map((l) => l.id)
-      : (user?.locations ?? []).map((l) => l.locationId);
+    const permitted = viewAll
+      ? await this.prisma.location.findMany({
+          where: { isActive: true },
+          select: { id: true, type: true },
+          orderBy: { sortOrder: 'asc' },
+        })
+      : (user?.locations ?? []).map((l) => ({ id: l.locationId, type: l.location.type }));
+    const permittedIds = permitted.map((l) => l.id);
+    const typeOf = (id: string | null) => (id ? (permitted.find((l) => l.id === id)?.type ?? null) : null);
 
     if (requested === ALL_LOCATIONS) {
       if (!viewAll) this.deny('No tienes acceso a la vista de todas las sedes');
-      return { locationId: null, all: true, permittedIds, viewAll, readOther };
+      return { locationId: null, all: true, permittedIds, viewAll, readOther, locationType: null };
     }
 
     if (requested) {
       if (!permittedIds.includes(requested)) this.deny('No tienes acceso a esa sede');
-      return { locationId: requested, all: false, permittedIds, viewAll, readOther };
+      return { locationId: requested, all: false, permittedIds, viewAll, readOther, locationType: typeOf(requested) };
     }
 
     const fallback =
       user?.defaultLocationId && permittedIds.includes(user.defaultLocationId)
         ? user.defaultLocationId
         : (permittedIds[0] ?? null);
-    return { locationId: fallback, all: false, permittedIds, viewAll, readOther };
+    return { locationId: fallback, all: false, permittedIds, viewAll, readOther, locationType: typeOf(fallback) };
   }
 
   private deny(message: string): never {

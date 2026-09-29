@@ -63,6 +63,7 @@ import LockOpenIcon from '@mui/icons-material/LockOpen';
 import HistoryEduIcon from '@mui/icons-material/HistoryEdu';
 import StorefrontIcon from '@mui/icons-material/Storefront';
 import { useAuthStore } from '../../store/authStore';
+import { selectActiveSede, useLocationStore } from '../../store/locationStore';
 import { ROUTES, PERMISSIONS } from '../../utils/constants';
 import { neonColors } from '../../theme';
 import logo from '../../assets/logo.png';
@@ -82,6 +83,8 @@ interface NavItemSub {
   path: string;
   icon?: React.ReactNode;
   permission?: string | string[];
+  /** Solo en los locales: la Matriz no vende ni produce (docs/PLAN_SEDES.md §14). */
+  storesOnly?: boolean;
 }
 
 interface NavItem {
@@ -92,6 +95,8 @@ interface NavItem {
   permissions?: string[];
   menuKey?: string;
   submenu?: NavItemSub[];
+  /** Solo en los locales: la Matriz no vende ni produce (docs/PLAN_SEDES.md §14). */
+  storesOnly?: boolean;
 }
 
 /**
@@ -103,6 +108,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose, collapsed = fal
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const isDark = theme.palette.mode === 'dark';
   const { hasPermission } = useAuthStore();
+  // Con la Matriz activa se ocultan COT, OP, OT, DTF y producción: no es un
+  // local (docs/PLAN_SEDES.md §14). En "Todas" se ve todo.
+  const isHeadquarters = useLocationStore(selectActiveSede)?.type === 'HEADQUARTERS';
   const [menuOpen, setMenuOpen] = React.useState({
     comercial: false,
     logistica: false,
@@ -159,30 +167,34 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose, collapsed = fal
       permission: PERMISSIONS.VIEW_ALL_LOCATIONS,
     },
     {
-      label: 'Comercial',
+      label: isHeadquarters ? 'Gastos' : 'Comercial',
       icon: <ShoppingCartIcon />,
       menuKey: 'comercial',
       submenu: [
         {
           label: 'Pipeline de Ventas',
+          storesOnly: true,
           icon: <TrendingUpIcon />,
           path: ROUTES.PROSPECTS,
           permission: PERMISSIONS.READ_PROSPECTS,
         },
         {
           label: 'Cotizaciones',
+          storesOnly: true,
           icon: <PostAddIcon />,
           path: '/quotes',
           permission: PERMISSIONS.READ_QUOTES, // Add later if needed
         },
         {
           label: 'Órdenes de Pedido',
+          storesOnly: true,
           icon: <ReceiptIcon />,
           path: ROUTES.ORDERS,
           permission: PERMISSIONS.READ_ORDERS,
         },
         {
           label: 'Órdenes de Trabajo',
+          storesOnly: true,
           icon: <BuildIcon />,
           path: ROUTES.WORK_ORDERS,
           permission: PERMISSIONS.READ_WORK_ORDERS,
@@ -213,48 +225,56 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose, collapsed = fal
         },
         {
           label: 'Órdenes Pendientes por cobrar',
+          storesOnly: true,
           icon: <PaymentsIcon />,
           path: ROUTES.PENDING_PAYMENT_ORDERS,
           permission: PERMISSIONS.READ_ORDERS,
         },
         {
           label: 'Solicitudes Pendientes',
+          storesOnly: true,
           icon: <PendingActionsIcon />,
           path: ROUTES.STATUS_CHANGE_REQUESTS,
           permission: [PERMISSIONS.APPROVE_ORDERS, PERMISSIONS.APPROVE_ADVANCE_PAYMENTS, PERMISSIONS.APPROVE_DISCOUNTS, PERMISSIONS.APPROVE_CLIENT_OWNERSHIP_AUTH, PERMISSIONS.APPROVE_EXPENSE_ORDERS],
         },
         {
           label: 'Trazabilidad',
+          storesOnly: true,
           icon: <AccountTreeIcon />,
           path: ROUTES.ORDER_FLOW_BASE,
           permission: PERMISSIONS.READ_ORDERS,
         },
         {
           label: 'Rentabilidad',
+          storesOnly: true,
           icon: <TrendingUpIcon />,
           path: ROUTES.ORDERS_PROFITABILITY,
           permission: PERMISSIONS.READ_ORDERS,
         },
         {
           label: 'Ventas por Asesor',
+          storesOnly: true,
           icon: <PeopleAltIcon />,
           path: ROUTES.SALES_BY_ADVISOR,
           permission: PERMISSIONS.READ_SALES_BY_ADVISOR,
         },
         {
           label: 'Clientes',
+          storesOnly: true,
           icon: <BadgeIcon />,
           path: ROUTES.CLIENTS,
           permission: [PERMISSIONS.BROWSE_CLIENTS, PERMISSIONS.SEARCH_CLIENTS, PERMISSIONS.CREATE_CLIENTS],
         },
         {
           label: 'Canales de Venta',
+          storesOnly: true,
           icon: <StoreIcon />,
           path: '/commercial-channels',
           permission: PERMISSIONS.READ_COMMERCIAL_CHANNELS,
         },
         {
           label: 'DTF',
+          storesOnly: true,
           icon: <PrintIcon />,
           path: ROUTES.DTF,
           permission: PERMISSIONS.READ_DTF,
@@ -344,6 +364,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose, collapsed = fal
     },
     {
       label: 'Producción',
+      storesOnly: true,
       icon: <PrecisionManufacturingIcon />,
       menuKey: 'produccion',
       submenu: [
@@ -665,6 +686,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose, collapsed = fal
         }}
       >
         {navItems.map((item, index) => {
+          if (item.storesOnly && isHeadquarters) return null;
           // Check permissions: single permission or array of permissions (any match)
           if (item.permission && !hasPermission(item.permission)) {
             return null;
@@ -712,6 +734,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose, collapsed = fal
                     }
                   }}>
                     {item.submenu.map((subitem, subindex) => {
+                      if (subitem.storesOnly && isHeadquarters) return null;
                       if (subitem.permission) {
                         const hasAccess = Array.isArray(subitem.permission)
                            ? subitem.permission.some(p => hasPermission(p))

@@ -971,6 +971,7 @@ export const OrdersListPage: React.FC = () => {
       {isAllSedes ? (
         <SedeGroupedTable<Order>
           unit='OP'
+          storesOnly
           queryKey={ordersKeys.list(filters)}
           fetchGroup={(locationId, limit) => ordersApi.getAll({ ...filters, page: 1, limit }, locationId)}
           columns={columns}

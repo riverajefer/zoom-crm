@@ -14,14 +14,14 @@ const ACTIVE = ['l-104', 'l-119', 'l-125', 'l-mat'];
 const USERS: Record<string, any> = {
   'u-apoyo': {
     defaultLocationId: 'l-125',
-    locations: [{ locationId: 'l-119' }, { locationId: 'l-125' }],
+    locations: [{ locationId: 'l-119', location: { type: 'STORE' } }, { locationId: 'l-125', location: { type: 'STORE' } }],
     role: { permissions: [{ permission: { name: 'read_other_locations' } }] },
   },
   'u-sin-sede': { defaultLocationId: null, locations: [], role: { permissions: [] } },
   'u-admin': { defaultLocationId: null, locations: [], role: { permissions: [{ permission: { name: 'view_all_locations' } }] } },
   'u-pred-vieja': {
     defaultLocationId: 'l-104',
-    locations: [{ locationId: 'l-119' }],
+    locations: [{ locationId: 'l-119', location: { type: 'STORE' } }],
     role: { permissions: [] },
   },
 };
@@ -29,7 +29,9 @@ const USERS: Record<string, any> = {
 describe('LocationContextInterceptor', () => {
   const prisma = {
     user: { findUnique: jest.fn(async ({ where }: any) => USERS[where.id] ?? null) },
-    location: { findMany: jest.fn(async () => ACTIVE.map((id) => ({ id }))) },
+    location: {
+      findMany: jest.fn(async () => ACTIVE.map((id) => ({ id, type: id === 'l-mat' ? 'HEADQUARTERS' : 'STORE' }))),
+    },
   };
   const interceptor = new LocationContextInterceptor(prisma as any);
 
@@ -57,6 +59,7 @@ describe('LocationContextInterceptor', () => {
       permittedIds: ['l-119', 'l-125'],
       viewAll: false,
       readOther: true,
+      locationType: 'STORE',
     });
     expect(request.location).toEqual(stored);
   });
@@ -78,13 +81,25 @@ describe('LocationContextInterceptor', () => {
     await expect(run('u-apoyo', 'all')).rejects.toThrow(ForbiddenException);
 
     const { stored } = await run('u-admin', 'all');
-    expect(stored).toEqual({ locationId: null, all: true, permittedIds: ACTIVE, viewAll: true, readOther: false });
+    expect(stored).toEqual({
+      locationId: null,
+      all: true,
+      permittedIds: ACTIVE,
+      viewAll: true,
+      readOther: false,
+      locationType: null,
+    });
   });
 
   it('con view_all_locations cualquier sede activa está permitida', async () => {
     const { stored } = await run('u-admin', 'l-mat');
 
     expect(stored?.locationId).toBe('l-mat');
+  });
+
+  it('deja el tipo de la sede activa: la Matriz no es un local', async () => {
+    const { stored } = await run('u-admin', 'l-mat');
+    expect(stored?.locationType).toBe('HEADQUARTERS');
   });
 
   it('sin sede predeterminada válida toma la primera permitida', async () => {
@@ -96,7 +111,14 @@ describe('LocationContextInterceptor', () => {
   it('un usuario sin sedes queda sin sede activa (la fase 2 decidirá qué puede hacer)', async () => {
     const { stored } = await run('u-sin-sede');
 
-    expect(stored).toEqual({ locationId: null, all: false, permittedIds: [], viewAll: false, readOther: false });
+    expect(stored).toEqual({
+      locationId: null,
+      all: false,
+      permittedIds: [],
+      viewAll: false,
+      readOther: false,
+      locationType: null,
+    });
   });
 
   it('sin usuario (ruta pública) no consulta nada', async () => {

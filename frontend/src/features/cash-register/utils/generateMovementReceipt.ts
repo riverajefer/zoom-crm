@@ -4,6 +4,8 @@ import {
   COMPANY_INFO,
   PDF_COLORS,
   PDF_FONTS,
+  pdfContactLines,
+  type PdfSede,
 } from '../../../utils/pdfConstants';
 import type { CashMovement, CashMovementType } from '../../../types/cash-register.types';
 import { PAYMENT_METHOD_LABELS } from '../../../utils/paymentMethods';
@@ -90,10 +92,12 @@ function drawDashedLine(doc: jsPDF, y: number) {
 // Main: Generate Receipt
 // ---------------------------------------------------------------------------
 
+/** @param cashRegister Caja del movimiento; su sede da la dirección y el teléfono del recibo. */
 export async function generateMovementReceipt(
   movement: CashMovement,
-  cashRegisterName: string,
+  cashRegister: { name: string; location?: PdfSede },
 ): Promise<void> {
+  const cashRegisterName = cashRegister.name;
   // Calculate height dynamically
   const baseH = 130;
   const voidExtra = movement.isVoided ? 12 : 0;
@@ -130,9 +134,13 @@ export async function generateMovementReceipt(
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(6);
   setTextColor(doc, PDF_COLORS.footerText);
-  doc.text(`${COMPANY_INFO.address} · ${COMPANY_INFO.city}`, cx, y, { align: 'center' });
-  y += 3;
-  doc.text(`Tel: ${COMPANY_INFO.phones.join(' / ')}`, cx, y, { align: 'center' });
+  const contact = pdfContactLines(cashRegister.location);
+  // La dirección de una sede puede no caber en los 80 mm del recibo.
+  for (const line of doc.splitTextToSize(contact.address, CONTENT_W) as string[]) {
+    doc.text(line, cx, y, { align: 'center' });
+    y += 3;
+  }
+  doc.text(contact.contact, cx, y, { align: 'center' });
   y += 4;
 
   drawDashedLine(doc, y);

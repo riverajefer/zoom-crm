@@ -2,10 +2,11 @@ import jsPDF from 'jspdf';
 import * as XLSX from 'xlsx';
 import logo from '../../../assets/logo-dark.webp';
 import {
-  COMPANY_INFO,
   PDF_COLORS,
   PDF_FONTS,
   PDF_LAYOUT,
+  pdfContactLines,
+  type PdfSede,
 } from '../../../utils/pdfConstants';
 import type { CashSession, CashMovement, CashMovementType } from '../../../types/cash-register.types';
 import { PAYMENT_METHOD_LABELS } from '../../../utils/paymentMethods';
@@ -95,7 +96,8 @@ function loadImage(url: string): Promise<string> {
 // PDF Footer
 // ---------------------------------------------------------------------------
 
-function drawFooter(doc: jsPDF) {
+function drawFooter(doc: jsPDF, sede: PdfSede) {
+  const contact = pdfContactLines(sede);
   const totalPages = doc.getNumberOfPages();
   for (let i = 1; i <= totalPages; i++) {
     doc.setPage(i);
@@ -108,7 +110,7 @@ function drawFooter(doc: jsPDF) {
     setTextColor(doc, PDF_COLORS.footerText);
     doc.setFont('helvetica', 'normal');
     doc.text(
-      `${COMPANY_INFO.address}, ${COMPANY_INFO.city}  |  Tel: ${COMPANY_INFO.phones.join(' / ')}`,
+      `${contact.address}  |  ${contact.contact}`,
       PDF_LAYOUT.pageWidth / 2,
       sepY + 4,
       { align: 'center' },
@@ -472,7 +474,7 @@ export async function exportMovementsPdf(
     y = drawPageTotal(doc, y, 'Total Egresos:', totalExpenses, false);
   }
 
-  drawFooter(doc);
+  drawFooter(doc, session.cashRegister.location);
 
   const fileName = `Movimientos_${session.cashRegister.name.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.pdf`;
   doc.save(fileName);

@@ -3,7 +3,8 @@ import logo from '../../../assets/logo-dark.webp';
 import type { WorkOrder } from '../../../types/work-order.types';
 import { formatDate, formatDateTime } from '../../../utils/formatters';
 import {
-  COMPANY_INFO,
+  pdfContactLines,
+  type PdfSede,
   PDF_COLORS,
   PDF_FONTS,
   PDF_LAYOUT,
@@ -60,7 +61,7 @@ function loadImage(url: string): Promise<string> {
   });
 }
 
-function drawFooterOnPage(doc: jsPDF, pageIndex: number) {
+function drawFooterOnPage(doc: jsPDF, pageIndex: number, sede: PdfSede) {
   const totalPages = doc.getNumberOfPages();
   doc.setPage(pageIndex);
 
@@ -73,8 +74,8 @@ function drawFooterOnPage(doc: jsPDF, pageIndex: number) {
   setTextColor(doc, PDF_COLORS.footerText);
   doc.setFont('helvetica', 'normal');
 
-  const footerLine1 = `${COMPANY_INFO.address}, ${COMPANY_INFO.city}`;
-  const footerLine2 = `Tel: ${COMPANY_INFO.phones.join(' / ')}  |  ${COMPANY_INFO.email}`;
+  // Dirección y teléfono de la sede del documento (docs/PLAN_SEDES.md §9).
+  const { address: footerLine1, contact: footerLine2 } = pdfContactLines(sede, '  |  ');
   const footerLine3 = `Página ${pageIndex} de ${totalPages}`;
 
   doc.text(footerLine1, PDF_LAYOUT.pageWidth / 2, sepY + 4, { align: 'center' });
@@ -93,7 +94,8 @@ const SERVICES_LIST = [
 // Section drawers
 // ---------------------------------------------------------------------------
 
-async function drawHeader(doc: jsPDF): Promise<number> {
+async function drawHeader(doc: jsPDF, sede: PdfSede): Promise<number> {
+  const contact = pdfContactLines(sede);
   const logoData = await loadImage(logo);
   const logoW = 50;
   const logoH = 15;
@@ -127,10 +129,9 @@ async function drawHeader(doc: jsPDF): Promise<number> {
 
   doc.setFontSize(8);
   setTextColor(doc, [100, 100, 100]);
-  doc.text(`${COMPANY_INFO.address}, ${COMPANY_INFO.city}`, PDF_LAYOUT.pageWidth / 2, y, { align: 'center' });
+  doc.text(contact.address, PDF_LAYOUT.pageWidth / 2, y, { align: 'center' });
   y += 4;
-  doc.text(
-    `Tel: ${COMPANY_INFO.phones.join(' / ')} | ${COMPANY_INFO.email}`,
+  doc.text(contact.contact,
     PDF_LAYOUT.pageWidth / 2,
     y,
     { align: 'center' },
@@ -472,7 +473,7 @@ function drawAsesor(doc: jsPDF, y: number, workOrder: WorkOrder): number {
 export async function generateWorkOrderPdf(workOrder: WorkOrder): Promise<jsPDF> {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
 
-  let y = await drawHeader(doc);
+  let y = await drawHeader(doc, workOrder.location);
 
   setDrawColor(doc, PDF_COLORS.tableHeaderBg);
   doc.setLineWidth(0.5);
@@ -487,7 +488,7 @@ export async function generateWorkOrderPdf(workOrder: WorkOrder): Promise<jsPDF>
 
   const totalPages = doc.getNumberOfPages();
   for (let i = 1; i <= totalPages; i++) {
-    drawFooterOnPage(doc, i);
+    drawFooterOnPage(doc, i, workOrder.location);
   }
 
   return doc;

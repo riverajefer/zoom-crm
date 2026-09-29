@@ -1,5 +1,9 @@
 import jsPDF from 'jspdf';
-import { COMPANY_INFO, PDF_COLORS } from '../../../utils/pdfConstants';
+import {
+  COMPANY_INFO,
+  PDF_COLORS,
+  pdfContactLines,
+} from '../../../utils/pdfConstants';
 import type { Order } from '../../../types/order.types';
 
 // 80mm thermal printer standard
@@ -51,7 +55,7 @@ function drawDashedLine(doc: jsPDF, y: number) {
 function estimateHeight(order: Order): number {
   let h = 10; // top margin
   h += 6;  // company name
-  h += 3;  // address + phones
+  h += 6;  // address (hasta dos líneas) + phones
   h += 5;  // separator + gap
   h += 5;  // "ORDEN DE PEDIDO" title
   h += 4;  // OP number
@@ -114,9 +118,14 @@ export function generateOrderPosReceipt(order: Order): jsPDF {
   doc.setFont('courier', 'normal');
   doc.setFontSize(6);
   setTextColor(doc, PDF_COLORS.footerText);
-  doc.text(`${COMPANY_INFO.address} · ${COMPANY_INFO.city}`, cx, y, { align: 'center' });
-  y += 3;
-  doc.text(`Tel: ${COMPANY_INFO.phones.join(' / ')}`, cx, y, { align: 'center' });
+  // Dirección y teléfono de la sede de la OP (docs/PLAN_SEDES.md §9).
+  const contact = pdfContactLines(order.location);
+  // La dirección de una sede puede no caber en los 80 mm de la tirilla.
+  for (const line of doc.splitTextToSize(contact.address, CONTENT_W) as string[]) {
+    doc.text(line, cx, y, { align: 'center' });
+    y += 3;
+  }
+  doc.text(contact.contact, cx, y, { align: 'center' });
   y += 4;
 
   drawDashedLine(doc, y);

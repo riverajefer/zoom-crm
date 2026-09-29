@@ -1,3 +1,5 @@
+import type { LocatedDocument } from './sede.types';
+
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
 export enum ExpenseOrderStatus {
@@ -89,7 +91,7 @@ export interface ExpenseOrderItem {
   productionAreas: ExpenseOrderItemProductionArea[];
 }
 
-export interface ExpenseOrder {
+export interface ExpenseOrder extends LocatedDocument {
   id: string;
   ogNumber: string;
   status: ExpenseOrderStatus;

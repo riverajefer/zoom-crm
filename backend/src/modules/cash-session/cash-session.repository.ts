@@ -4,6 +4,7 @@ import { CashSessionStatus, Prisma } from '../../generated/prisma';
 import { FilterCashSessionsDto } from './dto';
 import { EXCLUDE_REVERSALS } from '../cash-movement/cash-movement.helpers';
 import { clampPageSize, MAX_PAGE_SIZE } from '../../common/dto/pagination.dto';
+import { LOCATION_SUMMARY_SELECT } from '../../common/constants/location-select';
 import { endOfDay, startOfDay } from '../../common/utils/date-range.util';
 
 const SESSION_SELECT = {
@@ -21,8 +22,9 @@ const SESSION_SELECT = {
   closedAt: true,
   createdAt: true,
   updatedAt: true,
+  // La sede de la caja: la dirección y el teléfono de los recibos y reportes (docs/PLAN_SEDES.md §9).
   cashRegister: {
-    select: { id: true, name: true, description: true },
+    select: { id: true, name: true, description: true, location: { select: LOCATION_SUMMARY_SELECT } },
   },
   openedBy: {
     select: { id: true, firstName: true, lastName: true, username: true },

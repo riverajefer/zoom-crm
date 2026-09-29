@@ -1,3 +1,5 @@
+import type { SedeSummary } from './sede.types';
+
 // ============================================================
 // Módulo de Caja Registradora (POS) — TypeScript Types
 // ============================================================
@@ -57,7 +59,7 @@ export interface CashSession {
   closedAt?: string;
   createdAt: string;
   updatedAt: string;
-  cashRegister: Pick<CashRegister, 'id' | 'name' | 'description'>;
+  cashRegister: Pick<CashRegister, 'id' | 'name' | 'description'> & { location?: SedeSummary };
   openedBy: UserSummary;
   closedBy?: UserSummary;
   denominations: DenominationCount[];

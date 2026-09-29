@@ -1,14 +1,32 @@
-// TODO(zoom): faltan los datos de contacto reales de Zoom Publicidad.
-// Estos valores se imprimen en TODOS los PDF (OP, OT, cotizaciones y OG).
-// Los marcadores "PENDIENTE" son deliberados: se ven en QA y no dejan pasar
-// a producción los datos de otra empresa.
+/**
+ * Lo que es de toda la empresa y sale igual en todos los PDF. La dirección y
+ * el teléfono no van aquí: son los de la sede del documento, que viven en
+ * `Location` y llegan con cada documento (docs/PLAN_SEDES.md §9). Ver
+ * `pdfContactLines`.
+ */
 export const COMPANY_INFO = {
   name: 'Zoom Publicidad',
-  address: 'PENDIENTE: dirección',
-  city: 'PENDIENTE: ciudad',
-  phones: ['PENDIENTE: teléfono'],
-  email: 'PENDIENTE: email',
+  city: 'Bogotá',
+  email: 'promocionaleszoom@gmail.com',
 } as const;
+
+/** La sede de un documento, en lo que le importa al PDF. */
+export type PdfSede = { address?: string | null; phone?: string | null } | null | undefined;
+
+/**
+ * Las dos líneas de contacto de un PDF: la dirección de la sede del documento
+ * con la ciudad, y su teléfono con el correo común. Una sede sin dirección ni
+ * teléfono (la Matriz no es un local) o un PDF sin sede (la nómina es común)
+ * imprime solo la ciudad y el correo.
+ *
+ * @param separator Entre el teléfono y el correo.
+ */
+export function pdfContactLines(sede: PdfSede, separator = ' | '): { address: string; contact: string } {
+  return {
+    address: sede?.address ? `${sede.address}, ${COMPANY_INFO.city}` : COMPANY_INFO.city,
+    contact: [sede?.phone ? `Tel: ${sede.phone}` : null, COMPANY_INFO.email].filter(Boolean).join(separator),
+  };
+}
 
 export const PDF_COLORS = {
   // Paleta Camaleón adaptada a papel blanco: el lima va en barras y rellenos,

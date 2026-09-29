@@ -5,6 +5,7 @@ import type { PayrollEmployee } from '../../../types/payroll-employee.types';
 import type { PayrollPeriod } from '../../../types/payroll-period.types';
 import {
   COMPANY_INFO,
+  pdfContactLines,
   PDF_COLORS,
   PDF_FONTS,
   PDF_LAYOUT,
@@ -272,11 +273,11 @@ function drawHeader(doc: jsPDF, y: number, logoData: string | null): number {
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7);
   setTextColor(doc, PDF_COLORS.footerText);
-  doc.text(`${COMPANY_INFO.address}, ${COMPANY_INFO.city}`, rightX, y + 8.5, {
+  doc.text(pdfContactLines(null).address, rightX, y + 8.5, {
     align: 'right',
   });
   doc.text(
-    `Tel: ${COMPANY_INFO.phones.join(' / ')}  |  ${COMPANY_INFO.email}`,
+    pdfContactLines(null, '  |  ').contact,
     rightX,
     y + 12,
     { align: 'right' },
@@ -773,13 +774,13 @@ function drawFooterOnPage(doc: jsPDF, pageIndex: number) {
   doc.setFont('helvetica', 'normal');
 
   doc.text(
-    `${COMPANY_INFO.address}, ${COMPANY_INFO.city}`,
+    pdfContactLines(null).address,
     PDF_LAYOUT.pageWidth / 2,
     sepY + 4,
     { align: 'center' },
   );
   doc.text(
-    `Tel: ${COMPANY_INFO.phones.join(' / ')}  |  ${COMPANY_INFO.email}`,
+    pdfContactLines(null, '  |  ').contact,
     PDF_LAYOUT.pageWidth / 2,
     sepY + 8,
     { align: 'center' },

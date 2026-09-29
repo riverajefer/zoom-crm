@@ -938,7 +938,7 @@ const ActiveSessionPage: React.FC = () => {
                       <Tooltip title="Imprimir comprobante">
                         <IconButton
                           size="small"
-                          onClick={() => generateMovementReceipt(mov, session.cashRegister.name)}
+                          onClick={() => generateMovementReceipt(mov, session.cashRegister)}
                           sx={{ p: 0.5, color: 'text.secondary' }}
                         >
                           <PrintIcon sx={{ fontSize: '1rem' }} />

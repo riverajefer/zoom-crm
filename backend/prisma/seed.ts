@@ -544,6 +544,28 @@ async function main() {
   });
   console.log(`  ✓ Role: contabilidad`);
 
+  // Roles de sede (solo Zoom, docs/PLAN_SEDES.md §11): punto de partida para
+  // quien vende y quien produce en un local; se ajustan desde la pantalla de Roles.
+  const asesorRole = await prisma.role.upsert({
+    where: { name: 'asesor' },
+    update: {},
+    create: {
+      name: 'asesor',
+      description: 'Asesor de un local: prospectos, clientes, cotizaciones, órdenes y DTF',
+    },
+  });
+  console.log(`  ✓ Role: asesor`);
+
+  const produccionRole = await prisma.role.upsert({
+    where: { name: 'produccion' },
+    update: {},
+    create: {
+      name: 'produccion',
+      description: 'Producción de un local: órdenes de trabajo y de producción, insumos e inventario',
+    },
+  });
+  console.log(`  ✓ Role: produccion`);
+
   // Caja Role - gestión de pagos y anticipos
   const cajaRole = await prisma.role.upsert({
     where: { name: 'caja' },
@@ -629,6 +651,80 @@ async function main() {
     'use_attendance',
     'create_comments',
     'read_comments',
+  ]);
+
+  // Asesor - vende en su local y consulta lo de otras sedes (docs/PLAN_SEDES.md §8)
+  await assignPermissionsToRole(asesorRole.id, 'asesor', [
+    'read_users',
+    'use_attendance',
+    'create_comments',
+    'read_comments',
+    'upload_files',
+    'read_files',
+    'browse_clients',
+    'search_clients',
+    'read_clients',
+    'create_clients',
+    'update_clients',
+    'request_client_advisor',
+    'create_prospects',
+    'read_prospects',
+    'update_prospects',
+    'convert_prospects',
+    'create_quotes',
+    'read_quotes',
+    'update_quotes',
+    'convert_quotes',
+    'request_quote_restore',
+    'create_orders',
+    'read_orders',
+    'update_orders',
+    'change_order_status',
+    'register_order_payments',
+    'apply_discounts',
+    'request_payment_void',
+    'create_refund_requests',
+    'request_advisor_change',
+    'read_pending_orders',
+    'read_orders_dashboard',
+    'create_work_orders',
+    'read_work_orders',
+    'update_work_orders',
+    'create_dtf',
+    'read_dtf',
+    'update_dtf',
+    'convert_dtf_to_order',
+    'read_products',
+    'read_commercial_channels',
+    'read_production_areas',
+    'read_other_locations',
+  ]);
+
+  // Producción - OT, órdenes de producción e insumos de su local
+  await assignPermissionsToRole(produccionRole.id, 'produccion', [
+    'read_users',
+    'use_attendance',
+    'create_comments',
+    'read_comments',
+    'upload_files',
+    'read_files',
+    'read_orders',
+    'read_work_orders',
+    'update_work_orders',
+    'read_production_orders',
+    'create_production_orders',
+    'update_production_orders',
+    'read_product_templates',
+    'read_step_definitions',
+    'read_production_areas',
+    'read_products',
+    'read_supplies',
+    'read_inventory_movements',
+    'create_inventory_movements',
+    'read_dtf',
+    'update_dtf',
+    'change_dtf_status',
+    'read_other_locations',
   ]);
 
   // Manager - gestión de usuarios y lectura de clientes/proveedores
@@ -834,14 +930,14 @@ async function main() {
     }[] = [
       { username: 'admin.zoom', firstName: 'Admin', lastName: 'Zoom', roleId: adminRole.id, sedes: [], defaultSede: null },
       { username: 'contabilidad.lina', firstName: 'Lina', lastName: 'Contabilidad', roleId: contabilidadRole.id, sedes: ['MAT'], defaultSede: 'MAT' },
-      { username: 'asesor.104', firstName: 'Asesor', lastName: '104', roleId: userRole.id, sedes: ['104'], defaultSede: '104' },
-      { username: 'asesor.119', firstName: 'Asesor', lastName: '119', roleId: userRole.id, sedes: ['119'], defaultSede: '119' },
-      { username: 'asesor.125', firstName: 'Asesor', lastName: '125', roleId: userRole.id, sedes: ['125'], defaultSede: '125' },
-      { username: 'asesor.apoyo', firstName: 'Asesor', lastName: 'Apoyo', roleId: userRole.id, sedes: ['125', '119'], defaultSede: '125' },
+      { username: 'asesor.104', firstName: 'Asesor', lastName: '104', roleId: asesorRole.id, sedes: ['104'], defaultSede: '104' },
+      { username: 'asesor.119', firstName: 'Asesor', lastName: '119', roleId: asesorRole.id, sedes: ['119'], defaultSede: '119' },
+      { username: 'asesor.125', firstName: 'Asesor', lastName: '125', roleId: asesorRole.id, sedes: ['125'], defaultSede: '125' },
+      { username: 'asesor.apoyo', firstName: 'Asesor', lastName: 'Apoyo', roleId: asesorRole.id, sedes: ['125', '119'], defaultSede: '125' },
       { username: 'caja.104', firstName: 'Caja', lastName: '104', roleId: cajaRole.id, sedes: ['104'], defaultSede: '104' },
       { username: 'caja.119', firstName: 'Caja', lastName: '119', roleId: cajaRole.id, sedes: ['119'], defaultSede: '119' },
       { username: 'caja.125', firstName: 'Caja', lastName: '125', roleId: cajaRole.id, sedes: ['125'], defaultSede: '125' },
-      { username: 'produccion.119', firstName: 'Producción', lastName: '119', roleId: userRole.id, sedes: ['119'], defaultSede: '119' },
+      { username: 'produccion.119', firstName: 'Producción', lastName: '119', roleId: produccionRole.id, sedes: ['119'], defaultSede: '119' },
     ];
 
     for (const demo of demoUsers) {
@@ -2274,6 +2370,9 @@ async function main() {
               reference: 'TRANSF-001-2026',
               notes: 'Abono inicial 40%',
               receivedById: adminUserForOrders.id,
+              // Sin caja abierta, un pago queda en la cola de pendientes y entra a la caja
+              // de la sede de la OP cuando se abre (docs/PLAN_SEDES.md §4).
+              pendingCashEntry: true,
             },
           },
         },
@@ -2363,6 +2462,9 @@ async function main() {
                 reference: 'TRANSF-002-2026',
                 notes: 'Abono inicial 50%',
                 receivedById: adminUserForOrders.id,
+                // Sin caja abierta, un pago queda en la cola de pendientes y entra a la caja
+                // de la sede de la OP cuando se abre (docs/PLAN_SEDES.md §4).
+                pendingCashEntry: true,
               },
               {
                 amount: 300000,
@@ -2371,6 +2473,9 @@ async function main() {
                 reference: 'CARD-003-2026',
                 notes: 'Segundo abono',
                 receivedById: adminUserForOrders.id,
+                // Sin caja abierta, un pago queda en la cola de pendientes y entra a la caja
+                // de la sede de la OP cuando se abre (docs/PLAN_SEDES.md §4).
+                pendingCashEntry: true,
               },
             ],
           },
@@ -2437,6 +2542,9 @@ async function main() {
               reference: 'EFVO-001-2026',
               notes: 'Pago completo en efectivo',
               receivedById: adminUserForOrders.id,
+              // Sin caja abierta, un pago queda en la cola de pendientes y entra a la caja
+              // de la sede de la OP cuando se abre (docs/PLAN_SEDES.md §4).
+              pendingCashEntry: true,
             },
           },
         },
@@ -3261,6 +3369,7 @@ async function main() {
     console.log(`   Admin:   adminsistema / ${process.env.SEED_ADMIN_PASSWORD ?? 'admin123'}`);
     console.log('   Manager: managersistema / manager123');
     console.log('   User:    usuariosistema / user123');
+    console.log('   Sedes:   admin.zoom, contabilidad.lina, asesor.104/119/125/apoyo, caja.104/119/125, produccion.119 / zoom123');
   } else {
     console.log('\n🔐 Usuario administrador: adminsistema');
     console.log('   Contraseña: la de SEED_ADMIN_PASSWORD. Cámbiala al primer ingreso.');

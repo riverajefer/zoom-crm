@@ -438,6 +438,47 @@ Todavía **no toca documentos**: al terminar, la app funciona como hoy, pero ya 
 
 ### Fase 8 · Aceptación y producción
 
+#### Preparación de staging (ensayada en local el 2026-09-29)
+
+Staging corre hoy el código anterior a las sedes (`origin/staging` @ `8856b3a`, 15 commits detrás de `develop`) y su base tiene los datos de demo viejos. **No hay variables de entorno nuevas**: basta con el deploy y el seed. Se ensayaron los dos caminos en Postgres 17 local:
+
+| | **A. Reiniciar la base** (recomendado, §15.3) | **B. Conservar los datos** |
+|---|---|---|
+| Migraciones | las 129 aplican limpio sobre una base vacía | las 4 de sedes aplican limpio sobre la base vieja: los documentos previos quedan en el 125 y cada sede recibe su caja |
+| Seed (`SEED_DEMO=true`) | 4 sedes con su caja, 13 usuarios (§11), OP y COT de demo en 104, 119 y 125 | crea los usuarios de sede y los roles nuevos, y pasa `adminsistema` a `soporte` |
+| Permisos | completos | **hay que correr `prisma:sync:permissions`**: el seed no toca los roles que ya tienen permisos, y sin eso `admin` no tiene `view_all_locations` (no ve "Todas") ni los otros 4 permisos de sedes. `caja` y `user` quedan sin `read_other_locations`: se les da desde Roles |
+| Invariantes | todas en 0 | 4 "pagos sin rastro en caja", heredados de la demo vieja |
+| Numeración | todo con el formato nuevo | las OP y COT viejas conservan `OP-2026-0001` |
+
+En el ensayo aparecieron y se corrigieron en el seed dos cosas: los asesores y `produccion.119` tenían el rol `user` de High (7 permisos: no podían vender ni producir), y ahora usan los roles nuevos **`asesor`** y **`produccion`**, puntos de partida que se ajustan desde Roles; y los pagos de demo quedaban sin rastro en caja, ahora nacen como pendientes y entran a la caja de su sede al abrirla.
+
+**Pasos** (los de Railway los hace quien tiene acceso al proyecto):
+
+1. **Respaldo** de la base de staging (Railway → Postgres → Backups), aunque se vaya a reiniciar.
+2. *Solo A*: vaciar la base de staging (Railway → Postgres → Data, o `psql` con la URL pública: `DROP SCHEMA public CASCADE; CREATE SCHEMA public;`). Así la `DATABASE_URL` no cambia.
+3. **Desplegar**: `git checkout staging && git merge --ff-only develop && git push && git checkout develop`. El backend corre `prisma migrate deploy` al arrancar; confirmar en el log que aplicó las migraciones (129 en A, 4 en B).
+4. **Seed** desde la máquina local, con la **URL pública** de la Postgres de staging (la interna `postgres.railway.internal` no se alcanza desde afuera):
+   `cd backend && DATABASE_URL='<URL pública de staging>' NODE_ENV=staging SEED_DEMO=true SEED_ADMIN_PASSWORD='<la de QA>' npm run prisma:seed`
+5. *Solo B*: `DATABASE_URL='<URL pública>' npm run prisma:sync:permissions`, y dar `read_other_locations` a `caja` y `user` desde Roles si se van a usar.
+6. **Invariantes**: `scripts/sql/invariants.sql` contra la URL pública (solo lectura). En A deben dar todas 0.
+7. **Humo**: `curl -i https://api.pruebas.zoompublicidadcrm.com/health`; entrar con `adminsistema` y con `admin.zoom` (ve "Todas" y el Dashboard por sede); entrar con `asesor.104` (solo ve el 104).
+8. *Opcional*: cargar los catálogos de High (productos, insumos, proveedores) con `npm run prisma:import:high -- --apply` y la URL pública; los JSON viven solo en local (`prisma/data/high-catalog/`, fuera de git).
+
+#### Recorrido de aceptación
+
+Con los usuarios del §11 (contraseña `zoom123`), los criterios de cada fase:
+
+- [ ] **Fase 1**: cada usuario entra a su sede; `asesor.apoyo` cambia entre el 125 y el 119; `admin.zoom` ve "Todas"; el admin no puede asignarse `manage_locations`; una acción directa del admin aparece en el historial con su motivo.
+- [ ] **Fase 2**: `asesor.104` y `asesor.125` no ven los documentos del otro; los números salen `104-OP-…` y `125-OP-…` en paralelo; un abono cruzado se rechaza; un saldo a favor del 119 se aplica en el 125; la notificación de una OP del 119 no le llega al 125.
+- [ ] **Fase 3**: las 3 cajas abren a la vez sin cruzarse, cada una cierra con su propio saldo, y un pago del 119 nunca cae en la caja del 125.
+- [ ] **Fase 4**: las 3 pantallas del mockup "Modo consulta entre sedes" en la app; `admin.zoom` ve "Todas" agrupada sin filas intercaladas; "¿En qué sede se crea?" al crear desde "Todas".
+- [ ] **Fase 5**: una OP del 104 y una del 119 imprimen cada una su dirección y su teléfono (PDF y tirilla).
+- [ ] **Fase 6**: el Dashboard por sede cuadra, sede por sede, con el listado de OP y su mini dashboard en el mismo periodo.
+- [ ] **Fase 7a**: con la Matriz activa el menú solo muestra gastos, nómina, caja y dashboards; crear una OP desde la Matriz pide un local.
+- [ ] Además, el recorrido de la fase 9 del plan del fork (login, PDF, adjuntos, Excel, logs en Grafana con `env="staging"`).
+
+#### Producción
+
 - **Aceptación en staging**: el recorrido de la fase 9 del plan del fork, repetido con sedes y con los usuarios del §11.
 - **Producción** (fase 8 del fork): base vacía, las 4 sedes creadas por la migración, `SEED_DEMO=false`. Soporte crea el usuario de Oscar Herrera (`admin`), y él define su contraseña.
 - Anotar en DIVERGENCIA el commit de la fase 2 como el punto desde el que ya no se reconverge con High.

@@ -462,7 +462,7 @@ En el ensayo aparecieron y se corrigieron en el seed dos cosas: los asesores y `
 5. *Solo B*: `DATABASE_URL='<URL pública>' npm run prisma:sync:permissions`, y dar `read_other_locations` a `caja` y `user` desde Roles si se van a usar.
 6. **Invariantes**: `scripts/sql/invariants.sql` contra la URL pública (solo lectura). En A deben dar todas 0.
 7. **Humo**: `curl -i https://api.pruebas.zoompublicidadcrm.com/health`; entrar con `adminsistema` y con `admin.zoom` (ve "Todas" y el Dashboard por sede); entrar con `asesor.104` (solo ve el 104).
-8. *Opcional*: cargar los catálogos de High (productos, insumos, proveedores) con `npm run prisma:import:high -- --apply` y la URL pública; los JSON viven solo en local (`prisma/data/high-catalog/`, fuera de git).
+8. **Catálogos de High** (decidido el 2026-09-29: los 10) con `npm run prisma:import:high -- --apply` y la URL pública; los JSON viven solo en local (`prisma/data/high-catalog/`, fuera de git). Ensayado sobre una base recién sembrada: entran 15 áreas de producción, 15 cargos, 2 canales, 4 tipos y 20 subcategorías de gasto, 17 categorías de productos, 271 productos, 9 insumos y 143 proveedores; se puede repetir sin duplicar y las invariantes siguen en 0. Llegan también los pendientes de proveedores (YAMAIKE fusionado con HIGH SOLUTIONS GROUP, ARTE Y DISEÑO CLISES FOTOGRABADO con FOTOGRADADO SION, HCV PUBLICIDAD duplicado por un NIT que difiere en un dígito), y "DTF TEXTIL" y "DTF UV" quedan dobles porque los de la demo están en otra categoría.
 
 #### Recorrido de aceptación
 

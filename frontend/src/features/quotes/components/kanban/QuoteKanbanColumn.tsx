@@ -15,6 +15,8 @@ interface QuoteKanbanColumnProps {
   onEdit: (id: string) => void;
   onDelete: (quote: Quote) => void;
   onConvert: (quote: Quote) => void;
+  /** Sede del carril en la vista "Todas"; sin ella, la sede activa. */
+  locationId?: string;
 }
 
 export const QuoteKanbanColumn: React.FC<QuoteKanbanColumnProps> = ({
@@ -24,6 +26,7 @@ export const QuoteKanbanColumn: React.FC<QuoteKanbanColumnProps> = ({
   onEdit,
   onDelete,
   onConvert,
+  locationId,
 }) => {
   const { setNodeRef, isOver } = useDroppable({
     id: column.id,
@@ -37,7 +40,7 @@ export const QuoteKanbanColumn: React.FC<QuoteKanbanColumnProps> = ({
     isFetchingNextPage,
     hasNextPage,
     fetchNextPage,
-  } = useQuotesBoardColumn(column.mappedStatus, baseFilters);
+  } = useQuotesBoardColumn(column.mappedStatus, baseFilters, locationId);
 
   const sentinelRef = useRef<HTMLDivElement>(null);
 

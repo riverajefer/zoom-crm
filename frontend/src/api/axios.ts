@@ -41,9 +41,11 @@ axiosInstance.interceptors.request.use(
     }
 
     // Sede activa (docs/PLAN_SEDES.md §15.1). Sin sede, el backend usa la
-    // predeterminada del usuario.
+    // predeterminada del usuario. Una petición que ya trae la sede (la vista
+    // "Todas" pide cada grupo con la suya, ver `sedeRequestConfig`) la conserva:
+    // el backend la valida igual.
     const activeLocationId = useLocationStore.getState().activeLocationId;
-    if (token && activeLocationId) {
+    if (token && activeLocationId && !config.headers['X-Location-Id']) {
       config.headers['X-Location-Id'] = activeLocationId;
     }
 
@@ -276,3 +278,12 @@ axiosInstance.delete = ((url: string, config?: unknown) =>
   )) as typeof axiosInstance.delete;
 
 export default axiosInstance;
+
+/**
+ * Config de axios para pedir algo en una sede distinta de la activa. La usa la
+ * vista "Todas" del admin, que pide cada grupo en su sede (docs/PLAN_SEDES.md
+ * §6.2). El backend valida que el usuario tenga esa sede, como con la activa.
+ */
+export function sedeRequestConfig(locationId?: string): { headers?: Record<string, string> } {
+  return locationId ? { headers: { 'X-Location-Id': locationId } } : {};
+}

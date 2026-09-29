@@ -418,7 +418,7 @@ export class OrdersRepository {
     const take = clampPageSize(limit, 20, MAX_REPORT_PAGE_SIZE);
     const skip = (page - 1) * take;
 
-    const [orders, total] = await Promise.all([
+    const [orders, total, sum] = await Promise.all([
       this.prisma.order.findMany({
         where,
         select: this.selectFields,
@@ -427,6 +427,9 @@ export class OrdersRepository {
         take,
       }),
       this.prisma.order.count({ where }),
+      // Subtotal de los filtros: el encabezado de cada sede en la vista
+      // "Todas" (docs/PLAN_SEDES.md §6.2).
+      this.prisma.order.aggregate({ where, _sum: { total: true } }),
     ]);
 
     return {
@@ -450,6 +453,7 @@ export class OrdersRepository {
         page,
         limit: take,
         totalPages: Math.ceil(total / take),
+        sumTotal: (sum._sum.total ?? 0).toString(),
       },
     };
   }

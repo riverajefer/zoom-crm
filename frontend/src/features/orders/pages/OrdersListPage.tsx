@@ -28,7 +28,9 @@ import { PageHeader } from '../../../components/common/PageHeader';
 import { DataTable } from '../../../components/common/DataTable';
 import { ConfirmDialog } from '../../../components/common/ConfirmDialog';
 import { ActionsCell } from '../../../components/common/DataTable/ActionsCell';
+import type { GridRowClassNameParams } from '@mui/x-data-grid';
 import { useOrders } from '../hooks';
+import { ordersKeys } from '../hooks/useOrders';
 import { useClients } from '../../clients/hooks/useClients';
 import { useProductionAreas } from '../../production-areas/hooks/useProductionAreas';
 import { useUsers } from '../../users/hooks/useUsers';
@@ -67,6 +69,9 @@ import type {
 } from '../../../types/order.types';
 import { ORDER_STATUS_CONFIG, ORDER_STATUS_OPTIONS, type OrderLookupItem } from '../../../types/order.types';
 import { OtherSedesLookupHint } from '../../sedes/components/OtherSedesLookupHint';
+import { ALL_LOCATIONS, useLocationStore } from '../../../store/locationStore';
+import { SedeGroupedTable } from '../../sedes/components/SedeGroupedTable';
+import { SedeQuickSelector } from '../../sedes/components/SedeQuickSelector';
 import type { Client } from '../../../types/client.types';
 import { parseDateFilter, toDateFilterOrUndefined } from '../../../utils/dateFilters';
 
@@ -242,6 +247,20 @@ export const OrdersListPage: React.FC = () => {
       limit: 20,
     });
   };
+
+  const getOrderRowClassName = (params: GridRowClassNameParams<Order>) => {
+    if (params.row.status === 'ANULADO') return 'row-anulado';
+    // Anticipo pendiente/rechazado tiene prioridad visual
+    if (params.row.advancePaymentStatus === 'PENDING') return 'row-advance-pending';
+    if (params.row.advancePaymentStatus === 'REJECTED') return 'row-advance-rejected';
+    const alert = getDeliveryAlert(params.row);
+    if (alert === 'overdue') return 'row-overdue';
+    if (alert === 'due-today') return 'row-due-today';
+    return '';
+  };
+
+  // Vista "Todas" del admin: una tabla por sede (docs/PLAN_SEDES.md §6.2).
+  const isAllSedes = useLocationStore((st) => st.activeLocationId === ALL_LOCATIONS);
 
   const handleViewOrder = (order: Order) => {
     navigate(`/orders/${order.id}`);
@@ -948,42 +967,49 @@ export const OrdersListPage: React.FC = () => {
       </Box>
 
       {/* Tabla */}
-      <DataTable
-        density='compact'
-        rows={orders}
-        columns={columns}
-        loading={ordersQuery.isLoading || ordersQuery.isFetching}
-        getRowId={(row) => row.id}
-        onRowClick={handleViewOrder}
-        pageSize={filters.limit ?? 20}
-        pageSizeOptions={[20, 50, 100]}
-        rowCount={ordersQuery.data?.meta.total ?? 0}
-        currentPage={(filters.page ?? 1) - 1}
-        onPaginationModelChange={(model) =>
-          setFilters((prev) => ({
-            ...prev,
-            page: model.page + 1,
-            limit: model.pageSize,
-          }))
-        }
-        searchValue={filters.search || ''}
-        onSearchChange={(value) => handleFilterChange('search', value)}
-        serverSideSearch={true}
-        columnSettingsKey='orders'
-        lockedColumnFields={['orderNumber', 'actions']}
-        searchPlaceholder='Buscar por número, cliente, notas...'
-        emptyMessage='No se encontraron órdenes'
-        getRowClassName={(params) => {
-          if (params.row.status === 'ANULADO') return 'row-anulado';
-          // Anticipo pendiente/rechazado tiene prioridad visual
-          if (params.row.advancePaymentStatus === 'PENDING') return 'row-advance-pending';
-          if (params.row.advancePaymentStatus === 'REJECTED') return 'row-advance-rejected';
-          const alert = getDeliveryAlert(params.row);
-          if (alert === 'overdue') return 'row-overdue';
-          if (alert === 'due-today') return 'row-due-today';
-          return '';
-        }}
-      />
+      <SedeQuickSelector />
+      {isAllSedes ? (
+        <SedeGroupedTable<Order>
+          unit='OP'
+          queryKey={ordersKeys.list(filters)}
+          fetchGroup={(locationId, limit) => ordersApi.getAll({ ...filters, page: 1, limit }, locationId)}
+          columns={columns}
+          getRowId={(row) => row.id}
+          onRowClick={handleViewOrder}
+          getRowClassName={getOrderRowClassName}
+          search={filters.search || ''}
+          onSearchChange={(value) => handleFilterChange('search', value)}
+          searchPlaceholder='Buscar por número, cliente, notas...'
+        />
+      ) : (
+        <DataTable
+          density='compact'
+          rows={orders}
+          columns={columns}
+          loading={ordersQuery.isLoading || ordersQuery.isFetching}
+          getRowId={(row) => row.id}
+          onRowClick={handleViewOrder}
+          pageSize={filters.limit ?? 20}
+          pageSizeOptions={[20, 50, 100]}
+          rowCount={ordersQuery.data?.meta.total ?? 0}
+          currentPage={(filters.page ?? 1) - 1}
+          onPaginationModelChange={(model) =>
+            setFilters((prev) => ({
+              ...prev,
+              page: model.page + 1,
+              limit: model.pageSize,
+            }))
+          }
+          searchValue={filters.search || ''}
+          onSearchChange={(value) => handleFilterChange('search', value)}
+          serverSideSearch={true}
+          columnSettingsKey='orders'
+          lockedColumnFields={['orderNumber', 'actions']}
+          searchPlaceholder='Buscar por número, cliente, notas...'
+          emptyMessage='No se encontraron órdenes'
+          getRowClassName={getOrderRowClassName}
+        />
+      )}
 
       <OtherSedesLookupHint<OrderLookupItem>
         type='OP'

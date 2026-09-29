@@ -6,6 +6,7 @@ import { AuthGuard, PermissionGuard } from '../components/guards';
 import { MainLayout, AuthLayout } from '../components/layout';
 import { PATHS } from './paths';
 import { PERMISSIONS } from '../utils/constants';
+import { RequireSedeGate } from '../features/sedes/components/RequireSedeGate';
 
 // Lazy load componentes
 const LoginPage = lazyWithRetry(() => import('../features/auth/pages/LoginPage'));
@@ -736,7 +737,9 @@ const RoutesConfig: FC = () => {
             <AuthGuard>
               <MainLayout>
                 <PermissionGuard permission={PERMISSIONS.CREATE_ORDERS}>
-                  <OrderFormPage />
+                  <RequireSedeGate>
+                    <OrderFormPage />
+                  </RequireSedeGate>
                 </PermissionGuard>
               </MainLayout>
             </AuthGuard>
@@ -836,7 +839,9 @@ const RoutesConfig: FC = () => {
           element={
             <AuthGuard>
               <MainLayout>
-                <QuoteFormPage />
+                <RequireSedeGate>
+                  <QuoteFormPage />
+                </RequireSedeGate>
               </MainLayout>
             </AuthGuard>
           }
@@ -1215,7 +1220,9 @@ const RoutesConfig: FC = () => {
             <AuthGuard>
               <MainLayout>
                 <PermissionGuard permission={PERMISSIONS.CREATE_EXPENSE_ORDERS}>
-                  <ExpenseOrderFormPage />
+                  <RequireSedeGate>
+                    <ExpenseOrderFormPage />
+                  </RequireSedeGate>
                 </PermissionGuard>
               </MainLayout>
             </AuthGuard>
@@ -1601,7 +1608,9 @@ const RoutesConfig: FC = () => {
             <AuthGuard>
               <MainLayout>
                 <PermissionGuard permission={PERMISSIONS.CREATE_ACCOUNTS_PAYABLE}>
-                  <AccountsPayableFormPage />
+                  <RequireSedeGate>
+                    <AccountsPayableFormPage />
+                  </RequireSedeGate>
                 </PermissionGuard>
               </MainLayout>
             </AuthGuard>
@@ -1651,7 +1660,9 @@ const RoutesConfig: FC = () => {
             <AuthGuard>
               <MainLayout>
                 <PermissionGuard permission={PERMISSIONS.CREATE_DTF}>
-                  <DtfFormPage />
+                  <RequireSedeGate>
+                    <DtfFormPage />
+                  </RequireSedeGate>
                 </PermissionGuard>
               </MainLayout>
             </AuthGuard>

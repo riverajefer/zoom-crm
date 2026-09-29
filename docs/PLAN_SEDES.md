@@ -379,13 +379,17 @@ Todavía **no toca documentos**: al terminar, la app funciona como hoy, pero ya 
 
 **Se acepta cuando**: las 3 cajas abren a la vez sin cruzarse, cada una cierra con su propio saldo, y un pago del 119 nunca cae en la caja del 125.
 
-### Fase 4 · Experiencia multisede
+### Fase 4 · Experiencia multisede ✅
 
 > **4a hecha** (2026-09-28, probada en el navegador con `asesor.apoyo` contra `zoom_seedtest`): **modo consulta** de OP, COT y OT. El `GET :id` de las tres usa `findOneForView`: si el documento no está en la sede activa y el usuario tiene `read_other_locations`, lo busca en todas y lo devuelve con `accessMode: 'consulta'`, dejando una fila `CONSULTA` en `audit_logs`. Lo que escribe sigue usando `findOne` con el filtro, así que un documento ajeno no existe para ningún endpoint que modifica (404). En el frontend, una envoltura por ruta (`OrderDetailRoute`, `QuoteDetailRoute`, `WorkOrderDetailRoute`) carga el documento y, si llega en consulta, muestra una **vista de solo lectura aparte** en vez de la página completa: esa página pide de entrada pagos, aprobaciones y rentabilidad, que para un documento ajeno responden 404, y ocultar una por una las acciones de una página de 3.700 líneas era frágil. La vista tiene el banner fijo con el color y el teléfono de la sede, "Cambiar al Local X" si el usuario la tiene permitida, resumen, ítems, documentos relacionados (que también se abren en consulta) y el PDF. **Búsqueda en otras sedes**: `GET /orders/lookup`, `/quotes/lookup` y `/work-orders/lookup` (con `read_other_locations`), agrupados por sede; los listados muestran debajo de la tabla "No está en el Local 125, pero hay resultados en otras sedes" cuando la búsqueda no encuentra nada en la sede activa. **Ficha del cliente**: OP y COT de todas las sedes que el usuario puede consultar, agrupadas por sede, la activa primero.
 >
 > El seed da `read_other_locations` a los roles `user` y `caja`. En una base ya sembrada (staging) hay que dárselo desde la pantalla de Roles a los roles de sede.
 >
-> Pendiente para la 4b: la vista "Todas" agrupada del admin. Las OPROD relacionadas no salen en la vista de consulta de la OP (la OP no las trae).
+> **4b hecha** (2026-09-28, probada en el navegador con `admin.zoom`): en "Todas", los listados de OP, COT y OT muestran **una tabla por sede** (`SedeGroupedTable`): encabezado con color, nombre, cantidad y subtotal (el `meta` de los listados de OP y COT trae `sumTotal`), plegable, primeras 10 filas y "Ver las N del Local X", que entra a esa sede. Cada grupo se pide aparte con el header `X-Location-Id` de su sede (el interceptor de axios respeta una sede puesta en la petición), así que filtros y orden se aplican dentro de cada grupo y el backend valida la sede como siempre. No se usa un `?locationId=`: la extensión respeta un `locationId` explícito en el `where` y eso abriría otras sedes a quien no las tiene. **Selector rápido** `Todas · 104 · 119 · 125 · Matriz` arriba de los tres listados y del tablero, solo con `view_all_locations`. **Tablero de cotizaciones**: las mismas columnas, un carril por sede, cada uno con su propio arrastre (una COT no cambia de sede). **"¿En qué sede se crea?"**: las rutas para crear OP, COT, OG, CP y DTF preguntan la sede cuando la activa es "Todas" y cambian a ella.
+>
+> Las OPROD relacionadas no salen en la vista de consulta de la OP (la OP no las trae).
+>
+> **Fase 4 cerrada.**
 
 - **Modo consulta** de OP, COT y OT de otra sede (§8): banner, acciones ocultas, "Cambiar al Local X", `GET …/lookup`, registro en `AuditLog`.
 - **Ficha del cliente** con COT y OP agrupadas por sede.

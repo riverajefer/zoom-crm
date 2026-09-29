@@ -1,4 +1,4 @@
-import axiosInstance from './axios';
+import axiosInstance, { sedeRequestConfig } from './axios';
 import type { SedeLookupGroup } from '../types/sede.types';
 import type {
   Order,
@@ -35,9 +35,11 @@ export const ordersApi = {
   /**
    * Obtener todas las órdenes con filtros y paginación
    */
-  getAll: async (params?: FilterOrdersDto): Promise<OrdersListResponse> => {
+  /** @param locationId Sede en la que se pide, si no es la activa (vista "Todas"). */
+  getAll: async (params?: FilterOrdersDto, locationId?: string): Promise<OrdersListResponse> => {
     const { data } = await axiosInstance.get<OrdersListResponse>(BASE_URL, {
       params,
+      ...sedeRequestConfig(locationId),
     });
     return data;
   },

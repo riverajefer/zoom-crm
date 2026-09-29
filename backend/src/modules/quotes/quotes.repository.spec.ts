@@ -131,6 +131,20 @@ describe('QuotesRepository', () => {
       expect(callArg.take).toBe(20);
     });
 
+    it('should sum the total of the filtered quotes into meta.sumTotal', async () => {
+      prisma.quote.findMany.mockResolvedValue([mockQuote]);
+      prisma.quote.count.mockResolvedValue(2);
+      prisma.quote.aggregate.mockResolvedValue({ _sum: { total: 1500 } });
+
+      const result = await repository.findAll({ status: 'SENT' as any });
+
+      expect(prisma.quote.aggregate).toHaveBeenCalledWith({
+        where: expect.objectContaining({ status: 'SENT' }),
+        _sum: { total: true },
+      });
+      expect(result.meta.sumTotal).toBe('1500');
+    });
+
     it('should return paginated meta with totalPages', async () => {
       prisma.quote.findMany.mockResolvedValue([mockQuote]);
       prisma.quote.count.mockResolvedValue(45);
@@ -142,6 +156,7 @@ describe('QuotesRepository', () => {
         page: 1,
         limit: 20,
         totalPages: 3, // ceil(45/20)
+        sumTotal: '0',
       });
     });
 

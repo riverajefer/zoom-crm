@@ -1,4 +1,4 @@
-import axios from './axios';
+import axios, { sedeRequestConfig } from './axios';
 import { 
   Quote, 
   CreateQuoteDto, 
@@ -11,8 +11,12 @@ import { ApiResponse, PaginatedMetaResponse } from '../types/api.types';
 import { Order } from '../types/order.types';
 
 export const quotesApi = {
-  findAll: async (params?: FilterQuotesDto) => {
-    const { data } = await axios.get<PaginatedMetaResponse<Quote>>('/quotes', { params });
+  /** @param locationId Sede en la que se pide, si no es la activa (vista "Todas"). */
+  findAll: async (params?: FilterQuotesDto, locationId?: string) => {
+    const { data } = await axios.get<PaginatedMetaResponse<Quote>>('/quotes', {
+      params,
+      ...sedeRequestConfig(locationId),
+    });
     return data;
   },
 

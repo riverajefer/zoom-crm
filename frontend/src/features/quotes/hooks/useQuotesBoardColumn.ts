@@ -6,22 +6,30 @@ import { QuoteStatus } from '../../../types/quote.types';
 
 const PAGE_SIZE = 20;
 
+/**
+ * @param locationId Sede del carril en la vista "Todas" (docs/PLAN_SEDES.md
+ *   §6.2). Sin ella, la sede activa.
+ */
 export const useQuotesBoardColumn = (
   status: QuoteStatus,
   baseFilters: BoardFilters,
+  locationId?: string,
 ) => {
   const queryClient = useQueryClient();
   const { enqueueSnackbar } = useSnackbar();
 
   const infiniteQuery = useInfiniteQuery({
-    queryKey: ['quotes-board', status, baseFilters],
+    queryKey: ['quotes-board', status, baseFilters, locationId],
     queryFn: ({ pageParam = 1 }) =>
-      quotesApi.findAll({
-        ...baseFilters,
-        status,
-        page: pageParam as number,
-        limit: PAGE_SIZE,
-      }),
+      quotesApi.findAll(
+        {
+          ...baseFilters,
+          status,
+          page: pageParam as number,
+          limit: PAGE_SIZE,
+        },
+        locationId,
+      ),
     initialPageParam: 1,
     getNextPageParam: (lastPage) => {
       const { page, totalPages } = lastPage.meta;

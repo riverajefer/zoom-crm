@@ -66,6 +66,7 @@ describe('OrdersRepository', () => {
         page: 1,
         limit: 20,
         totalPages: 1,
+        sumTotal: '0',
       });
     });
 

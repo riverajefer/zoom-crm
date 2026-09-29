@@ -36,6 +36,9 @@ import { QuoteKanbanBoard } from '../components/kanban/QuoteKanbanBoard';
 import type { Quote, QuoteStatus, FilterQuotesDto } from '../../../types/quote.types';
 import { QuoteStatus as QStatus, QUOTE_STATUS_CONFIG, type QuoteLookupItem } from '../../../types/quote.types';
 import { OtherSedesLookupHint } from '../../sedes/components/OtherSedesLookupHint';
+import { ALL_LOCATIONS, useLocationStore } from '../../../store/locationStore';
+import { SedeGroupedTable } from '../../sedes/components/SedeGroupedTable';
+import { SedeQuickSelector } from '../../sedes/components/SedeQuickSelector';
 import { ExportDialog } from '../../../components/common/ExportDialog';
 import { fetchAllPages } from '../../../utils/excelExport';
 import { QUOTE_EXPORT_COLUMNS } from '../utils/quoteExportColumns';
@@ -123,6 +126,9 @@ export const QuotesListPage: React.FC = () => {
   const selectedUser = filters.createdById
     ? users.find((u: any) => u.id === filters.createdById)
     : null;
+
+  // Vista "Todas" del admin: una tabla por sede (docs/PLAN_SEDES.md §6.2).
+  const isAllSedes = useLocationStore((st) => st.activeLocationId === ALL_LOCATIONS);
 
   const handleFilterChange = (key: keyof FilterQuotesDto, value: any) => {
     setFilters((prev) => ({
@@ -389,30 +395,45 @@ export const QuotesListPage: React.FC = () => {
             )}
           </Stack>
 
-          <DataTable
-            density="compact"
-            rows={quotes}
-            columns={columns}
-            loading={quotesQuery.isLoading || quotesQuery.isFetching}
-            getRowId={(row) => row.id}
-            onRowClick={(row) => navigate(`/quotes/${row.id}`)}
-            pageSize={filters.limit ?? 20}
-            pageSizeOptions={[20, 50, 100]}
-            rowCount={quotesQuery.data?.meta.total ?? 0}
-            currentPage={(filters.page ?? 1) - 1}
-            onPaginationModelChange={(model) =>
-              setFilters((prev) => ({
-                ...prev,
-                page: model.page + 1,
-                limit: model.pageSize,
-              }))
-            }
-            searchValue={filters.search || ''}
-            onSearchChange={(value) => handleFilterChange('search', value)}
-            serverSideSearch
-            searchPlaceholder="Buscar por número o cliente..."
-            emptyMessage="No se encontraron cotizaciones"
-          />
+          <SedeQuickSelector />
+          {isAllSedes ? (
+            <SedeGroupedTable<Quote>
+              unit="COT"
+              queryKey={['quotes', filters]}
+              fetchGroup={(locationId, limit) => quotesApi.findAll({ ...filters, page: 1, limit }, locationId)}
+              columns={columns}
+              getRowId={(row) => row.id}
+              onRowClick={(row) => navigate(`/quotes/${row.id}`)}
+              search={filters.search || ''}
+              onSearchChange={(value) => handleFilterChange('search', value)}
+              searchPlaceholder="Buscar por número o cliente..."
+            />
+          ) : (
+            <DataTable
+              density="compact"
+              rows={quotes}
+              columns={columns}
+              loading={quotesQuery.isLoading || quotesQuery.isFetching}
+              getRowId={(row) => row.id}
+              onRowClick={(row) => navigate(`/quotes/${row.id}`)}
+              pageSize={filters.limit ?? 20}
+              pageSizeOptions={[20, 50, 100]}
+              rowCount={quotesQuery.data?.meta.total ?? 0}
+              currentPage={(filters.page ?? 1) - 1}
+              onPaginationModelChange={(model) =>
+                setFilters((prev) => ({
+                  ...prev,
+                  page: model.page + 1,
+                  limit: model.pageSize,
+                }))
+              }
+              searchValue={filters.search || ''}
+              onSearchChange={(value) => handleFilterChange('search', value)}
+              serverSideSearch
+              searchPlaceholder="Buscar por número o cliente..."
+              emptyMessage="No se encontraron cotizaciones"
+            />
+          )}
           <OtherSedesLookupHint<QuoteLookupItem>
             type="COT"
             search={filters.search}
@@ -427,6 +448,7 @@ export const QuotesListPage: React.FC = () => {
         </>
       ) : (
         <Box sx={{ mt: 2 }}>
+          <SedeQuickSelector />
           <QuoteKanbanBoard
             onViewQuote={(id) => navigate(`/quotes/${id}`)}
             onEditQuote={(id) => navigate(`/quotes/${id}/edit`)}

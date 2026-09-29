@@ -32,5 +32,7 @@ export interface PaginatedMetaResponse<T> {
     page: number;
     limit: number;
     totalPages: number;
+    /** Suma de `total` de todo lo filtrado (OP y COT), para el subtotal por sede. */
+    sumTotal?: string;
   };
 }

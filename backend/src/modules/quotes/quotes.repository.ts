@@ -137,7 +137,7 @@ export class QuotesRepository {
     const take = clampPageSize(limit, 20, MAX_PAGE_SIZE);
     const skip = (page - 1) * take;
 
-    const [quotes, total] = await Promise.all([
+    const [quotes, total, sum] = await Promise.all([
       this.prisma.quote.findMany({
         where,
         select: this.selectFields,
@@ -146,6 +146,8 @@ export class QuotesRepository {
         take,
       }),
       this.prisma.quote.count({ where }),
+      // Subtotal para el encabezado de cada sede en "Todas" (docs/PLAN_SEDES.md §6.2).
+      this.prisma.quote.aggregate({ where, _sum: { total: true } }),
     ]);
 
     return {
@@ -155,6 +157,7 @@ export class QuotesRepository {
         page,
         limit: take,
         totalPages: Math.ceil(total / take),
+        sumTotal: (sum._sum.total ?? 0).toString(),
       },
     };
   }

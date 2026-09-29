@@ -1,4 +1,4 @@
-import axiosInstance from './axios';
+import axiosInstance, { sedeRequestConfig } from './axios';
 import type { SedeLookupGroup } from '../types/sede.types';
 import {
   WorkOrder,
@@ -19,8 +19,12 @@ export const workOrdersApi = {
   /**
    * Get all work orders with optional filters and pagination
    */
-  getAll: async (params?: FilterWorkOrdersDto): Promise<WorkOrdersListResponse> => {
-    const response = await axiosInstance.get<WorkOrdersListResponse>('/work-orders', { params });
+  /** @param locationId Sede en la que se pide, si no es la activa (vista "Todas"). */
+  getAll: async (params?: FilterWorkOrdersDto, locationId?: string): Promise<WorkOrdersListResponse> => {
+    const response = await axiosInstance.get<WorkOrdersListResponse>('/work-orders', {
+      params,
+      ...sedeRequestConfig(locationId),
+    });
     return response.data;
   },
 

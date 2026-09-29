@@ -50,7 +50,8 @@ export const createMockPrismaService = () => ({
     update: jest.fn(),
     delete: jest.fn(),
     count: jest.fn(),
-    aggregate: jest.fn(),
+    // Los listados suman `total` para el subtotal por sede.
+    aggregate: jest.fn().mockResolvedValue({ _sum: { total: null } }),
     groupBy: jest.fn(),
   },
   orderItem: {
@@ -261,6 +262,8 @@ export const createMockPrismaService = () => ({
     update: jest.fn(),
     delete: jest.fn(),
     count: jest.fn(),
+    aggregate: jest.fn().mockResolvedValue({ _sum: { total: null } }),
+    groupBy: jest.fn(),
   },
   quoteItem: {
     findUnique: jest.fn(),

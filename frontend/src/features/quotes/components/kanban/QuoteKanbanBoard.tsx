@@ -31,6 +31,8 @@ import {
   QuoteStatus as QStatus,
 } from '../../../../types/quote.types';
 import type { BoardFilters } from '../../../../types/quoteKanban.types';
+import { ALL_LOCATIONS, useLocationStore } from '../../../../store/locationStore';
+import { SedeDot } from '../../../../components/layout/LocationSelector';
 
 interface QuoteKanbanBoardProps {
   initialFilters?: BoardFilters;
@@ -52,6 +54,12 @@ export const QuoteKanbanBoard: React.FC<QuoteKanbanBoardProps> = ({
   const queryClient = useQueryClient();
 
   const { columns, columnsQuery } = useQuoteKanbanColumns();
+
+  // Vista "Todas" del admin: las mismas columnas, con un carril por sede
+  // (docs/PLAN_SEDES.md §6.2). Cada carril tiene su propio arrastre: una
+  // cotización no cambia de sede.
+  const isAllSedes = useLocationStore((s) => s.activeLocationId === ALL_LOCATIONS);
+  const sedes = useLocationStore((s) => s.locations);
 
   const [filters, setFilters] = useState<BoardFilters>(initialFilters ?? {});
   const [activeQuote, setActiveQuote] = useState<Quote | null>(null);
@@ -140,6 +148,55 @@ export const QuoteKanbanBoard: React.FC<QuoteKanbanBoardProps> = ({
 
   const handleClearFilters = () => setFilters({});
 
+  /** Las columnas del tablero, con su arrastre. `locationId`: carril de una sede en "Todas". */
+  const renderLane = (locationId: string | undefined, height: number | string) => (
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+      onDragCancel={handleDragCancel}
+    >
+      <Box
+        sx={{
+          display: 'flex',
+          gap: 2,
+          overflowX: 'auto',
+          pb: 2,
+          height,
+          minHeight: locationId ? undefined : 400,
+          alignItems: 'flex-start',
+        }}
+      >
+        {columns.map((column) => (
+          <QuoteKanbanColumn
+            key={column.id}
+            column={column}
+            baseFilters={effectiveFilters}
+            locationId={locationId}
+            onView={onViewQuote}
+            onEdit={onEditQuote}
+            onDelete={onDeleteQuote}
+            onConvert={onConvertQuote}
+          />
+        ))}
+      </Box>
+
+      <DragOverlay dropAnimation={{ duration: 150, easing: 'ease' }}>
+        {activeQuote ? (
+          <QuoteKanbanCard
+            quote={activeQuote}
+            onView={() => {}}
+            onEdit={() => {}}
+            onDelete={() => {}}
+            onConvert={() => {}}
+            overlay
+          />
+        ) : null}
+      </DragOverlay>
+    </DndContext>
+  );
+
   if (columnsQuery.isLoading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
@@ -175,50 +232,21 @@ export const QuoteKanbanBoard: React.FC<QuoteKanbanBoardProps> = ({
         )}
       </Box>
 
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCenter}
-        onDragStart={handleDragStart}
-        onDragEnd={handleDragEnd}
-        onDragCancel={handleDragCancel}
-      >
-        <Box
-          sx={{
-            display: 'flex',
-            gap: 2,
-            overflowX: 'auto',
-            pb: 2,
-            height: 'calc(100vh - 320px)',
-            minHeight: 400,
-            alignItems: 'flex-start',
-          }}
-        >
-          {columns.map((column) => (
-            <QuoteKanbanColumn
-              key={column.id}
-              column={column}
-              baseFilters={effectiveFilters}
-              onView={onViewQuote}
-              onEdit={onEditQuote}
-              onDelete={onDeleteQuote}
-              onConvert={onConvertQuote}
-            />
-          ))}
-        </Box>
-
-        <DragOverlay dropAnimation={{ duration: 150, easing: 'ease' }}>
-          {activeQuote ? (
-            <QuoteKanbanCard
-              quote={activeQuote}
-              onView={() => {}}
-              onEdit={() => {}}
-              onDelete={() => {}}
-              onConvert={() => {}}
-              overlay
-            />
-          ) : null}
-        </DragOverlay>
-      </DndContext>
+      {isAllSedes ? (
+        sedes.map((sede) => (
+          <Box key={sede.id} sx={{ mb: 3 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+              <SedeDot color={sede.color} size={12} />
+              <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                {sede.name}
+              </Typography>
+            </Box>
+            {renderLane(sede.id, 420)}
+          </Box>
+        ))
+      ) : (
+        renderLane(undefined, 'calc(100vh - 320px)')
+      )}
 
       <QuoteKanbanManageColumnsDialog
         open={manageColumnsOpen}

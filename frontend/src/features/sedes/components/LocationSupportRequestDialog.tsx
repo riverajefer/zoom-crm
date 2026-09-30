@@ -20,6 +20,7 @@ import { useLocationStore } from '../../../store/locationStore';
 import { useAuthStore } from '../../../store/authStore';
 import { PERMISSIONS } from '../../../utils/constants';
 import { SedeDot } from '../../../components/layout/LocationSelector';
+import { SupportDateField } from './SupportDateField';
 import { useActiveSedes } from '../hooks/useSedes';
 import { useLocationSupportMutations } from '../hooks/useLocationSupports';
 import { apiErrorMessage, bogotaToday, formatSupportDay } from '../utils/locationSupport';
@@ -142,13 +143,11 @@ export const LocationSupportRequestDialog: React.FC<Props> = ({ open, onClose })
                     name="startDate"
                     control={control}
                     render={({ field }) => (
-                      <TextField
-                        {...field}
-                        type="date"
+                      <SupportDateField
                         label="Desde"
-                        InputLabelProps={{ shrink: true }}
-                        inputProps={{ min: today }}
-                        fullWidth
+                        value={field.value}
+                        onChange={field.onChange}
+                        minDate={today}
                       />
                     )}
                   />
@@ -157,18 +156,16 @@ export const LocationSupportRequestDialog: React.FC<Props> = ({ open, onClose })
                   name="endDate"
                   control={control}
                   render={({ field, fieldState }) => (
-                    <TextField
-                      {...field}
-                      type="date"
+                    <SupportDateField
                       label="Hasta"
-                      InputLabelProps={{ shrink: true }}
-                      inputProps={{ min: activeSupport ? today : startDate }}
+                      value={field.value}
+                      onChange={field.onChange}
+                      minDate={activeSupport ? today : startDate}
                       error={!!fieldState.error}
                       helperText={
                         fieldState.error?.message ??
                         (activeSupport ? `Tu apoyo actual va hasta el ${formatSupportDay(activeSupport.endDate)}` : undefined)
                       }
-                      fullWidth
                     />
                   )}
                 />

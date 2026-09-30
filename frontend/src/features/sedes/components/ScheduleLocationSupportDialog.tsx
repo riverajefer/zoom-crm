@@ -18,6 +18,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useSnackbar } from 'notistack';
 import { SedeDot } from '../../../components/layout/LocationSelector';
+import { SupportDateField } from './SupportDateField';
 import { useUsers } from '../../users/hooks/useUsers';
 import type { User } from '../../../types';
 import { useActiveSedes } from '../hooks/useSedes';
@@ -164,15 +165,13 @@ export const ScheduleLocationSupportDialog: React.FC<Props> = ({ open, onClose }
                 name="startDate"
                 control={control}
                 render={({ field, fieldState }) => (
-                  <TextField
-                    {...field}
-                    type="date"
+                  <SupportDateField
                     label="Desde"
-                    InputLabelProps={{ shrink: true }}
-                    inputProps={{ min: today }}
+                    value={field.value}
+                    onChange={field.onChange}
+                    minDate={today}
                     error={!!fieldState.error}
                     helperText={fieldState.error?.message}
-                    fullWidth
                   />
                 )}
               />
@@ -180,15 +179,13 @@ export const ScheduleLocationSupportDialog: React.FC<Props> = ({ open, onClose }
                 name="endDate"
                 control={control}
                 render={({ field, fieldState }) => (
-                  <TextField
-                    {...field}
-                    type="date"
+                  <SupportDateField
                     label="Hasta"
-                    InputLabelProps={{ shrink: true }}
-                    inputProps={{ min: startDate }}
+                    value={field.value}
+                    onChange={field.onChange}
+                    minDate={startDate}
                     error={!!fieldState.error}
                     helperText={fieldState.error?.message}
-                    fullWidth
                   />
                 )}
               />

@@ -1,6 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
-  ArrayMinSize,
   IsArray,
   IsNotEmpty,
   IsOptional,
@@ -20,8 +19,9 @@ export class OpenCashSessionDto {
     description: 'Conteo de denominaciones del fondo de apertura',
     type: [DenominationCountItemDto],
   })
+  // Puede ir vacío: una caja abre sin fondo
+  // (decisión de Zoom del 2026-09-29; en High era obligatorio al menos un billete).
   @IsArray()
-  @ArrayMinSize(1)
   @ValidateNested({ each: true })
   @Type(() => DenominationCountItemDto)
   denominations: DenominationCountItemDto[];

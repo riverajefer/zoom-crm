@@ -150,6 +150,18 @@ describe('CashSessionService', () => {
       expect(pendingEntries.flushInto).toHaveBeenCalledWith(prisma, 'cs-new', 'user-1', 'loc-125');
       expect(repository.findById).toHaveBeenCalledWith('cs-new');
     });
+
+    it('abre sin fondo: sin denominaciones el fondo es $0 y no guarda desglose', async () => {
+      repository.findOpenByRegisterId.mockResolvedValue(null);
+      prisma.cashSession.create.mockResolvedValue({ id: 'cs-new' });
+      repository.findById.mockResolvedValue(sessionStub({ id: 'cs-new' }));
+
+      await service.openSession({ ...dto, denominations: [] }, 'user-1');
+
+      const openingArg = prisma.cashSession.create.mock.calls[0][0].data.openingAmount;
+      expect(Number(openingArg.toString())).toBe(0);
+      expect(prisma.cashDenominationCount.createMany).not.toHaveBeenCalled();
+    });
   });
 
   describe('closeSession', () => {

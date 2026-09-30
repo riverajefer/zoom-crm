@@ -1,6 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
-  ArrayMinSize,
   IsArray,
   IsOptional,
   IsString,
@@ -14,8 +13,9 @@ export class CloseCashSessionDto {
     description: 'Conteo de denominaciones al cierre (conteo ciego)',
     type: [DenominationCountItemDto],
   })
+  // Puede ir vacío: una caja cierra en $0 si todo el efectivo se retiró
+  // (decisión de Zoom del 2026-09-29; en High era obligatorio al menos un billete).
   @IsArray()
-  @ArrayMinSize(1)
   @ValidateNested({ each: true })
   @Type(() => DenominationCountItemDto)
   denominations: DenominationCountItemDto[];

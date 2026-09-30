@@ -31,3 +31,4 @@ export { cashRegisterApi } from './cash-register.api';
 export { refundRequestsApi } from './refund-requests.api';
 export { dashboardApi } from './dashboard.api';
 export { sedesApi } from './sedes.api';
+export { locationSupportsApi } from './location-supports.api';

@@ -9,6 +9,8 @@ import { EnvironmentBanner } from './EnvironmentBanner';
 import { AttendanceReminderBanner } from './AttendanceReminderBanner';
 import { UpdateAvailableBanner } from './UpdateAvailableBanner';
 import { useHeartbeat } from '../../hooks/useHeartbeat';
+import { useLocationSupportSync } from '../../features/sedes/hooks/useLocationSupportSync';
+import { LocationSupportBanner } from '../../features/sedes/components/LocationSupportBanner';
 import { GlobalSearchModal } from '../GlobalSearch';
 import { useUIStore } from '../../store/uiStore';
 
@@ -31,6 +33,8 @@ export const MainLayout: FC<MainLayoutProps> = ({ children }) => {
 
   // Enviar heartbeats de actividad cada 5 minutos mientras el layout está montado
   useHeartbeat();
+  // Solo Zoom: la sede cambia sola al aprobarse o terminar un apoyo (docs/PLAN_SEDES.md §16)
+  useLocationSupportSync();
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -93,6 +97,7 @@ export const MainLayout: FC<MainLayoutProps> = ({ children }) => {
       <Box sx={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
         <EnvironmentBanner />
         <Topbar onMenuClick={handleMenuClick} />
+        <LocationSupportBanner />
         <AttendanceReminderBanner />
         <UpdateAvailableBanner />
 

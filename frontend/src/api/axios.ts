@@ -4,6 +4,7 @@ import { useLocationStore } from '../store/locationStore';
 import { getFriendlyErrorMessage } from '../utils/error-messages';
 import { useMaintenanceModeStore } from '../hooks/useMaintenanceMode';
 import { enqueueSnackbar } from 'notistack';
+import type { UserSedes } from '../types';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api/v1';
 
@@ -45,7 +46,10 @@ axiosInstance.interceptors.request.use(
     // "Todas" pide cada grupo con la suya, ver `sedeRequestConfig`) la conserva:
     // el backend la valida igual.
     const activeLocationId = useLocationStore.getState().activeLocationId;
-    if (token && activeLocationId && !config.headers['X-Location-Id']) {
+    if (config.headers[WITHOUT_SEDE_HEADER]) {
+      // Recarga de sedes: la activa puede ya no valer (ver `fetchUserSedes`).
+      delete config.headers[WITHOUT_SEDE_HEADER];
+    } else if (token && activeLocationId && !config.headers['X-Location-Id']) {
       config.headers['X-Location-Id'] = activeLocationId;
     }
 
@@ -63,20 +67,41 @@ axiosInstance.interceptors.request.use(
  */
 let locationRecovery: Promise<void> | null = null;
 
+/** Marca interna (no sale a la red): la petición va sin sede activa. */
+const WITHOUT_SEDE_HEADER = 'X-Without-Location';
+
+/**
+ * Sedes del usuario (`/auth/me`) sin mandar la sede activa, que puede ya no
+ * valer: al empezar o terminar un apoyo en otra sede (docs/PLAN_SEDES.md §16)
+ * con ella el backend respondería 403.
+ *
+ * No pasa por `singleFlight`: la recuperación de sede la llama desde el manejo
+ * del 403 de otra petición, y si esa petición era también `POST /auth/me`
+ * recibiría su propia promesa y ninguna de las dos terminaría nunca.
+ */
+export async function fetchUserSedes(): Promise<Partial<UserSedes> & { permissions?: string[] }> {
+  const { data } = await rawPost('/auth/me', undefined, { headers: { [WITHOUT_SEDE_HEADER]: '1' } });
+  return data;
+}
+
 function recoverActiveLocation(): Promise<void> {
   if (!locationRecovery) {
     locationRecovery = (async () => {
       useLocationStore.getState().clear();
       try {
-        const { data } = await axiosInstance.post('/auth/me');
-        useLocationStore.getState().setFromAuth(data);
+        useLocationStore.getState().setFromAuth(await fetchUserSedes());
       } catch {
         // Sin sedes recargadas, el reintento va sin header y el backend usa la predeterminada.
       }
-      enqueueSnackbar('Tu sede activa cambió: volviste a tu sede predeterminada.', {
-        variant: 'info',
-        preventDuplicate: true,
-      });
+      // Con un apoyo en otra sede (docs/PLAN_SEDES.md §16) la sede cambia al empezar o terminar el apoyo.
+      const { activeSupport, locations } = useLocationStore.getState();
+      const supportSede = activeSupport && locations.find((l) => l.id === activeSupport.locationId);
+      enqueueSnackbar(
+        supportSede
+          ? `Estás de apoyo en ${supportSede.name}: tu sede activa cambió.`
+          : 'Tu sede activa cambió: volviste a tu sede predeterminada.',
+        { variant: 'info', preventDuplicate: true },
+      );
     })().finally(() => {
       locationRecovery = null;
     });

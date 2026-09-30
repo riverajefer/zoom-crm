@@ -7,6 +7,7 @@ import { LoadingSpinner } from '../../../components/common/LoadingSpinner';
 import { ConfirmDialog } from '../../../components/common/ConfirmDialog';
 import { UserDetail } from '../components/UserDetail';
 import { UserSedesCard } from '../../sedes/components/UserSedesCard';
+import { UserLocationSupportsCard } from '../../sedes/components/UserLocationSupportsCard';
 import { useUsers } from '../hooks/useUsers';
 import { ROUTES, PERMISSIONS } from '../../../utils/constants';
 import { useAuthStore } from '../../../store/authStore';
@@ -70,6 +71,8 @@ const UserViewPage: React.FC = () => {
       />
 
       <UserSedesCard user={user} canManage={hasPermission(PERMISSIONS.MANAGE_USER_LOCATIONS)} />
+
+      {hasPermission(PERMISSIONS.AUTHORIZE_LOCATION_SUPPORT) && <UserLocationSupportsCard userId={user.id} />}
 
       <ConfirmDialog
         open={confirmDeactivateOpen}

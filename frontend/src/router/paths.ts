@@ -20,6 +20,8 @@ export const PATHS = {
   PRODUCTION_AREAS_VIEW: '/production-areas/:id',
   // Sedes (solo soporte, fuera del menú): docs/PLAN_SEDES.md §6.4
   SEDES_ADMIN: '/sistema/sedes',
+  // Apoyos en otra sede (solo Zoom): docs/PLAN_SEDES.md §16
+  LOCATION_SUPPORTS: '/apoyos-sedes',
   CARGOS: '/cargos',
   CARGOS_CREATE: '/cargos/new',
   CARGOS_EDIT: '/cargos/:id/edit',

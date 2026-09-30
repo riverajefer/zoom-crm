@@ -82,4 +82,52 @@ describe('locationStore', () => {
 
     expect(useLocationStore.getState().locations).toHaveLength(1);
   });
+
+  // Solo Zoom: apoyo en otra sede (docs/PLAN_SEDES.md §16)
+  describe('apoyo en otra sede', () => {
+    const support = {
+      id: 's-1',
+      locationId: 'l-125',
+      startDate: '2026-10-01',
+      endDate: '2026-10-05',
+      reason: 'Vacaciones de Laura',
+      authorizedBy: 'Oscar Herrera',
+      overdue: false,
+      homeLocationIds: ['l-104'],
+    };
+
+    it('al aprobarse, la sede activa pasa sola a la del apoyo', () => {
+      const store = useLocationStore.getState();
+      store.setFromAuth({ locations: [L104], defaultLocationId: 'l-104', canViewAllLocations: false });
+
+      store.setFromAuth({
+        locations: [L125],
+        defaultLocationId: 'l-125',
+        canViewAllLocations: false,
+        activeLocationSupport: support,
+      });
+
+      expect(useLocationStore.getState().activeLocationId).toBe('l-125');
+      expect(useLocationStore.getState().activeSupport?.authorizedBy).toBe('Oscar Herrera');
+    });
+
+    it('mientras dura no puede volver a su sede desde el selector', () => {
+      const store = useLocationStore.getState();
+      store.setFromAuth({ locations: [L125], defaultLocationId: 'l-125', canViewAllLocations: false, activeLocationSupport: support });
+
+      store.setActive('l-104');
+
+      expect(useLocationStore.getState().activeLocationId).toBe('l-125');
+    });
+
+    it('al terminar vuelve a su sede y se olvida el apoyo', () => {
+      const store = useLocationStore.getState();
+      store.setFromAuth({ locations: [L125], defaultLocationId: 'l-125', canViewAllLocations: false, activeLocationSupport: support });
+
+      store.setFromAuth({ locations: [L104], defaultLocationId: 'l-104', canViewAllLocations: false, activeLocationSupport: null });
+
+      expect(useLocationStore.getState().activeLocationId).toBe('l-104');
+      expect(useLocationStore.getState().activeSupport).toBeNull();
+    });
+  });
 });

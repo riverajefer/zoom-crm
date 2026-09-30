@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MemoryRouter } from 'react-router-dom';
+import { SnackbarProvider } from 'notistack';
 import { LocationSelector } from './LocationSelector';
 import { ALL_LOCATIONS, useLocationStore } from '../../store/locationStore';
 import type { Sede } from '../../types';
@@ -18,7 +20,11 @@ const sede = (id: string, code: string, color: string): Sede => ({
 const renderSelector = () =>
   render(
     <QueryClientProvider client={new QueryClient()}>
-      <LocationSelector />
+      <SnackbarProvider>
+        <MemoryRouter>
+          <LocationSelector />
+        </MemoryRouter>
+      </SnackbarProvider>
     </QueryClientProvider>,
   );
 
@@ -30,7 +36,7 @@ describe('LocationSelector', () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it('con una sola sede la muestra fija, sin menú', () => {
+  it('con una sola sede no hay a dónde cambiar, pero puede pedir apoyo en otra', () => {
     useLocationStore.getState().setFromAuth({
       locations: [sede('l-125', '125', '#FF8A7A')],
       defaultLocationId: 'l-125',
@@ -38,8 +44,49 @@ describe('LocationSelector', () => {
     });
     renderSelector();
 
-    expect(screen.getByLabelText('Sede: Local 125')).toBeInTheDocument();
-    expect(screen.queryByRole('button')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Sede activa: Local 125/ }));
+    expect(screen.getAllByRole('menuitem').map((i) => i.textContent)).toEqual([
+      'Local 125',
+      'Pedir apoyo en otra sede',
+      'Mis solicitudes de sede',
+    ]);
+  });
+
+  // Solo Zoom: apoyo en otra sede (docs/PLAN_SEDES.md §16)
+  it('de apoyo solo ve la sede del apoyo, hasta cuándo, y cambiarse es pedirlo', () => {
+    useLocationStore.getState().setFromAuth({
+      locations: [sede('l-125', '125', '#FF8A7A')],
+      defaultLocationId: 'l-125',
+      canViewAllLocations: false,
+      activeLocationSupport: {
+        id: 's-1',
+        locationId: 'l-125',
+        startDate: '2026-10-01',
+        endDate: '2026-10-05',
+        reason: 'x',
+        authorizedBy: 'Oscar Herrera',
+        overdue: false,
+        homeLocationIds: ['l-104'],
+      },
+    });
+    renderSelector();
+
+    fireEvent.click(screen.getByRole('button', { name: /Sede activa: Local 125/ }));
+    expect(screen.getByText('De apoyo en')).toBeInTheDocument();
+    expect(screen.getByText(/^Hasta el 5 /)).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: 'Pedir cambio de sede' })).toBeInTheDocument();
+  });
+
+  it('quien ve todas las sedes no pide apoyos', () => {
+    useLocationStore.getState().setFromAuth({
+      locations: [sede('l-119', '119', '#F5B94A')],
+      defaultLocationId: null,
+      canViewAllLocations: true,
+    });
+    renderSelector();
+
+    fireEvent.click(screen.getByRole('button', { name: /Sede activa/ }));
+    expect(screen.queryByText('Pedir apoyo en otra sede')).not.toBeInTheDocument();
   });
 
   it('con varias sedes permite cambiar y "Todas" solo con view_all_locations', () => {

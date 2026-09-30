@@ -2,11 +2,15 @@ import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useSnackbar } from 'notistack';
 import { useAuthStore } from '../../../store/authStore';
+import { useLocationStore } from '../../../store/locationStore';
 import { createSocket } from '../../../lib/socket';
 import type { Socket } from 'socket.io-client';
 
 export function useApprovalSocket() {
   const accessToken = useAuthStore((s) => s.accessToken);
+  // Las salas de sede se eligen al conectar: si empieza o termina un apoyo en
+  // otra sede (docs/PLAN_SEDES.md §16), hay que reconectar.
+  const supportId = useLocationStore((s) => s.activeSupport?.id ?? null);
   const queryClient = useQueryClient();
   const { enqueueSnackbar } = useSnackbar();
   const socketRef = useRef<Socket | null>(null);
@@ -52,7 +56,7 @@ export function useApprovalSocket() {
       socketRef.current = null;
       setIsConnected(false);
     };
-  }, [accessToken, queryClient, enqueueSnackbar]);
+  }, [accessToken, supportId, queryClient, enqueueSnackbar]);
 
   return { isConnected };
 }

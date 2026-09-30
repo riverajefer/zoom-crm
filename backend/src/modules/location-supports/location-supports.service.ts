@@ -341,6 +341,15 @@ export class LocationSupportsService {
     };
 
     switch (filters.view ?? 'pending') {
+      case 'all':
+        if (!filters.userId) throw new BadRequestException('Indica el empleado');
+        return this.prisma.locationSupport.findMany({
+          where: byUser,
+          include,
+          orderBy: { createdAt: 'desc' },
+          take: 100,
+        });
+
       case 'pending':
         return this.prisma.locationSupport.findMany({
           where: { ...byUser, status: LocationSupportStatus.PENDING },

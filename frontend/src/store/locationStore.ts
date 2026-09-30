@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { Sede, UserSedes } from '../types';
+import type { ActiveLocationSupport, Sede, UserSedes } from '../types';
 
 /** Valor del header para la vista "Todas las sedes". */
 export const ALL_LOCATIONS = 'all';
@@ -13,6 +13,11 @@ interface LocationState {
   canViewAll: boolean;
   /** Sede activa: su id, `ALL_LOCATIONS`, o `null` si el usuario no tiene sede. */
   activeLocationId: string | null;
+  /**
+   * Apoyo en otra sede vigente (docs/PLAN_SEDES.md §16). Mientras dura, su sede
+   * es la única de `locations` y cambiar de sede pide autorización a Gerencia.
+   */
+  activeSupport: ActiveLocationSupport | null;
 
   /** Guarda lo que llega con el login o con `/auth/me`, sin perder la sede activa si sigue valiendo. */
   setFromAuth: (data: Partial<UserSedes>) => void;
@@ -50,6 +55,7 @@ export const useLocationStore = create<LocationState>()(
       defaultLocationId: null,
       canViewAll: false,
       activeLocationId: null,
+      activeSupport: null,
 
       setFromAuth: (data) => {
         if (data.locations === undefined) return;
@@ -61,6 +67,7 @@ export const useLocationStore = create<LocationState>()(
           locations,
           defaultLocationId,
           canViewAll,
+          activeSupport: data.activeLocationSupport ?? null,
           activeLocationId: isValid(current, locations, canViewAll)
             ? current
             : fallbackLocation(locations, defaultLocationId),
@@ -80,7 +87,7 @@ export const useLocationStore = create<LocationState>()(
       },
 
       clear: () =>
-        set({ locations: [], defaultLocationId: null, canViewAll: false, activeLocationId: null }),
+        set({ locations: [], defaultLocationId: null, canViewAll: false, activeLocationId: null, activeSupport: null }),
     }),
     { name: 'location-storage' },
   ),

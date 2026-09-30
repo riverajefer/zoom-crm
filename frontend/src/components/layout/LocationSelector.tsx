@@ -15,8 +15,15 @@ import {
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import CheckIcon from '@mui/icons-material/Check';
 import StorefrontIcon from '@mui/icons-material/Storefront';
+import AddLocationAltOutlinedIcon from '@mui/icons-material/AddLocationAltOutlined';
+import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
+import HistoryIcon from '@mui/icons-material/History';
 import { useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { ALL_LOCATIONS, selectActiveSede, useLocationStore } from '../../store/locationStore';
+import { ROUTES } from '../../utils/constants';
+import { LocationSupportRequestDialog } from '../../features/sedes/components/LocationSupportRequestDialog';
+import { formatSupportDay } from '../../features/sedes/utils/locationSupport';
 
 /** Punto de color que identifica a una sede en todo el sistema. */
 export const SedeDot: React.FC<{ color: string; size?: number }> = ({ color, size = 10 }) => (
@@ -37,19 +44,27 @@ export const SedeDot: React.FC<{ color: string; size?: number }> = ({ color, siz
  *
  * Al cambiar de sede se invalidan todas las consultas: lo que se ve es de la
  * sede anterior.
+ *
+ * Quien no ve todas las sedes puede además pedir apoyo en otra sede a Gerencia
+ * (docs/PLAN_SEDES.md §16). Con un apoyo vigente solo se ve la sede del apoyo, y
+ * cambiarse es "Pedir cambio de sede".
  */
 export const LocationSelector: React.FC = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const queryClient = useQueryClient();
-  const { locations, canViewAll, activeLocationId, setActive } = useLocationStore();
+  const navigate = useNavigate();
+  const { locations, canViewAll, activeLocationId, setActive, activeSupport } = useLocationStore();
   const activeSede = useLocationStore(selectActiveSede);
   const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
+  const [requestOpen, setRequestOpen] = React.useState(false);
 
   if (locations.length === 0 && !canViewAll) return null;
 
   const isAll = activeLocationId === ALL_LOCATIONS;
-  const canSwitch = canViewAll || locations.length > 1;
+  // Pedir apoyo es para quien trabaja en sus sedes; quien ve todas no lo necesita.
+  const canRequest = !canViewAll;
+  const canSwitch = canViewAll || locations.length > 1 || canRequest;
   const label = isAll ? 'Todas las sedes' : (activeSede?.name ?? 'Sin sede');
   const color = isAll ? theme.palette.text.secondary : (activeSede?.color ?? theme.palette.grey[500]);
 
@@ -118,17 +133,48 @@ export const LocationSelector: React.FC = () => {
         slotProps={{ paper: { sx: { mt: 1, minWidth: 220 } } }}
       >
         <Typography variant="overline" sx={{ px: 2, color: 'text.secondary' }}>
-          Cambiar de sede
+          {activeSupport ? 'De apoyo en' : 'Cambiar de sede'}
         </Typography>
         {locations.map((sede) => (
           <MenuItem key={sede.id} selected={sede.id === activeLocationId} onClick={() => handleSelect(sede.id)}>
             <ListItemIcon>
               <SedeDot color={sede.color} size={12} />
             </ListItemIcon>
-            <ListItemText primary={sede.name} />
+            <ListItemText
+              primary={sede.name}
+              secondary={activeSupport && !activeSupport.overdue ? `Hasta el ${formatSupportDay(activeSupport.endDate)}` : undefined}
+            />
             {sede.id === activeLocationId && <CheckIcon fontSize="small" sx={{ ml: 1 }} />}
           </MenuItem>
         ))}
+        {canRequest && [
+          <Divider key="request-divider" />,
+          <MenuItem
+            key="request"
+            disabled={!!activeSupport?.overdue}
+            onClick={() => {
+              setAnchorEl(null);
+              setRequestOpen(true);
+            }}
+          >
+            <ListItemIcon>
+              {activeSupport ? <SwapHorizIcon fontSize="small" /> : <AddLocationAltOutlinedIcon fontSize="small" />}
+            </ListItemIcon>
+            <ListItemText primary={activeSupport ? 'Pedir cambio de sede' : 'Pedir apoyo en otra sede'} />
+          </MenuItem>,
+          <MenuItem
+            key="mine"
+            onClick={() => {
+              setAnchorEl(null);
+              navigate(ROUTES.LOCATION_SUPPORTS);
+            }}
+          >
+            <ListItemIcon>
+              <HistoryIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText primary="Mis solicitudes de sede" />
+          </MenuItem>,
+        ]}
         {canViewAll && [
           <Divider key="divider" />,
           <MenuItem key={ALL_LOCATIONS} selected={isAll} onClick={() => handleSelect(ALL_LOCATIONS)}>
@@ -140,6 +186,7 @@ export const LocationSelector: React.FC = () => {
           </MenuItem>,
         ]}
       </Menu>
+      {canRequest && <LocationSupportRequestDialog open={requestOpen} onClose={() => setRequestOpen(false)} />}
     </>
   );
 };

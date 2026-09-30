@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { AxiosAdapter } from 'axios';
+import { AxiosError, type AxiosAdapter } from 'axios';
 
 // El módulo de axios arrastra el store de auth y el de mantenimiento; aquí solo
 // interesa la capa que evita el doble envío, así que se sustituyen por mínimos.
@@ -135,5 +135,39 @@ describe('axios · una sola petición en vuelo por acción', () => {
 
     http.releaseAll();
     await Promise.all(uploads);
+  });
+});
+
+// Solo Zoom: recuperación de la sede activa (docs/PLAN_SEDES.md §5 y §16)
+describe('axios · sede activa que ya no vale', () => {
+  it('recupera aunque la que falla sea POST /auth/me: no se bloquea con su propia promesa', async () => {
+    const { useLocationStore } = await import('../store/locationStore');
+    const calls: string[] = [];
+    axiosInstance.defaults.adapter = ((config) => {
+      calls.push(`${config.method} ${config.url}`);
+      if (calls.length === 1) {
+        // La sede del header ya no está permitida (empezó o terminó un apoyo).
+        return Promise.reject(
+          new AxiosError('forbidden', 'ERR_BAD_REQUEST', config, null, {
+            status: 403,
+            statusText: 'Forbidden',
+            headers: {},
+            config,
+            data: { code: 'LOCATION_NOT_ALLOWED', message: 'Estás de apoyo en Local 125' },
+          }),
+        );
+      }
+      const sedes = { locations: [{ id: 'l-125', code: '125', name: 'Local 125' }], defaultLocationId: 'l-125' };
+      return Promise.resolve({ data: sedes, status: 200, statusText: 'OK', headers: {}, config });
+    }) as AxiosAdapter;
+
+    const result = await Promise.race([
+      axiosInstance.post('/auth/me'),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('bloqueada')), 1000)),
+    ]);
+
+    expect((result as { status: number }).status).toBe(200);
+    expect(calls).toEqual(['post /auth/me', 'post /auth/me', 'post /auth/me']);
+    expect(useLocationStore.getState().activeLocationId).toBe('l-125');
   });
 });

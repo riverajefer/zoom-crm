@@ -75,7 +75,8 @@ export class EndLocationSupportDto {
   reason: string;
 }
 
-export const LOCATION_SUPPORT_VIEWS = ['pending', 'active', 'scheduled', 'history'] as const;
+/** `all`: todos los de un empleado, para su ficha (exige `userId`). */
+export const LOCATION_SUPPORT_VIEWS = ['pending', 'active', 'scheduled', 'history', 'all'] as const;
 export type LocationSupportView = (typeof LOCATION_SUPPORT_VIEWS)[number];
 
 export class FilterLocationSupportsDto {

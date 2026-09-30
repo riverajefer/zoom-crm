@@ -1,3 +1,5 @@
+import type { ActiveLocationSupport } from './location-support.types';
+
 /**
  * Sedes de Zoom: los locales 104, 119 y 125, y la Matriz.
  * En el backend el modelo es `Location`; en el frontend se llaman sedes para
@@ -49,6 +51,8 @@ export interface UserSedes {
   locations: Sede[];
   defaultLocationId: string | null;
   canViewAllLocations: boolean;
+  /** Apoyo en otra sede vigente: su sede es la única de `locations` (§16). */
+  activeLocationSupport?: ActiveLocationSupport | null;
 }
 
 export interface CreateSedeDto {

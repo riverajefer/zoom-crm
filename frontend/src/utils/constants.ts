@@ -220,6 +220,7 @@ export const PERMISSIONS = {
   MANAGE_USER_LOCATIONS: 'manage_user_locations',
   READ_ALL_CASH_SESSIONS: 'read_all_cash_sessions',
   PERFORM_GENERAL_CLOSING: 'perform_general_closing',
+  AUTHORIZE_LOCATION_SUPPORT: 'authorize_location_support',
   MANAGE_LOCATIONS: 'manage_locations',
 };
 
@@ -228,6 +229,8 @@ export const ROUTES = {
   DASHBOARD: '/dashboard',
   /** Dashboard consolidado por sede (solo Zoom, docs/PLAN_SEDES.md §7). */
   DASHBOARD_SEDES: '/dashboard/sedes',
+  /** Apoyos en otra sede (solo Zoom, docs/PLAN_SEDES.md §16). */
+  LOCATION_SUPPORTS: '/apoyos-sedes',
   USERS: '/users',
   USERS_CREATE: '/users/create',
   USERS_EDIT: '/users/:id/edit',

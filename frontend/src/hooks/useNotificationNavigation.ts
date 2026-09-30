@@ -51,13 +51,16 @@ const RESOLVABLE_TYPES = new Set([
   'CashMovementVoidRequest',
 ]);
 
+/** Apoyos en otra sede (solo Zoom, §16): llevan a su página, no a un documento. */
+const LOCATION_SUPPORT_TYPE = 'LocationSupport';
+
 export const isNotificationNavigable = (
   relatedId?: string | null,
   relatedType?: string | null,
 ) =>
   !!relatedId &&
   !!relatedType &&
-  (relatedType in DIRECT_TYPES || RESOLVABLE_TYPES.has(relatedType));
+  (relatedType in DIRECT_TYPES || RESOLVABLE_TYPES.has(relatedType) || relatedType === LOCATION_SUPPORT_TYPE);
 
 interface NavigableNotification {
   id: string;
@@ -77,6 +80,11 @@ export const useNotificationNavigation = () => {
     async ({ id, relatedId, relatedType }: NavigableNotification) => {
       if (!isNotificationNavigable(relatedId, relatedType) || inFlight.current) {
         return false;
+      }
+
+      if (relatedType === LOCATION_SUPPORT_TYPE) {
+        navigate(PATHS.LOCATION_SUPPORTS);
+        return true;
       }
 
       const direct = DIRECT_TYPES[relatedType!];

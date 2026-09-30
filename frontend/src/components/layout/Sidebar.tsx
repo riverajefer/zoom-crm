@@ -62,6 +62,7 @@ import PointOfSaleIcon from '@mui/icons-material/PointOfSale';
 import LockOpenIcon from '@mui/icons-material/LockOpen';
 import HistoryEduIcon from '@mui/icons-material/HistoryEdu';
 import StorefrontIcon from '@mui/icons-material/Storefront';
+import HandshakeOutlinedIcon from '@mui/icons-material/HandshakeOutlined';
 import { useAuthStore } from '../../store/authStore';
 import { selectActiveSede, useLocationStore } from '../../store/locationStore';
 import { ROUTES, PERMISSIONS } from '../../utils/constants';
@@ -415,12 +416,20 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose, collapsed = fal
           icon: <FactoryIcon />,
           path: ROUTES.PRODUCTION_AREAS,
           permission: PERMISSIONS.READ_PRODUCTION_AREAS,
-        },        
+        },
+        // Solo Zoom: docs/PLAN_SEDES.md §16
+        {
+          label: 'Apoyos entre sedes',
+          icon: <HandshakeOutlinedIcon />,
+          path: ROUTES.LOCATION_SUPPORTS,
+          permission: PERMISSIONS.AUTHORIZE_LOCATION_SUPPORT,
+        },
       ],
       permissions: [
         PERMISSIONS.READ_USERS,
         PERMISSIONS.READ_CARGOS,
         PERMISSIONS.READ_PRODUCTION_AREAS,
+        PERMISSIONS.AUTHORIZE_LOCATION_SUPPORT,
       ],
     },
     {

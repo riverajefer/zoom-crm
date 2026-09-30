@@ -41,6 +41,8 @@ export interface UserLocations {
     authorizedBy: string | null;
     /** Venció, pero sigue hasta que cierre su caja en esa sede. */
     overdue: boolean;
+    /** Sus sedes fijas: pedir una de ellas es volver antes de tiempo. */
+    homeLocationIds: string[];
   } | null;
 }
 
@@ -220,6 +222,7 @@ export class AuthService {
           reason: support.reason,
           authorizedBy: by ? [by.firstName, by.lastName].filter(Boolean).join(' ') || by.username : null,
           overdue: support.overdue,
+          homeLocationIds: (user?.locations ?? []).map((ul) => ul.location.id),
         },
       };
     }

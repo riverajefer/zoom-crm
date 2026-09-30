@@ -25,6 +25,7 @@ const ProductionAreaFormPage = lazyWithRetry(() => import('../features/productio
 const ProductionAreaDetailPage = lazyWithRetry(() => import('../features/production-areas/pages/ProductionAreaDetailPage'));
 const CargosListPage = lazyWithRetry(() => import('../features/cargos/pages/CargosListPage'));
 const SedesAdminPage = lazyWithRetry(() => import('../features/sedes/pages/SedesAdminPage'));
+const LocationSupportsPage = lazyWithRetry(() => import('../features/sedes/pages/LocationSupportsPage'));
 const CargoFormPage = lazyWithRetry(() => import('../features/cargos/pages/CargoFormPage'));
 const CargoDetailPage = lazyWithRetry(() => import('../features/cargos/pages/CargoDetailPage'));
 const ClientsListPage = lazyWithRetry(() => import('../features/clients/pages/ClientsListPage'));
@@ -372,6 +373,18 @@ const RoutesConfig: FC = () => {
                 <PermissionGuard permission={PERMISSIONS.UPDATE_PRODUCTION_AREAS}>
                   <ProductionAreaFormPage />
                 </PermissionGuard>
+              </MainLayout>
+            </AuthGuard>
+          }
+        />
+
+        {/* Apoyos en otra sede (docs/PLAN_SEDES.md §16): Gerencia ve todos, los demás los suyos */}
+        <Route
+          path={PATHS.LOCATION_SUPPORTS}
+          element={
+            <AuthGuard>
+              <MainLayout>
+                <LocationSupportsPage />
               </MainLayout>
             </AuthGuard>
           }

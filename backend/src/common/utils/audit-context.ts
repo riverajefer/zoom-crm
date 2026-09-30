@@ -38,6 +38,8 @@ export interface RequestLocation {
    * que no vende ni produce. `null` en "Todas" o sin sede.
    */
   locationType?: 'STORE' | 'HEADQUARTERS' | null;
+  /** Apoyo en otra sede vigente (docs/PLAN_SEDES.md §16): la sede del apoyo es la única permitida. */
+  supportId?: string | null;
 }
 
 /**

@@ -5,6 +5,7 @@ import {
   VIEW_ALL_LOCATIONS_PERMISSION,
   withoutLocationScope,
 } from '../../common/utils/location-context';
+import { usersWorkingInLocationWhere } from '../../common/utils/location-support.util';
 
 export type NotificationTargetType =
   | 'ORDER'
@@ -248,7 +249,8 @@ export class NotificationsService {
    * Solo Zoom: con `scope`, el aviso es de un documento de una sede y solo les
    * llega a los usuarios de esa sede y a quienes ven todas las sedes. Sin esto
    * la caja del 104 recibía los anticipos del 119 (docs/PLAN_SEDES.md §5).
-   * `orderId` resuelve la sede de la OP; `locationId` la da directa.
+   * `orderId` resuelve la sede de la OP; `locationId` la da directa. Quien está
+   * de apoyo en otra sede recibe los de esa sede y no los de la suya (§16).
    */
   async notifyUsersWithPermission(
     permissionName: string,
@@ -267,7 +269,7 @@ export class NotificationsService {
         },
         ...(locationId && {
           OR: [
-            { locations: { some: { locationId } } },
+            ...usersWorkingInLocationWhere(locationId),
             {
               role: {
                 permissions: { some: { permission: { name: VIEW_ALL_LOCATIONS_PERMISSION } } },

@@ -138,6 +138,7 @@ const PERMISSION_GROUPS: Record<string, string[]> = {
     'manage_user_locations',
     'read_all_cash_sessions',
     'perform_general_closing',
+    'authorize_location_support',
     'manage_locations',
   ],
   Otros: [],

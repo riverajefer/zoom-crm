@@ -9,11 +9,12 @@ import { Server, Socket } from 'socket.io';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../database/prisma.service';
-import { WS_EVENTS, WS_ROOMS, advancePaymentSedeRoom } from './ws-events.types';
+import { WS_EVENTS, WS_ROOMS, advancePaymentSedeRoom, userRoom } from './ws-events.types';
 import {
   VIEW_ALL_LOCATIONS_PERMISSION,
   withoutLocationScope,
 } from '../../common/utils/location-context';
+import { findActiveLocationSupport } from '../../common/utils/location-support.util';
 
 @WebSocketGateway({
   namespace: '/ws',
@@ -72,6 +73,7 @@ export class WsEventsGateway
       });
 
       client.data.userId = userId;
+      client.join(userRoom(userId));
 
       if (hasPermission) {
         // La sala general sigue recibiendo lo que no se sabe de qué sede es.
@@ -95,6 +97,11 @@ export class WsEventsGateway
 
   handleDisconnect(client: Socket) {
     this.logger.log(`Client ${client.id} disconnected`);
+  }
+
+  /** Aviso solo para un usuario, en todas sus pestañas abiertas. */
+  emitToUser(userId: string, event: string, data: unknown) {
+    this.server.to(userRoom(userId)).emit(event, data);
   }
 
   emitApprovalCreated(data: unknown) {
@@ -128,7 +135,11 @@ export class WsEventsGateway
     }
   }
 
-  /** Salas de sede del usuario: las permitidas, o la de "todas" con `view_all_locations`. */
+  /**
+   * Salas de sede del usuario: las permitidas, o la de "todas" con
+   * `view_all_locations`. Con un apoyo en otra sede vigente, solo la del apoyo
+   * (§16); al cambiar de sede el frontend reconecta el socket.
+   */
   private async sedeRoomsFor(userId: string): Promise<string[]> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
@@ -146,6 +157,8 @@ export class WsEventsGateway
     });
     if (!user) return [];
     if (user.role.permissions.length > 0) return [advancePaymentSedeRoom('all')];
+    const support = await findActiveLocationSupport(this.prisma, userId);
+    if (support) return [advancePaymentSedeRoom(support.locationId)];
     return user.locations.map((l) => advancePaymentSedeRoom(l.locationId));
   }
 }

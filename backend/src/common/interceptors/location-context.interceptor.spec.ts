@@ -32,6 +32,9 @@ describe('LocationContextInterceptor', () => {
     location: {
       findMany: jest.fn(async () => ACTIVE.map((id) => ({ id, type: id === 'l-mat' ? 'HEADQUARTERS' : 'STORE' }))),
     },
+    // Sin apoyos en otra sede, salvo en las pruebas del final
+    locationSupport: { findFirst: jest.fn(async (): Promise<any> => null) },
+    cashSession: { findFirst: jest.fn(async (): Promise<any> => null) },
   };
   const interceptor = new LocationContextInterceptor(prisma as any);
 
@@ -60,6 +63,7 @@ describe('LocationContextInterceptor', () => {
       viewAll: false,
       readOther: true,
       locationType: 'STORE',
+      supportId: null,
     });
     expect(request.location).toEqual(stored);
   });
@@ -118,6 +122,7 @@ describe('LocationContextInterceptor', () => {
       viewAll: false,
       readOther: false,
       locationType: null,
+      supportId: null,
     });
   });
 
@@ -126,5 +131,56 @@ describe('LocationContextInterceptor', () => {
 
     expect(stored).toBeUndefined();
     expect(prisma.user.findUnique).not.toHaveBeenCalled();
+  });
+
+  // Solo Zoom: apoyo en otra sede (docs/PLAN_SEDES.md §16)
+  describe('con un apoyo en otra sede vigente', () => {
+    const today = new Date(`${new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota' }).format(new Date())}T00:00:00.000Z`);
+    const support = (endDate: Date) => ({
+      id: 's-1',
+      locationId: 'l-104',
+      endDate,
+      location: { id: 'l-104', name: 'Local 104', type: 'STORE' },
+    });
+
+    it('la sede del apoyo es la única permitida y la de entrada', async () => {
+      prisma.locationSupport.findFirst.mockResolvedValueOnce(support(today));
+
+      const { stored } = await run('u-apoyo');
+
+      expect(stored).toMatchObject({ locationId: 'l-104', permittedIds: ['l-104'], supportId: 's-1' });
+    });
+
+    it('sus sedes fijas quedan bloqueadas mientras dura: 403 que nombra la sede del apoyo', async () => {
+      prisma.locationSupport.findFirst.mockResolvedValue(support(today));
+
+      await expect(run('u-apoyo', 'l-125')).rejects.toMatchObject({
+        response: { code: LOCATION_NOT_ALLOWED, message: 'Estás de apoyo en Local 104' },
+      });
+      prisma.locationSupport.findFirst.mockResolvedValue(null);
+    });
+
+    it('vencido con su caja abierta en esa sede, sigue vigente para que pueda cerrarla', async () => {
+      prisma.locationSupport.findFirst.mockResolvedValueOnce(support(new Date(today.getTime() - 86_400_000)));
+      prisma.cashSession.findFirst.mockResolvedValueOnce({ id: 'cs-1' });
+
+      const { stored } = await run('u-apoyo');
+
+      expect(stored).toMatchObject({ locationId: 'l-104', permittedIds: ['l-104'] });
+    });
+
+    it('vencido sin caja abierta en esa sede, vuelve a sus sedes fijas', async () => {
+      prisma.locationSupport.findFirst.mockResolvedValueOnce(support(new Date(today.getTime() - 86_400_000)));
+
+      const { stored } = await run('u-apoyo');
+
+      expect(stored).toMatchObject({ locationId: 'l-125', permittedIds: ['l-119', 'l-125'], supportId: null });
+    });
+
+    it('quien ve todas las sedes no tiene apoyos: ni se consultan', async () => {
+      await run('u-admin');
+
+      expect(prisma.locationSupport.findFirst).not.toHaveBeenCalled();
+    });
   });
 });

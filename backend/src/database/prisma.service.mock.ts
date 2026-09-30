@@ -429,6 +429,16 @@ export const createMockPrismaService = () => ({
     delete: jest.fn(),
     count: jest.fn(),
   },
+  // Solo Zoom: apoyos en otra sede (docs/PLAN_SEDES.md §16)
+  locationSupport: {
+    findUnique: jest.fn(),
+    findFirst: jest.fn(),
+    findMany: jest.fn(),
+    create: jest.fn(),
+    update: jest.fn(),
+    updateMany: jest.fn(),
+    count: jest.fn(),
+  },
   cashSession: {
     findUnique: jest.fn(),
     findFirst: jest.fn(),

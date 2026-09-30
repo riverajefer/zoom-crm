@@ -380,7 +380,11 @@ describe('NotificationsService', () => {
 
       const where = prisma.user.findMany.mock.calls[0][0].where;
       expect(where.OR).toEqual([
-        { locations: { some: { locationId: 'l-119' } } },
+        {
+          locations: { some: { locationId: 'l-119' } },
+          NOT: { locationSupports: { some: expect.objectContaining({ locationId: { not: 'l-119' } }) } },
+        },
+        { locationSupports: { some: expect.objectContaining({ locationId: 'l-119', status: 'APPROVED' }) } },
         { role: { permissions: { some: { permission: { name: 'view_all_locations' } } } } },
       ]);
       expect(prisma.notification.createMany).toHaveBeenCalledWith({
@@ -394,7 +398,7 @@ describe('NotificationsService', () => {
       await service.notifyUsersWithPermission('approve_discounts', data, { locationId: 'l-104' });
 
       expect(prisma.order.findUnique).not.toHaveBeenCalled();
-      expect(prisma.user.findMany.mock.calls[0][0].where.OR[0]).toEqual({
+      expect(prisma.user.findMany.mock.calls[0][0].where.OR[0]).toMatchObject({
         locations: { some: { locationId: 'l-104' } },
       });
     });

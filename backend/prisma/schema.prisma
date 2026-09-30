@@ -30,6 +30,10 @@ model User {
 
   defaultLocation                           Location?                              @relation("UserDefaultLocation", fields: [defaultLocationId], references: [id])
   locations                                 UserLocation[]
+  locationSupports                          LocationSupport[]                      @relation("LocationSupportUser")
+  requestedLocationSupports                 LocationSupport[]                      @relation("LocationSupportRequestedBy")
+  reviewedLocationSupports                  LocationSupport[]                      @relation("LocationSupportReviewedBy")
+  endedLocationSupports                     LocationSupport[]                      @relation("LocationSupportEndedBy")
   role                                      Role                                   @relation(fields: [roleId], references: [id])
   cargo                                     Cargo?                                 @relation(fields: [cargoId], references: [id])
   sessionLogs                               SessionLog[]
@@ -177,6 +181,7 @@ model Location {
   attendanceRecords  AttendanceRecord[]
   inventoryMovements InventoryMovement[]
   consecutives       Consecutive[]
+  locationSupports   LocationSupport[]
 
   @@map("locations")
 }
@@ -193,6 +198,57 @@ model UserLocation {
   @@id([userId, locationId])
   @@index([locationId])
   @@map("user_locations")
+}
+
+enum LocationSupportStatus {
+  PENDING // Pedido por el empleado, espera a Gerencia
+  APPROVED // Programado por Gerencia o aprobado
+  REJECTED
+  CANCELLED // El empleado retiró su solicitud
+}
+
+enum LocationSupportKind {
+  SUPPORT // Trabajar en otra sede durante un rango de fechas
+  RETURN // Volver a sus sedes fijas antes de que termine el apoyo
+}
+
+/// Apoyo en otra sede autorizado por Gerencia (solo Zoom, docs/PLAN_SEDES.md §16).
+/// Mientras está vigente, la sede del apoyo es la única permitida del usuario.
+model LocationSupport {
+  id            String                @id @default(uuid())
+  userId        String                @map("user_id")
+  // En un RETURN es la sede fija a la que vuelve
+  locationId    String                @map("location_id")
+  kind          LocationSupportKind   @default(SUPPORT)
+  status        LocationSupportStatus @default(PENDING)
+  // Días de Bogotá, ambos incluidos
+  startDate     DateTime              @map("start_date") @db.Date
+  endDate       DateTime              @map("end_date") @db.Date
+  reason        String
+  requestedById String                @map("requested_by_id")
+  reviewedById  String?               @map("reviewed_by_id")
+  reviewedAt    DateTime?             @map("reviewed_at")
+  reviewNotes   String?               @map("review_notes")
+  // Terminado antes de tiempo (o reemplazado por un cambio aprobado)
+  endedAt       DateTime?             @map("ended_at")
+  endedById     String?               @map("ended_by_id")
+  endReason     String?               @map("end_reason")
+  // Un cambio pedido a mitad de un apoyo apunta al apoyo que reemplaza
+  replacesId    String?               @map("replaces_id")
+  createdAt     DateTime              @default(now()) @map("created_at")
+  updatedAt     DateTime              @updatedAt @map("updated_at")
+
+  user        User              @relation("LocationSupportUser", fields: [userId], references: [id], onDelete: Cascade)
+  location    Location          @relation(fields: [locationId], references: [id])
+  requestedBy User              @relation("LocationSupportRequestedBy", fields: [requestedById], references: [id])
+  reviewedBy  User?             @relation("LocationSupportReviewedBy", fields: [reviewedById], references: [id])
+  endedBy     User?             @relation("LocationSupportEndedBy", fields: [endedById], references: [id])
+  replaces    LocationSupport?  @relation("LocationSupportReplaces", fields: [replacesId], references: [id])
+  replacedBy  LocationSupport[] @relation("LocationSupportReplaces")
+
+  @@index([userId, status, startDate, endDate])
+  @@index([status])
+  @@map("location_supports")
 }
 
 model Role {
@@ -1069,6 +1125,11 @@ enum NotificationType {
   PAYROLL_DEDUCTION_APPROVED // Descuento por nómina aprobado
   PAYROLL_DEDUCTION_REJECTED // Descuento por nómina rechazado
   PAYROLL_DEDUCTION_APPLIED // Descuento aplicado sobre la nómina del periodo
+  LOCATION_SUPPORT_REQUEST_PENDING // Un empleado pide apoyo o cambio de sede (solo Zoom)
+  LOCATION_SUPPORT_APPROVED // Gerencia aprobó el apoyo o el cambio de sede
+  LOCATION_SUPPORT_REJECTED // Gerencia rechazó el apoyo o el cambio de sede
+  LOCATION_SUPPORT_SCHEDULED // Gerencia programó un apoyo en otra sede
+  LOCATION_SUPPORT_ENDED // Gerencia terminó un apoyo antes de tiempo
 }
 
 enum ApPaymentAuthRequestStatus {

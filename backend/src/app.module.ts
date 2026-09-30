@@ -16,6 +16,7 @@ import { AuditLogsModule } from './modules/audit-logs/audit-logs.module';
 import { SessionLogsModule } from './modules/session-logs/session-logs.module';
 import { CargosModule } from './modules/cargos/cargos.module';
 import { SedesModule } from './modules/sedes/sedes.module';
+import { LocationSupportsModule } from './modules/location-supports/location-supports.module';
 import { LocationsModule } from './modules/locations/locations.module';
 import { ClientsModule } from './modules/clients/clients.module';
 import { SuppliersModule } from './modules/suppliers/suppliers.module';
@@ -107,6 +108,7 @@ import { ClientErrorsModule } from './modules/client-errors/client-errors.module
     SessionLogsModule,
     CargosModule,
     SedesModule,
+    LocationSupportsModule,
     // Módulos de ubicaciones, clientes y proveedores
     LocationsModule,
     ClientsModule,

@@ -442,6 +442,8 @@ Todavía **no toca documentos**: al terminar, la app funciona como hoy, pero ya 
 
 Diseño en §16. Se numera después de la 8 porque se decidió cuando la 8 ya estaba en curso, pero **va antes de la salida a producción**.
 
+> **Backend hecho** (2026-09-30, probado contra `zoom_seedtest` con un backend aparte): modelo, migración, permiso, interceptor, notificaciones, socket y `/location-supports`. Probado de punta a punta: `admin.zoom` programa a `asesor.104` en el 125 (su login y su perfil traen solo el 125; el 104 responde 403 «Estás de apoyo en Local 125»), un segundo apoyo que se cruza se rechaza, `asesor.104` pide volver y al aprobarlo recupera el 104; `caja.119` va de apoyo al 125, abre su caja, y aprobarle la vuelta falla con `CASH_SESSION_OPEN` hasta que la cierra. **Falta el frontend.**
+
 - Modelo `LocationSupport` y su migración; permiso `authorize_location_support` en el catálogo, el seed (`admin` y `soporte`) y la etiqueta del selector de roles (grupo Sedes).
 - `LocationContextInterceptor`: con un apoyo vigente, la única sede permitida es la del apoyo. Destinatarios de las notificaciones de operación según el apoyo. Regla de caja.
 - Endpoints de `/location-supports` y el apoyo vigente en `GET /auth/me`.

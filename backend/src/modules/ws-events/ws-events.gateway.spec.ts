@@ -10,6 +10,8 @@ describe('WsEventsGateway — salas por sede', () => {
   const prisma: any = {
     order: { findUnique: jest.fn() },
     user: { findFirst: jest.fn(), findUnique: jest.fn() },
+    locationSupport: { findFirst: jest.fn() },
+    cashSession: { findFirst: jest.fn() },
   };
   const jwt: any = { verifyAsync: jest.fn().mockResolvedValue({ sub: 'u1' }) };
   const config: any = { get: jest.fn(() => 'secret') };
@@ -61,5 +63,33 @@ describe('WsEventsGateway — salas por sede', () => {
     await gateway.handleConnection(client);
 
     expect(client.join).toHaveBeenCalledWith(['approvals:advance_payments', 'approvals:advance_payments:all']);
+  });
+
+  // Solo Zoom: apoyo en otra sede (docs/PLAN_SEDES.md §16)
+  it('todo cliente entra a su sala personal', async () => {
+    prisma.user.findFirst.mockResolvedValue(null);
+    const client: any = { id: 'c1', handshake: { auth: { token: 't' } }, data: {}, join: jest.fn(), disconnect: jest.fn() };
+
+    await gateway.handleConnection(client);
+
+    expect(client.join).toHaveBeenCalledWith('user:u1');
+  });
+
+  it('de apoyo en otra sede, la caja entra solo a la sala de esa sede', async () => {
+    prisma.user.findFirst.mockResolvedValue({ id: 'u1' });
+    prisma.user.findUnique.mockResolvedValue({ locations: [{ locationId: 'l-119' }], role: { permissions: [] } });
+    prisma.locationSupport.findFirst.mockResolvedValue({ id: 's1', locationId: 'l-125', endDate: new Date('2999-01-01') });
+    const client: any = { id: 'c1', handshake: { auth: { token: 't' } }, data: {}, join: jest.fn(), disconnect: jest.fn() };
+
+    await gateway.handleConnection(client);
+
+    expect(client.join).toHaveBeenCalledWith(['approvals:advance_payments', 'approvals:advance_payments:l-125']);
+  });
+
+  it('emitToUser avisa en la sala personal', () => {
+    gateway.emitToUser('u9', WS_EVENTS.LOCATION_SUPPORT_CHANGED, { id: 's1' });
+
+    expect(to).toHaveBeenCalledWith('user:u9');
+    expect(emit).toHaveBeenCalledWith(WS_EVENTS.LOCATION_SUPPORT_CHANGED, { id: 's1' });
   });
 });

@@ -254,6 +254,10 @@ export const permissionGroups: PermissionGroup[] = [
         description: 'Hacer el cierre general diario de las cajas',
       },
       {
+        name: 'authorize_location_support',
+        description: 'Programar, aprobar y terminar apoyos de empleados en otra sede',
+      },
+      {
         name: 'manage_locations',
         description: 'Crear y editar sedes (reservado a soporte)',
       },

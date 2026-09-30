@@ -16,6 +16,7 @@ import {
   setRequestLocation,
   VIEW_ALL_LOCATIONS_PERMISSION,
 } from '../utils/location-context';
+import { findActiveLocationSupport } from '../utils/location-support.util';
 
 /** Código que el frontend reconoce para volver a la sede predeterminada. */
 export const LOCATION_NOT_ALLOWED = 'LOCATION_NOT_ALLOWED';
@@ -31,7 +32,8 @@ export const LOCATION_NOT_ALLOWED = 'LOCATION_NOT_ALLOWED';
  * - Sin header: la sede predeterminada del usuario, o la primera permitida.
  *
  * Con `view_all_locations` (admin, soporte, contabilidad) se permiten todas las
- * sedes activas. Un header no permitido es 403, nunca un cambio silencioso de
+ * sedes activas. Con un apoyo en otra sede vigente (docs/PLAN_SEDES.md §16),
+ * solo la del apoyo: mientras dura, cambiar de sede pide autorización. Un header no permitido es 403, nunca un cambio silencioso de
  * sede: desde la fase 2 eso haría que un documento naciera en la sede
  * equivocada. Ver docs/PLAN_SEDES.md §5 y §15.1.
  */
@@ -84,13 +86,16 @@ export class LocationContextInterceptor implements NestInterceptor {
     const granted = new Set((user?.role.permissions ?? []).map((p) => p.permission.name));
     const viewAll = granted.has(VIEW_ALL_LOCATIONS_PERMISSION);
     const readOther = granted.has(READ_OTHER_LOCATIONS_PERMISSION);
+    const support = viewAll ? null : await findActiveLocationSupport(this.prisma, userId);
     const permitted = viewAll
       ? await this.prisma.location.findMany({
           where: { isActive: true },
           select: { id: true, type: true },
           orderBy: { sortOrder: 'asc' },
         })
-      : (user?.locations ?? []).map((l) => ({ id: l.locationId, type: l.location.type }));
+      : support
+        ? [{ id: support.locationId, type: support.location.type }]
+        : (user?.locations ?? []).map((l) => ({ id: l.locationId, type: l.location.type }));
     const permittedIds = permitted.map((l) => l.id);
     const typeOf = (id: string | null) => (id ? (permitted.find((l) => l.id === id)?.type ?? null) : null);
 
@@ -99,16 +104,28 @@ export class LocationContextInterceptor implements NestInterceptor {
       return { locationId: null, all: true, permittedIds, viewAll, readOther, locationType: null };
     }
 
+    const supportId = support?.id ?? null;
+
     if (requested) {
-      if (!permittedIds.includes(requested)) this.deny('No tienes acceso a esa sede');
-      return { locationId: requested, all: false, permittedIds, viewAll, readOther, locationType: typeOf(requested) };
+      if (!permittedIds.includes(requested)) {
+        this.deny(support ? `Estás de apoyo en ${support.location.name}` : 'No tienes acceso a esa sede');
+      }
+      return {
+        locationId: requested,
+        all: false,
+        permittedIds,
+        viewAll,
+        readOther,
+        locationType: typeOf(requested),
+        supportId,
+      };
     }
 
     const fallback =
       user?.defaultLocationId && permittedIds.includes(user.defaultLocationId)
         ? user.defaultLocationId
         : (permittedIds[0] ?? null);
-    return { locationId: fallback, all: false, permittedIds, viewAll, readOther, locationType: typeOf(fallback) };
+    return { locationId: fallback, all: false, permittedIds, viewAll, readOther, locationType: typeOf(fallback), supportId };
   }
 
   private deny(message: string): never {

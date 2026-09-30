@@ -13,6 +13,7 @@ import { JwtPayload, TokenPair, AuthenticatedUser } from '../../common/interface
 import { SessionLogsService } from '../session-logs/session-logs.service';
 import { AttendanceService } from '../attendance/attendance.service';
 import { VIEW_ALL_LOCATIONS_PERMISSION } from '../../common/utils/location-context';
+import { findActiveLocationSupport } from '../../common/utils/location-support.util';
 
 /** Sedes del usuario que viajan con el login y con `/auth/me`. */
 export interface UserLocations {
@@ -27,6 +28,20 @@ export interface UserLocations {
   }[];
   defaultLocationId: string | null;
   canViewAllLocations: boolean;
+  /**
+   * Apoyo en otra sede vigente (docs/PLAN_SEDES.md §16). Mientras dura, su sede
+   * es la única de `locations` y la predeterminada.
+   */
+  activeLocationSupport: {
+    id: string;
+    locationId: string;
+    startDate: string;
+    endDate: string;
+    reason: string;
+    authorizedBy: string | null;
+    /** Venció, pero sigue hasta que cierre su caja en esa sede. */
+    overdue: boolean;
+  } | null;
 }
 
 @Injectable()
@@ -162,8 +177,9 @@ export class AuthService {
 
   /**
    * Sedes en las que el usuario puede operar y la predeterminada, para el
-   * selector del frontend. Con `view_all_locations` son todas las activas.
-   * Ver docs/PLAN_SEDES.md §5.
+   * selector del frontend. Con `view_all_locations` son todas las activas; con
+   * un apoyo en otra sede vigente, solo la del apoyo.
+   * Ver docs/PLAN_SEDES.md §5 y §16.
    */
   async getUserLocations(userId: string, permissions: string[]): Promise<UserLocations> {
     const select = {
@@ -189,6 +205,25 @@ export class AuthService {
     });
 
     const canViewAll = permissions.includes(VIEW_ALL_LOCATIONS_PERMISSION);
+    const support = canViewAll ? null : await findActiveLocationSupport(this.prisma, userId);
+    if (support) {
+      const by = support.reviewedBy;
+      return {
+        locations: [support.location],
+        defaultLocationId: support.locationId,
+        canViewAllLocations: false,
+        activeLocationSupport: {
+          id: support.id,
+          locationId: support.locationId,
+          startDate: support.startDate.toISOString().slice(0, 10),
+          endDate: support.endDate.toISOString().slice(0, 10),
+          reason: support.reason,
+          authorizedBy: by ? [by.firstName, by.lastName].filter(Boolean).join(' ') || by.username : null,
+          overdue: support.overdue,
+        },
+      };
+    }
+
     const locations = canViewAll
       ? await this.prisma.location.findMany({
           where: { isActive: true },
@@ -202,7 +237,7 @@ export class AuthService {
         ? user.defaultLocationId
         : null;
 
-    return { locations, defaultLocationId, canViewAllLocations: canViewAll };
+    return { locations, defaultLocationId, canViewAllLocations: canViewAll, activeLocationSupport: null };
   }
 
   /**

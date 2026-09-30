@@ -8,6 +8,7 @@ import { NotFoundException, ForbiddenException } from '@nestjs/common';
 import { EditRequestStatus, NotificationType, Prisma } from '../../generated/prisma';
 import { WsEventsGateway } from '../ws-events/ws-events.gateway';
 import { CreditBalanceService } from '../credit-balance/credit-balance.service';
+import { runWithAuditContext } from '../../common/utils/audit-context';
 
 describe('AdvancePaymentApprovalsService', () => {
   let service: AdvancePaymentApprovalsService;
@@ -420,6 +421,26 @@ describe('AdvancePaymentApprovalsService', () => {
     it('should findPendingRequests', async () => {
       (prisma.advancePaymentApproval.findMany as jest.Mock).mockResolvedValue([{ id: '1' }] as any);
       expect(await service.findPendingRequests()).toEqual([{ id: '1' }]);
+    });
+
+    it('a un cajero solo le muestra los anticipos de las OP de su sede', async () => {
+      (prisma.advancePaymentApproval.findMany as jest.Mock).mockResolvedValue([]);
+      await runWithAuditContext(
+        { location: { locationId: 'loc-104', all: false, permittedIds: ['loc-104'] } },
+        () => service.findPendingRequests(),
+      );
+      const [[{ where }]] = (prisma.advancePaymentApproval.findMany as jest.Mock).mock.calls.slice(-1);
+      expect(where).toEqual({ status: EditRequestStatus.PENDING, order: { locationId: { in: ['loc-104'] } } });
+    });
+
+    it('al admin le muestra los de todas las sedes aunque tenga una activa', async () => {
+      (prisma.advancePaymentApproval.findMany as jest.Mock).mockResolvedValue([]);
+      await runWithAuditContext(
+        { location: { locationId: 'loc-104', all: false, permittedIds: ['loc-104'], viewAll: true } },
+        () => service.findPendingRequests(),
+      );
+      const [[{ where }]] = (prisma.advancePaymentApproval.findMany as jest.Mock).mock.calls.slice(-1);
+      expect(where).toEqual({ status: EditRequestStatus.PENDING, order: {} });
     });
 
     it('should findAll', async () => {

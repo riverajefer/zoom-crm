@@ -25,6 +25,7 @@ import { ApprovalRequestType, EditRequestStatus, ExpenseOrderStatus, Notificatio
 import { ExpenseOrdersService } from '../expense-orders/expense-orders.service';
 import { AuthenticatedUser } from '../../common/interfaces/auth.interface';
 import { isUniqueViolationOn } from '../../common/utils/unique-violation.util';
+import { queueLocationFilter } from '../../common/utils/location-context';
 
 const USER_SELECT = {
   id: true,
@@ -487,6 +488,7 @@ export class ExpenseOrderAuthRequestsService implements OnModuleInit, ApprovalRe
           status: {
             in: [ExpenseOrderStatus.DRAFT, ExpenseOrderStatus.CREATED],
           },
+          ...queueLocationFilter(),
         },
       },
       include: {
@@ -538,6 +540,7 @@ export class ExpenseOrderAuthRequestsService implements OnModuleInit, ApprovalRe
    */
   async findAll() {
     return this.prisma.expenseOrderAuthRequest.findMany({
+      where: { expenseOrder: queueLocationFilter() },
       include: {
         requestedBy: { select: USER_SELECT },
         reviewedBy: { select: USER_SELECT },

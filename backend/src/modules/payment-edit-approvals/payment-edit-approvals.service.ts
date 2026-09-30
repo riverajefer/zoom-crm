@@ -39,6 +39,7 @@ import {
   reportMovementEditedAfterClose,
   syncPaymentCashMovement,
 } from '../cash-session/payment-cash-movement.util';
+import { queueLocationFilter } from '../../common/utils/location-context';
 
 const USER_SELECT = {
   id: true,
@@ -325,7 +326,7 @@ export class PaymentEditApprovalsService
 
   async findPendingRequests() {
     return this.prisma.paymentEditApproval.findMany({
-      where: { status: EditRequestStatus.PENDING },
+      where: { status: EditRequestStatus.PENDING, order: queueLocationFilter() },
       include: {
         requestedBy: { select: USER_SELECT },
         order: {
@@ -345,6 +346,7 @@ export class PaymentEditApprovalsService
 
   async findAll() {
     return this.prisma.paymentEditApproval.findMany({
+      where: { order: queueLocationFilter() },
       include: {
         requestedBy: { select: USER_SELECT },
         reviewedBy: { select: USER_SELECT },

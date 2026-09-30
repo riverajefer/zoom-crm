@@ -4,6 +4,7 @@ import { PrismaService } from '../../database/prisma.service';
 import { ACTIVE_PAYMENT_WHERE } from '../../common/utils/order-balance.util';
 import { ConsecutivesService } from '../consecutives/consecutives.service';
 import { getRequestLocation } from '../../common/utils/location-context';
+import { businessDate } from '../../common/utils/date-range.util';
 
 /**
  * Cola de abonos que se registraron sin caja abierta.
@@ -134,7 +135,8 @@ export class PendingCashEntriesService {
         payment.order.locationId,
       );
 
-      const fecha = payment.paymentDate.toISOString().slice(0, 10);
+      // El día en hora de Bogotá: en UTC, un pago de la noche ya sería del día siguiente.
+      const fecha = businessDate(payment.paymentDate);
       const movement = await tx.cashMovement.create({
         data: {
           cashSessionId,

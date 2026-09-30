@@ -17,6 +17,7 @@ import {
 } from '../whatsapp/approval-request-registry';
 import { CreateEditRequestDto, ReviewEditRequestDto } from './dto';
 import { EditRequestStatus, NotificationType, OrderStatus } from '../../generated/prisma';
+import { queueLocationFilter } from '../../common/utils/location-context';
 
 /**
  * Ventana de edición desde que se entra a la orden: 5 minutos con una
@@ -546,7 +547,7 @@ export class OrderEditRequestsService implements OnModuleInit, ApprovalRequestHa
    */
   async findAllPending() {
     return this.prisma.orderEditRequest.findMany({
-      where: { status: EditRequestStatus.PENDING },
+      where: { status: EditRequestStatus.PENDING, order: queueLocationFilter() },
       include: {
         order: {
           select: {
@@ -581,6 +582,7 @@ export class OrderEditRequestsService implements OnModuleInit, ApprovalRequestHa
    */
   async findAll() {
     return this.prisma.orderEditRequest.findMany({
+      where: { order: queueLocationFilter() },
       include: {
         order: {
           select: {

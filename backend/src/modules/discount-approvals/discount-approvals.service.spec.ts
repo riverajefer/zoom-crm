@@ -426,7 +426,7 @@ describe('DiscountApprovalsService', () => {
       const res = await service.findPendingRequests();
       expect(res).toEqual([]);
       expect(prisma.discountApproval.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { status: EditRequestStatus.PENDING } }),
+        expect.objectContaining({ where: { status: EditRequestStatus.PENDING, order: {} } }),
       );
     });
   });

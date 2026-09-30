@@ -19,6 +19,7 @@ import {
   RejectClientOwnershipAuthRequestDto,
 } from './dto';
 import { ApprovalRequestType, EditRequestStatus, NotificationType } from '../../generated/prisma';
+import { queueLocationFilter } from '../../common/utils/location-context';
 
 const USER_SELECT = {
   id: true,
@@ -405,7 +406,7 @@ export class ClientOwnershipAuthRequestsService implements OnModuleInit, Approva
    */
   async findPendingRequests() {
     return this.prisma.clientOwnershipAuthRequest.findMany({
-      where: { status: EditRequestStatus.PENDING },
+      where: { status: EditRequestStatus.PENDING, order: queueLocationFilter() },
       include: {
         requestedBy: { select: USER_SELECT },
         advisor: { select: USER_SELECT },
@@ -420,6 +421,7 @@ export class ClientOwnershipAuthRequestsService implements OnModuleInit, Approva
    */
   async findAll() {
     return this.prisma.clientOwnershipAuthRequest.findMany({
+      where: { order: queueLocationFilter() },
       include: {
         requestedBy: { select: USER_SELECT },
         advisor: { select: USER_SELECT },

@@ -19,11 +19,8 @@ import {
 } from '../whatsapp/approval-request-registry';
 import { CashMovementService } from '../cash-movement/cash-movement.service';
 import { CreateVoidRequestDto, ReviewVoidRequestDto } from './dto';
-import {
-  EditRequestStatus,
-  NotificationType,
-  ApprovalRequestType,
-} from '../../generated/prisma';
+import { EditRequestStatus, NotificationType, ApprovalRequestType, Prisma } from '../../generated/prisma';
+import { queueLocationFilter } from '../../common/utils/location-context';
 
 @Injectable()
 export class CashMovementVoidRequestsService
@@ -603,9 +600,24 @@ export class CashMovementVoidRequestsService
     },
   };
 
+  /**
+   * Sede de una solicitud de anulación: la de la caja del movimiento, o la de
+   * la OP si el pago nunca pasó por caja. Ver `queueLocationFilter`.
+   */
+  private queueWhere(): Prisma.CashMovementVoidRequestWhereInput {
+    const sede = queueLocationFilter();
+    if (!sede.locationId) return {};
+    return {
+      OR: [
+        { cashMovement: { cashSession: { cashRegister: sede } } },
+        { payment: { order: sede } },
+      ],
+    };
+  }
+
   async findAllPending() {
     return this.prisma.cashMovementVoidRequest.findMany({
-      where: { status: EditRequestStatus.PENDING },
+      where: { status: EditRequestStatus.PENDING, ...this.queueWhere() },
       include: this.defaultInclude,
       orderBy: { createdAt: 'desc' },
     });
@@ -613,6 +625,7 @@ export class CashMovementVoidRequestsService
 
   async findAll() {
     return this.prisma.cashMovementVoidRequest.findMany({
+      where: this.queueWhere(),
       include: this.defaultInclude,
       orderBy: { createdAt: 'desc' },
     });

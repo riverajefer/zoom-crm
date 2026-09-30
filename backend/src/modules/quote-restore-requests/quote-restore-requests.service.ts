@@ -27,6 +27,7 @@ import {
   Prisma,
   QuoteStatus,
 } from '../../generated/prisma';
+import { queueLocationFilter } from '../../common/utils/location-context';
 
 const userSelect = {
   id: true,
@@ -486,7 +487,7 @@ export class QuoteRestoreRequestsService
       where: {
         ...(quoteId ? { quoteId } : {}),
         status: EditRequestStatus.PENDING,
-        quote: { status: QuoteStatus.REJECTED },
+        quote: { status: QuoteStatus.REJECTED, ...queueLocationFilter() },
       },
       include: requestInclude,
       orderBy: { createdAt: 'desc' },
@@ -495,7 +496,7 @@ export class QuoteRestoreRequestsService
 
   async findAllRequests(quoteId?: string) {
     return this.prisma.quoteRestoreRequest.findMany({
-      where: quoteId ? { quoteId } : {},
+      where: { ...(quoteId ? { quoteId } : {}), quote: queueLocationFilter() },
       include: requestInclude,
       orderBy: { createdAt: 'desc' },
     });

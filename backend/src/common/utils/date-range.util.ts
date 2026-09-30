@@ -72,8 +72,16 @@ export function endOfDay(date?: string): Date | undefined {
  * hora Colombia ya devuelve el día siguiente.
  */
 export function businessToday(): string {
+  return businessDate(new Date());
+}
+
+/**
+ * Día (`YYYY-MM-DD`) de un instante según el calendario del negocio. Un pago de
+ * las 7:02 p. m. del 29 es del 29, aunque en UTC ya sea el 30.
+ */
+export function businessDate(date: Date): string {
   // 'en-CA' formatea como YYYY-MM-DD.
   return new Intl.DateTimeFormat('en-CA', {
     timeZone: BUSINESS_TIMEZONE,
-  }).format(new Date());
+  }).format(date);
 }

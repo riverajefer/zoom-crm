@@ -115,6 +115,19 @@ export function locationFilter(): { locationId?: { in: string[] } } {
 }
 
 /**
+ * Filtro de sede para las bandejas de solicitudes (anticipos, devoluciones,
+ * ediciones…), que no tienen sede propia: se filtran por la sede de su
+ * documento, sobre la relación (`order: queueLocationFilter()`).
+ *
+ * Quien ve todas las sedes (el admin) ve las solicitudes de todas aunque tenga
+ * una sede activa: las aprueba todas desde su bandeja (docs/PLAN_SEDES.md §6).
+ * Los demás (caja, asesores) solo las de su sede activa.
+ */
+export function queueLocationFilter(): { locationId?: { in: string[] } } {
+  return getRequestLocation()?.viewAll ? {} : locationFilter();
+}
+
+/**
  * Corre `fn` sin el filtro de sede. Es la salida explícita, y con nombre, para
  * lo poco que debe cruzar sedes: el saldo a favor (que se usa en cualquier
  * sede) y el modo consulta de la fase 4. Ver docs/PLAN_SEDES.md §15.1.

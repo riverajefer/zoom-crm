@@ -18,6 +18,7 @@ import {
   RejectDiscountApprovalDto,
 } from './dto';
 import { ApprovalRequestType, EditRequestStatus, NotificationType } from '../../generated/prisma';
+import { queueLocationFilter } from '../../common/utils/location-context';
 
 const USER_SELECT = {
   id: true,
@@ -390,7 +391,7 @@ export class DiscountApprovalsService implements OnModuleInit, ApprovalRequestHa
    */
   async findPendingRequests() {
     return this.prisma.discountApproval.findMany({
-      where: { status: EditRequestStatus.PENDING },
+      where: { status: EditRequestStatus.PENDING, order: queueLocationFilter() },
       include: {
         requestedBy: { select: USER_SELECT },
         order: { select: { id: true, orderNumber: true, status: true, total: true } },
@@ -405,6 +406,7 @@ export class DiscountApprovalsService implements OnModuleInit, ApprovalRequestHa
    */
   async findAll() {
     return this.prisma.discountApproval.findMany({
+      where: { order: queueLocationFilter() },
       include: {
         requestedBy: { select: USER_SELECT },
         reviewedBy: { select: USER_SELECT },

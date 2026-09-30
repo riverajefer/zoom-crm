@@ -4,6 +4,7 @@ import {
   getLocationScope,
   LOCATION_NOT_A_STORE,
   LOCATION_REQUIRED,
+  queueLocationFilter,
   requireActiveLocationId,
   requireStoreLocationId,
   withoutLocationScope,
@@ -54,6 +55,28 @@ describe('location-context', () => {
           }
         },
       );
+    });
+  });
+
+  describe('queueLocationFilter', () => {
+    it('un cajero ve solo las solicitudes de su sede activa', () => {
+      runWithAuditContext({ location: { locationId: 'l-104', all: false, permittedIds: ['l-104'] } }, () => {
+        expect(queueLocationFilter()).toEqual({ locationId: { in: ['l-104'] } });
+      });
+    });
+
+    it('el admin ve las de todas las sedes aunque tenga una activa', () => {
+      runWithAuditContext(
+        { location: { locationId: 'l-104', all: false, permittedIds: ['l-104', 'l-119'], viewAll: true } },
+        () => expect(queueLocationFilter()).toEqual({}),
+      );
+    });
+
+    it('en "Todas" o fuera de un request no filtra', () => {
+      runWithAuditContext({ location: { locationId: null, all: true, permittedIds: [] } }, () => {
+        expect(queueLocationFilter()).toEqual({});
+      });
+      expect(queueLocationFilter()).toEqual({});
     });
   });
 

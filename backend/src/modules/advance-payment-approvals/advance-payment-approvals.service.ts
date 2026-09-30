@@ -27,6 +27,7 @@ import {
 } from '../../common/utils/order-balance.util';
 import { CreditBalanceService } from '../credit-balance/credit-balance.service';
 import { lockOrderForUpdate } from '../../common/utils/order-lock.util';
+import { queueLocationFilter } from '../../common/utils/location-context';
 
 const USER_SELECT = {
   id: true,
@@ -610,7 +611,7 @@ export class AdvancePaymentApprovalsService implements OnModuleInit, ApprovalReq
    */
   async findPendingRequests() {
     return this.prisma.advancePaymentApproval.findMany({
-      where: { status: EditRequestStatus.PENDING },
+      where: { status: EditRequestStatus.PENDING, order: queueLocationFilter() },
       include: {
         requestedBy: { select: USER_SELECT },
         order: {
@@ -636,6 +637,7 @@ export class AdvancePaymentApprovalsService implements OnModuleInit, ApprovalReq
    */
   async findAll() {
     return this.prisma.advancePaymentApproval.findMany({
+      where: { order: queueLocationFilter() },
       include: {
         requestedBy: { select: USER_SELECT },
         reviewedBy: { select: USER_SELECT },

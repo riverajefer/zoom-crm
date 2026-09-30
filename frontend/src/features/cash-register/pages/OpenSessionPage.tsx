@@ -116,6 +116,8 @@ const OpenSessionPage: React.FC = () => {
   // botón no se deshabilita hasta el siguiente render. En la base lo impide
   // `cash_sessions_one_open_per_register`, pero el candado evita el viaje y el
   // error crudo.
+  const hasOpeningFund = toDenominationDtoList(denominationRows).length > 0;
+
   const handleSubmit = useSingleFlight(async () => {
     if (!cashRegisterId) return;
 
@@ -308,7 +310,14 @@ const OpenSessionPage: React.FC = () => {
 
         {/* Submit button */}
         {passwordVerified && cashRegisterId && (
-          <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+            {!hasOpeningFund && (
+              // El backend exige al menos una denominación: sin esto, el botón
+              // fallaba sin explicar por qué.
+              <Typography variant="body2" color="warning.main" sx={{ mr: 'auto' }}>
+                Ingresa el fondo de apertura: al menos una denominación.
+              </Typography>
+            )}
             <Button
               variant="outlined"
               onClick={() => navigate(-1)}
@@ -323,6 +332,7 @@ const OpenSessionPage: React.FC = () => {
               size="large"
               startIcon={<LockOpenIcon />}
               onClick={handleSubmit}
+              disabled={!hasOpeningFund}
             >
               Abrir Sesión
             </LoadingButton>

@@ -26,6 +26,7 @@ import {
 } from '../../generated/prisma';
 import { AccountsPayableService } from '../accounts-payable/accounts-payable.service';
 import { AuthenticatedUser } from '../../common/interfaces/auth.interface';
+import { queueLocationFilter } from '../../common/utils/location-context';
 
 const USER_SELECT = { id: true, email: true, firstName: true, lastName: true } as const;
 
@@ -309,7 +310,7 @@ export class AccountsPayableAuthRequestsService implements OnModuleInit, Approva
 
   async findPending() {
     return this.prisma.accountPayableAuthRequest.findMany({
-      where: { status: EditRequestStatus.PENDING },
+      where: { status: EditRequestStatus.PENDING, accountPayable: queueLocationFilter() },
       include: {
         requestedBy: { select: USER_SELECT },
         accountPayable: { select: { id: true, apNumber: true, status: true, totalAmount: true, description: true } },
@@ -320,6 +321,7 @@ export class AccountsPayableAuthRequestsService implements OnModuleInit, Approva
 
   async findAll() {
     return this.prisma.accountPayableAuthRequest.findMany({
+      where: { accountPayable: queueLocationFilter() },
       include: {
         requestedBy: { select: USER_SELECT },
         reviewedBy: { select: USER_SELECT },

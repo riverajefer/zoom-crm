@@ -210,7 +210,7 @@ describe('AccountsPayableAuthRequestsService', () => {
       prisma.accountPayableAuthRequest.findMany.mockResolvedValue([] as any);
       await service.findPending();
       expect(prisma.accountPayableAuthRequest.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { status: EditRequestStatus.PENDING } }),
+        expect.objectContaining({ where: { status: EditRequestStatus.PENDING, accountPayable: {} } }),
       );
     });
 

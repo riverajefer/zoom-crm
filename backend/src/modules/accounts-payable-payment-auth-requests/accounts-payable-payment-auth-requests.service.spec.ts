@@ -334,7 +334,7 @@ describe('AccountsPayablePaymentAuthRequestsService', () => {
       prisma.accountPayablePaymentAuthRequest.findMany.mockResolvedValue([] as any);
       await service.findPendingAdmin();
       expect(prisma.accountPayablePaymentAuthRequest.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { status: ApPaymentAuthRequestStatus.PENDING } }),
+        expect.objectContaining({ where: { status: ApPaymentAuthRequestStatus.PENDING, accountPayable: {} } }),
       );
     });
 
@@ -342,7 +342,7 @@ describe('AccountsPayablePaymentAuthRequestsService', () => {
       prisma.accountPayablePaymentAuthRequest.findMany.mockResolvedValue([] as any);
       await service.findPendingCaja();
       expect(prisma.accountPayablePaymentAuthRequest.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { status: ApPaymentAuthRequestStatus.ADMIN_APPROVED } }),
+        expect.objectContaining({ where: { status: ApPaymentAuthRequestStatus.ADMIN_APPROVED, accountPayable: {} } }),
       );
     });
 

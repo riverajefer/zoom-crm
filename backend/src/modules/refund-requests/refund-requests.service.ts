@@ -40,6 +40,7 @@ import {
   computeOrderBalance,
   computeReversedNetAmount,
 } from '../../common/utils/order-balance.util';
+import { queueLocationFilter } from '../../common/utils/location-context';
 
 const USER_SELECT = {
   id: true,
@@ -746,7 +747,7 @@ export class RefundRequestsService
 
   async findPendingRequests() {
     return this.prisma.refundRequest.findMany({
-      where: { status: EditRequestStatus.PENDING },
+      where: { status: EditRequestStatus.PENDING, order: queueLocationFilter() },
       include: {
         requestedBy: { select: USER_SELECT },
         order: {
@@ -771,7 +772,7 @@ export class RefundRequestsService
    */
   async findPendingExecution() {
     return this.prisma.refundRequest.findMany({
-      where: { status: EditRequestStatus.APPROVED, executedAt: null },
+      where: { status: EditRequestStatus.APPROVED, executedAt: null, order: queueLocationFilter() },
       include: {
         requestedBy: { select: USER_SELECT },
         reviewedBy: { select: USER_SELECT },
@@ -793,6 +794,7 @@ export class RefundRequestsService
 
   async findAll() {
     return this.prisma.refundRequest.findMany({
+      where: { order: queueLocationFilter() },
       include: {
         requestedBy: { select: USER_SELECT },
         reviewedBy: { select: USER_SELECT },

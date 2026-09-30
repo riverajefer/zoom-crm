@@ -30,6 +30,7 @@ import {
 } from '../../generated/prisma';
 import { AccountsPayableService } from '../accounts-payable/accounts-payable.service';
 import { AuthenticatedUser } from '../../common/interfaces/auth.interface';
+import { queueLocationFilter } from '../../common/utils/location-context';
 
 const USER_SELECT = { id: true, email: true, firstName: true, lastName: true } as const;
 
@@ -435,7 +436,7 @@ export class AccountsPayablePaymentAuthRequestsService implements OnModuleInit, 
 
   async findPendingAdmin() {
     return this.prisma.accountPayablePaymentAuthRequest.findMany({
-      where: { status: ApPaymentAuthRequestStatus.PENDING },
+      where: { status: ApPaymentAuthRequestStatus.PENDING, accountPayable: queueLocationFilter() },
       include: {
         requestedBy: { select: USER_SELECT },
         accountPayable: { select: { id: true, apNumber: true, totalAmount: true, balance: true, description: true } },
@@ -446,7 +447,7 @@ export class AccountsPayablePaymentAuthRequestsService implements OnModuleInit, 
 
   async findPendingCaja() {
     return this.prisma.accountPayablePaymentAuthRequest.findMany({
-      where: { status: ApPaymentAuthRequestStatus.ADMIN_APPROVED },
+      where: { status: ApPaymentAuthRequestStatus.ADMIN_APPROVED, accountPayable: queueLocationFilter() },
       include: {
         requestedBy: { select: USER_SELECT },
         adminReviewedBy: { select: USER_SELECT },
@@ -458,6 +459,7 @@ export class AccountsPayablePaymentAuthRequestsService implements OnModuleInit, 
 
   async findAll() {
     return this.prisma.accountPayablePaymentAuthRequest.findMany({
+      where: { accountPayable: queueLocationFilter() },
       include: {
         requestedBy: { select: USER_SELECT },
         adminReviewedBy: { select: USER_SELECT },

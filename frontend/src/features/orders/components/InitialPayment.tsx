@@ -331,8 +331,13 @@ export const InitialPayment: React.FC<InitialPaymentProps> = ({
                         handleFieldChange(index, 'amount', amount);
                       }}
                       color={totalPaid > total ? 'warning' : 'primary'}
+                      // Sin monto, un abono que mueve dinero no es válido y el
+                      // formulario no deja crear la orden: se dice aquí por qué.
+                      error={!disabled && !requiresZeroAmount(payment.paymentMethod) && !payment.amount}
                       helperText={
-                        payment.paymentMethod === 'PAYROLL_DEDUCTION'
+                        !disabled && !requiresZeroAmount(payment.paymentMethod) && !payment.amount
+                          ? 'Ingresa el monto del abono, o elige «Crédito» si el cliente no deja anticipo'
+                          : payment.paymentMethod === 'PAYROLL_DEDUCTION'
                           ? `Se le descontarán ${formatCurrency(total)} de la nómina cuando se apruebe. La orden queda con saldo pendiente hasta entonces.`
                           : payment.paymentMethod === 'CREDIT'
                           ? `El crédito no registra dinero: quedan ${formatCurrency(total)} como saldo pendiente por cobrar`

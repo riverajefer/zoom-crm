@@ -82,6 +82,16 @@ describe('PendingCashEntriesService', () => {
       expect(description).toContain('sin caja abierta');
     });
 
+    it('la fecha de la descripción es la de Bogotá, no la de UTC', async () => {
+      // 7:02 p. m. del 29 en Bogotá: en UTC ya es el 30.
+      mockTx.payment.findMany.mockResolvedValue([makePending({ paymentDate: new Date('2026-09-30T00:02:00.000Z') })]);
+
+      await service.flushInto(mockTx, 'session-9', 'user-1', 'loc-125');
+
+      const { description } = mockTx.cashMovement.create.mock.calls[0][0].data;
+      expect(description).toContain('registrado el 2026-09-29');
+    });
+
     it('no crea movimiento si el pago ya tenía uno (duplicaría el ingreso)', async () => {
       mockTx.payment.findMany.mockResolvedValue([
         makePending({ cashMovementId: 'mov-existente' }),

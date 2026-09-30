@@ -4,6 +4,7 @@ import { AttendanceSource, AttendanceType } from '../../generated/prisma';
 import { AttendanceFilterDto, AdjustAttendanceDto } from './dto';
 import { clampPageSize, MAX_PAGE_SIZE } from '../../common/dto/pagination.dto';
 import { getRequestLocation } from '../../common/utils/location-context';
+import { businessDate } from '../../common/utils/date-range.util';
 
 @Injectable()
 export class AttendanceRepository {
@@ -311,7 +312,8 @@ export class AttendanceRepository {
       } else if (r.clockIn && !r.clockOut) {
         weekMinutes += Math.floor((now.getTime() - new Date(r.clockIn).getTime()) / 60000);
       }
-      const dayKey = new Date(r.clockIn).toISOString().slice(0, 10);
+      // El día en hora de Bogotá: un turno que empieza de noche no cuenta como el día siguiente.
+      const dayKey = businessDate(new Date(r.clockIn));
       uniqueDays.add(dayKey);
     }
 

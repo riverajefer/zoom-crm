@@ -656,11 +656,35 @@ export const OrderFormPage: React.FC = () => {
     return validByStep[i] ? 'completed' : 'visited';
   };
 
+  // Un abono que mueve dinero necesita monto; el crédito y el descuento por
+  // nómina van en 0. Es la misma regla del esquema, aplicada al paso del pago
+  // para no dejar pasar a un último paso con «Crear Orden» deshabilitado.
+  const paymentsAreValid = (watch('payments') ?? []).every((p) =>
+    requiresZeroAmount(p.paymentMethod) ? p.amount === 0 : p.amount > 0,
+  );
+
   const canGoNext = () => {
     if (activeStep === 0) return isClientSelected && !!commercialChannelId;
     if (activeStep === 1) return hasValidItems;
-    if (activeStep === 2) return hasValidItems;
+    if (activeStep === 2) return hasValidItems && (isEdit || paymentsAreValid);
     return true;
+  };
+
+  /**
+   * Por qué «Crear Orden» está deshabilitado, en palabras del usuario. Antes el
+   * botón se apagaba sin decir nada y había que adivinar qué faltaba.
+   */
+  const blockingReasons = (): string[] => {
+    const reasons: string[] = [];
+    if (!isClientSelected) reasons.push('Falta elegir el cliente.');
+    if (!commercialChannelId) reasons.push('Falta el canal de ventas.');
+    if (!hasValidItems) reasons.push('Los ítems necesitan descripción, cantidad y precio.');
+    if (!paymentsAreValid) reasons.push('El anticipo necesita monto; si el cliente no deja anticipo, elige «Crédito» con $0.');
+    for (const key of ['applyWithholdings', 'retefuenteCustom', 'items'] as const) {
+      const message = errors[key]?.message;
+      if (typeof message === 'string' && !reasons.includes(message)) reasons.push(message);
+    }
+    return reasons.length > 0 ? reasons : ['Revisa los pasos anteriores: hay un dato sin completar.'];
   };
 
   // ── Submit ───────────────────────────────────────────────────────────────────
@@ -1694,6 +1718,16 @@ export const OrderFormPage: React.FC = () => {
             {activeStep === 3 && renderStep3()}
 
             {/* Navegación */}
+            {!isEdit && activeStep === STEPS.length - 1 && !canSave && !isSubmitting && (
+              <Alert severity="warning" sx={{ mt: 3 }}>
+                Todavía no se puede crear la orden:
+                <Box component="ul" sx={{ m: 0, pl: 2.5 }}>
+                  {blockingReasons().map((reason) => (
+                    <li key={reason}>{reason}</li>
+                  ))}
+                </Box>
+              </Alert>
+            )}
             <Stack
               direction={{ xs: 'column-reverse', sm: 'row' }}
               justifyContent="space-between"

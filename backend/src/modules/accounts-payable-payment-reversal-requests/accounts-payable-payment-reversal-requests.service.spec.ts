@@ -279,7 +279,7 @@ describe('AccountsPayablePaymentReversalRequestsService', () => {
       prisma.accountPayablePaymentReversalRequest.findMany.mockResolvedValue([] as any);
       await service.findPendingGerencia();
       expect(prisma.accountPayablePaymentReversalRequest.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { status: ApPaymentReversalStatus.PENDING_GERENCIA } }),
+        expect.objectContaining({ where: { status: ApPaymentReversalStatus.PENDING_GERENCIA, paymentAuthRequest: { accountPayable: {} } } }),
       );
     });
 
@@ -287,7 +287,7 @@ describe('AccountsPayablePaymentReversalRequestsService', () => {
       prisma.accountPayablePaymentReversalRequest.findMany.mockResolvedValue([] as any);
       await service.findPendingCaja();
       expect(prisma.accountPayablePaymentReversalRequest.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { status: ApPaymentReversalStatus.PENDING_CAJA } }),
+        expect.objectContaining({ where: { status: ApPaymentReversalStatus.PENDING_CAJA, paymentAuthRequest: { accountPayable: {} } } }),
       );
     });
 

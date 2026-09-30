@@ -1,4 +1,4 @@
-import { startOfDay, endOfDay, businessToday } from './date-range.util';
+import { startOfDay, endOfDay, businessToday, businessDate } from './date-range.util';
 
 describe('date-range.util', () => {
   describe('startOfDay', () => {
@@ -44,6 +44,17 @@ describe('date-range.util', () => {
 
     it('returns undefined for an unparseable value instead of Invalid Date', () => {
       expect(endOfDay('not-a-date')).toBeUndefined();
+    });
+  });
+
+  describe('businessDate', () => {
+    it('un instante de la noche en Bogotá es de ese día, aunque en UTC sea el siguiente', () => {
+      // 7:02 p. m. del 29 en Bogotá = 00:02 UTC del 30.
+      expect(businessDate(new Date('2026-09-30T00:02:00.000Z'))).toBe('2026-09-29');
+    });
+
+    it('en la mañana coincide con UTC', () => {
+      expect(businessDate(new Date('2026-09-29T15:00:00.000Z'))).toBe('2026-09-29');
     });
   });
 

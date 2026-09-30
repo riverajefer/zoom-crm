@@ -25,6 +25,7 @@ import {
   EditRequestStatus,
   NotificationType,
 } from '../../generated/prisma';
+import { queueLocationFilter } from '../../common/utils/location-context';
 
 const userSelect = {
   id: true,
@@ -479,6 +480,7 @@ export class AdvisorChangeRequestsService
   async findPendingRequests(orderId?: string) {
     return this.prisma.advisorChangeRequest.findMany({
       where: {
+        order: queueLocationFilter(),
         ...(orderId ? { orderId } : {}),
         status: EditRequestStatus.PENDING,
       },
@@ -498,6 +500,7 @@ export class AdvisorChangeRequestsService
   async findAllRequests(orderId?: string) {
     return this.prisma.advisorChangeRequest.findMany({
       where: {
+        order: queueLocationFilter(),
         ...(orderId ? { orderId } : {}),
       },
       include: {

@@ -28,6 +28,7 @@ import {
   Prisma,
 } from '../../generated/prisma';
 import { computeMaxRetainableOnAnnul } from '../../common/utils/order-balance.util';
+import { queueLocationFilter } from '../../common/utils/location-context';
 
 const ORDER_STATUS_LABELS: Record<string, string> = {
   DRAFT: 'Borrador',
@@ -642,6 +643,7 @@ export class OrderStatusChangeRequestsService implements OnModuleInit, ApprovalR
   private async findPendingRequestRows(orderId?: string) {
     return this.prisma.orderStatusChangeRequest.findMany({
       where: {
+        order: queueLocationFilter(),
         ...(orderId ? { orderId } : {}),
         status: EditRequestStatus.PENDING,
       },
@@ -672,6 +674,7 @@ export class OrderStatusChangeRequestsService implements OnModuleInit, ApprovalR
   async findAllRequests(orderId?: string) {
     return this.prisma.orderStatusChangeRequest.findMany({
       where: {
+        order: queueLocationFilter(),
         ...(orderId ? { orderId } : {}),
       },
       include: {

@@ -6,6 +6,7 @@ import {
 } from '../../common/utils/payment-method.util';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { findActiveCashSessionForLocation } from './active-cash-session.util';
+import { businessToday } from '../../common/utils/date-range.util';
 
 /**
  * Rastro de una edición de pago que modificó un movimiento de caja cuya sesión
@@ -92,7 +93,8 @@ export async function syncPaymentCashMovement(
     const sessionClosed = movement?.cashSession?.status === 'CLOSED';
     const amountChanged =
       movement != null && !movement.amount.equals(updated.amount);
-    const fecha = new Date().toISOString().slice(0, 10);
+    // Hoy en hora de Bogotá: en UTC, desde las 7:00 p. m. ya sería mañana.
+    const fecha = businessToday();
 
     if (becameNonCash) {
       // El pago dejó de ser dinero, así que este movimiento deja de existir

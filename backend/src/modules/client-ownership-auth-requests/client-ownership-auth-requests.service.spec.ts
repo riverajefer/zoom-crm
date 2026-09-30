@@ -440,7 +440,7 @@ describe('ClientOwnershipAuthRequestsService', () => {
       expect(result).toEqual(requests);
       expect(mockPrisma.clientOwnershipAuthRequest.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { status: 'PENDING' },
+          where: { status: 'PENDING', order: {} },
           orderBy: { createdAt: 'desc' },
         }),
       );

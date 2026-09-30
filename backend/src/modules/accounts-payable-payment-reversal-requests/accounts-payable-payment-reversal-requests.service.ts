@@ -17,6 +17,7 @@ import {
   CreateApPaymentReversalRequestDto,
   GerenciaRejectApPaymentReversalDto,
 } from './dto';
+import { queueLocationFilter } from '../../common/utils/location-context';
 
 const USER_SELECT = { id: true, email: true, firstName: true, lastName: true } as const;
 
@@ -311,7 +312,10 @@ export class AccountsPayablePaymentReversalRequestsService {
 
   async findPendingGerencia() {
     return this.prisma.accountPayablePaymentReversalRequest.findMany({
-      where: { status: ApPaymentReversalStatus.PENDING_GERENCIA },
+      where: {
+        status: ApPaymentReversalStatus.PENDING_GERENCIA,
+        paymentAuthRequest: { accountPayable: queueLocationFilter() },
+      },
       include: {
         requestedBy: { select: USER_SELECT },
         paymentAuthRequest: {
@@ -326,7 +330,10 @@ export class AccountsPayablePaymentReversalRequestsService {
 
   async findPendingCaja() {
     return this.prisma.accountPayablePaymentReversalRequest.findMany({
-      where: { status: ApPaymentReversalStatus.PENDING_CAJA },
+      where: {
+        status: ApPaymentReversalStatus.PENDING_CAJA,
+        paymentAuthRequest: { accountPayable: queueLocationFilter() },
+      },
       include: {
         requestedBy: { select: USER_SELECT },
         gerenciaReviewedBy: { select: USER_SELECT },
@@ -342,6 +349,7 @@ export class AccountsPayablePaymentReversalRequestsService {
 
   async findAll() {
     return this.prisma.accountPayablePaymentReversalRequest.findMany({
+      where: { paymentAuthRequest: { accountPayable: queueLocationFilter() } },
       include: {
         requestedBy: { select: USER_SELECT },
         gerenciaReviewedBy: { select: USER_SELECT },

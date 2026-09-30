@@ -37,6 +37,7 @@ import PercentIcon from '@mui/icons-material/Percent';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSnackbar } from 'notistack';
 import { PageHeader } from '../../../components/common/PageHeader';
+import { LocationSupportsPendingAlert } from '../../sedes/components/LocationSupportsPendingAlert';
 import { DataTable } from '../../../components/common/DataTable';
 import { useAuthStore } from '../../../store/authStore';
 import { startApprovalQueue, type ApprovalQueueItem } from '../../../hooks/useApprovalQueue';
@@ -2935,6 +2936,8 @@ export const StatusChangeRequestsPage: React.FC = () => {
 
   return (
     <Box>
+      {/* Solo Zoom: los apoyos entre sedes viven en su página (docs/PLAN_SEDES.md §16) */}
+      <LocationSupportsPendingAlert />
       <PageHeader
         title="Solicitudes"
         subtitle={viewMode === 'pending' ? 'Gestionar solicitudes pendientes de aprobación' : 'Historial de solicitudes procesadas'}

@@ -85,6 +85,31 @@ const SERVICES_LIST = [
 ];
 
 // ---------------------------------------------------------------------------
+// Vertical zones (mm)
+// ---------------------------------------------------------------------------
+
+/** Separator line of the footer drawn on every page */
+const FOOTER_TOP = PDF_LAYOUT.pageHeight - PDF_LAYOUT.marginBottom - 4;
+/** Lowest point regular flowing content (table rows, observaciones) may reach */
+const CONTENT_BOTTOM = FOOTER_TOP - 2;
+/** Baseline of the first legal note, pinned above the footer on the last page */
+const LEGAL_NOTES_Y = FOOTER_TOP - 11;
+/**
+ * Lowest point the closing block (totales, "Atendido por") may reach: it shares
+ * the last page with the pinned legal notes, so it must stop above them.
+ */
+const CLOSING_BOTTOM = LEGAL_NOTES_Y - 6;
+
+/** Start a new page when `needed` mm from `y` would cross `limit` */
+function ensureSpace(doc: jsPDF, y: number, needed: number, limit: number): number {
+  if (y + needed > limit) {
+    doc.addPage();
+    return PDF_LAYOUT.marginTop;
+  }
+  return y;
+}
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
@@ -353,7 +378,7 @@ async function drawItemsTable(doc: jsPDF, y: number, order: Order): Promise<numb
     const dynamicRowHeight = Math.max(rowHeight, maxTextLines * 4 + 2, imageHeight + 4);
 
     // Page break check
-    if (y + dynamicRowHeight > PDF_LAYOUT.pageHeight - PDF_LAYOUT.marginBottom - 5) {
+    if (y + dynamicRowHeight > CONTENT_BOTTOM) {
       doc.addPage();
       y = PDF_LAYOUT.marginTop;
       drawTableHeader(y);
@@ -435,6 +460,19 @@ function drawFinancials(doc: jsPDF, y: number, order: Order): number {
   const valueRight = PDF_LAYOUT.marginLeft + PDF_LAYOUT.contentWidth; // right edge for right-aligned values
   const lineH = 5.5;
 
+  const hasRetefuente = parseFloat(order.retefuenteRate) > 0;
+  const hasReteICA = parseFloat(order.reteICARate) > 0;
+  const hasTax = parseFloat(order.tax) > 0;
+  const hasReteIVA = parseFloat(order.reteIVARate) > 0 && hasTax;
+  const hasDiscount = parseFloat(order.discountAmount) > 0;
+
+  // Keep the whole block together: detail rows + separator + total + abono + saldo
+  const detailRows =
+    1 + [hasRetefuente, hasReteICA, hasTax, hasReteIVA, order.requiresColorProof, hasDiscount]
+      .filter(Boolean).length;
+  const blockHeight = detailRows * lineH + 6 + 2 * lineH + 2;
+  y = ensureSpace(doc, y, blockHeight, CLOSING_BOTTOM);
+
   // Subtotal
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(PDF_FONTS.totalLabel);
@@ -445,7 +483,7 @@ function drawFinancials(doc: jsPDF, y: number, order: Order): number {
   y += lineH;
 
   // Retefuente — only if rate > 0
-  if (parseFloat(order.retefuenteRate) > 0) {
+  if (hasRetefuente) {
     const rate = (parseFloat(order.retefuenteRate) * 100).toFixed(3).replace(/\.?0+$/, '');
     const amount = parseFloat(order.subtotal) * parseFloat(order.retefuenteRate);
     doc.setFont('helvetica', 'normal');
@@ -458,7 +496,7 @@ function drawFinancials(doc: jsPDF, y: number, order: Order): number {
   }
 
   // ReteICA — only if rate > 0
-  if (parseFloat(order.reteICARate) > 0) {
+  if (hasReteICA) {
     const rate = (parseFloat(order.reteICARate) * 100).toFixed(3).replace(/\.?0+$/, '');
     const amount = parseFloat(order.subtotal) * parseFloat(order.reteICARate);
     doc.setFont('helvetica', 'normal');
@@ -471,7 +509,7 @@ function drawFinancials(doc: jsPDF, y: number, order: Order): number {
   }
 
   // IVA — only if tax > 0
-  if (parseFloat(order.tax) > 0) {
+  if (hasTax) {
     const rate = (parseFloat(order.taxRate) * 100).toFixed(1);
     doc.setFont('helvetica', 'normal');
     doc.text(`IVA (${rate}%):`, labelX, y);
@@ -481,7 +519,7 @@ function drawFinancials(doc: jsPDF, y: number, order: Order): number {
   }
 
   // ReteIVA — only if rate > 0 and there is IVA
-  if (parseFloat(order.reteIVARate) > 0 && parseFloat(order.tax) > 0) {
+  if (hasReteIVA) {
     const rate = (parseFloat(order.reteIVARate) * 100).toFixed(0);
     const amount = parseFloat(order.tax) * parseFloat(order.reteIVARate);
     doc.setFont('helvetica', 'normal');
@@ -503,7 +541,7 @@ function drawFinancials(doc: jsPDF, y: number, order: Order): number {
   }
 
   // Descuentos — only if discountAmount > 0
-  if (parseFloat(order.discountAmount) > 0) {
+  if (hasDiscount) {
     doc.setFont('helvetica', 'normal');
     setTextColor(doc, [220, 53, 69]); // Color rojo para descuentos
     doc.text('Descuentos:', labelX, y);
@@ -579,10 +617,7 @@ function drawNotes(doc: jsPDF, y: number, order: Order): number {
     setTextColor(doc, PDF_COLORS.bodyText);
     const lines = doc.splitTextToSize(order.notes, PDF_LAYOUT.contentWidth);
     lines.forEach((line: string) => {
-      if (y > PDF_LAYOUT.pageHeight - PDF_LAYOUT.marginBottom - 6) {
-        doc.addPage();
-        y = PDF_LAYOUT.marginTop;
-      }
+      y = ensureSpace(doc, y, 1, CONTENT_BOTTOM);
       doc.text(line, PDF_LAYOUT.marginLeft, y);
       y += 4;
     });
@@ -592,11 +627,8 @@ function drawNotes(doc: jsPDF, y: number, order: Order): number {
 }
 
 function drawAttendedBy(doc: jsPDF, y: number, order: Order): number {
-  // Page-break guard: footer starts at pageHeight - marginBottom - 10
-  if (y > PDF_LAYOUT.pageHeight - PDF_LAYOUT.marginBottom - 10) {
-    doc.addPage();
-    y = PDF_LAYOUT.marginTop;
-  }
+  // The legal notes below are pinned to this same page: stay above them
+  y = ensureSpace(doc, y, 1, CLOSING_BOTTOM);
 
   const name =
     order.createdBy.firstName && order.createdBy.lastName
@@ -611,10 +643,8 @@ function drawAttendedBy(doc: jsPDF, y: number, order: Order): number {
   doc.setFont('helvetica', 'bold');
   doc.text(name, PDF_LAYOUT.marginLeft + strWidthMm(doc, 'Atendido por: '), y);
 
-  // Move legal notes closer to the footer
-  // The footer separator line is at: PDF_LAYOUT.pageHeight - PDF_LAYOUT.marginBottom - 4
-  // We'll place the notes just above that line
-  const notesY = PDF_LAYOUT.pageHeight - PDF_LAYOUT.marginBottom - 15;
+  // Legal notes pinned just above the footer separator
+  const notesY = LEGAL_NOTES_Y;
 
   // Legal Notes
   doc.setFont('helvetica', 'bold');

@@ -3,6 +3,7 @@ import {
   Box,
   Button,
   Chip,
+  Divider,
   Stack,
   Table,
   TableBody,
@@ -11,6 +12,8 @@ import {
   TableHead,
   TableRow,
   Typography,
+  useMediaQuery,
+  useTheme,
 } from '@mui/material';
 import { SedeDot } from '../../../components/layout/LocationSelector';
 import type { LocationSupport } from '../../../types';
@@ -32,8 +35,83 @@ interface Props {
   emptyText: string;
 }
 
-/** Tabla de apoyos en otra sede (docs/PLAN_SEDES.md §16). */
+const Sede: React.FC<{ row: LocationSupport }> = ({ row }) => (
+  <Box>
+    <Stack direction="row" spacing={1} alignItems="center">
+      <SedeDot color={row.location.color} />
+      <span>{row.location.name}</span>
+    </Stack>
+    {row.replaces && (
+      <Typography variant="caption" color="text.secondary">
+        desde el apoyo en {row.replaces.location.name}
+      </Typography>
+    )}
+  </Box>
+);
+
+const dates = (row: LocationSupport) => (row.kind === 'RETURN' ? '—' : formatSupportRange(row.startDate, row.endDate));
+
+/** Motivo, y lo que anotó Gerencia al revisar o al terminar. */
+const Reason: React.FC<{ row: LocationSupport }> = ({ row }) => (
+  <>
+    <Typography variant="body2">{row.reason}</Typography>
+    {row.reviewNotes && (
+      <Typography variant="caption" color="text.secondary" display="block">
+        Gerencia: {row.reviewNotes}
+      </Typography>
+    )}
+    {row.endReason && (
+      <Typography variant="caption" color="text.secondary" display="block">
+        Terminado por {personName(row.endedBy)}: {row.endReason}
+      </Typography>
+    )}
+  </>
+);
+
+const Requested: React.FC<{ row: LocationSupport; withLabel?: boolean }> = ({ row, withLabel }) => (
+  <>
+    <Typography variant="body2">
+      {withLabel ? 'Pedido por ' : ''}
+      {personName(row.requestedBy)}
+    </Typography>
+    {row.reviewedBy && row.reviewedBy.id !== row.requestedBy.id && (
+      <Typography variant="caption" color="text.secondary">
+        {row.status === 'REJECTED' ? 'rechazó' : 'autorizó'} {personName(row.reviewedBy)}
+      </Typography>
+    )}
+  </>
+);
+
+const Actions: React.FC<{ row: LocationSupport; actions: LocationSupportAction[]; fullWidth?: boolean }> = ({
+  row,
+  actions,
+  fullWidth,
+}) => (
+  <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
+    {actions.map((action) => (
+      <Button
+        key={action.label}
+        size="small"
+        color={action.color ?? 'primary'}
+        variant={action.variant ?? 'text'}
+        onClick={() => action.onClick(row)}
+        sx={{ whiteSpace: 'nowrap', ...(fullWidth && { flex: 1 }) }}
+      >
+        {action.label}
+      </Button>
+    ))}
+  </Box>
+);
+
+/**
+ * Apoyos en otra sede (docs/PLAN_SEDES.md §16). En pantallas angostas se
+ * muestran como tarjetas, con las acciones al final: en una tabla quedaban
+ * fuera de la pantalla.
+ */
 export const LocationSupportsTable: React.FC<Props> = ({ rows, actions, showEmployee = true, emptyText }) => {
+  const theme = useTheme();
+  const isNarrow = useMediaQuery(theme.breakpoints.down('md'));
+
   if (rows.length === 0) {
     return (
       <Typography color="text.secondary" sx={{ p: 3, textAlign: 'center' }}>
@@ -42,92 +120,111 @@ export const LocationSupportsTable: React.FC<Props> = ({ rows, actions, showEmpl
     );
   }
 
+  if (isNarrow) {
+    return (
+      <Stack divider={<Divider />}>
+        {rows.map((row) => {
+          const status = supportStatus(row);
+          const rowActions = actions?.(row) ?? [];
+          return (
+            <Box key={row.id} sx={{ p: 2 }}>
+              <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1} sx={{ mb: 1 }}>
+                <Box sx={{ minWidth: 0 }}>
+                  {showEmployee && (
+                    <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                      {personName(row.user)}{' '}
+                      <Typography component="span" variant="caption" color="text.secondary">
+                        {row.user.username}
+                      </Typography>
+                    </Typography>
+                  )}
+                  <Typography variant="body2" color="text.secondary">
+                    {supportKindLabel(row)} · {dates(row)}
+                  </Typography>
+                </Box>
+                <Chip size="small" label={status.label} color={status.color} />
+              </Stack>
+              <Stack spacing={1}>
+                <Sede row={row} />
+                <Box>
+                  <Reason row={row} />
+                </Box>
+                <Box>
+                  <Requested row={row} withLabel />
+                </Box>
+                {rowActions.length > 0 && <Actions row={row} actions={rowActions} fullWidth />}
+              </Stack>
+            </Box>
+          );
+        })}
+      </Stack>
+    );
+  }
+
+  // Las acciones quedan fijas a la derecha: si la tabla no cabe y hay que
+  // desplazarla, los botones siguen a la vista (macOS esconde la barra).
+  const stickySx = {
+    position: 'sticky',
+    right: 0,
+    bgcolor: 'background.paper',
+    boxShadow: `-8px 0 8px -8px ${theme.palette.mode === 'dark' ? 'rgba(0,0,0,0.6)' : 'rgba(0,0,0,0.15)'}`,
+  } as const;
+
   return (
-    <TableContainer>
-      <Table size="small">
+    <TableContainer sx={{ overflowX: 'auto' }}>
+      <Table size="small" sx={{ minWidth: 720 }}>
         <TableHead>
           <TableRow>
-            {showEmployee && <TableCell>Empleado</TableCell>}
+            <TableCell>{showEmployee ? 'Empleado' : 'Pedido por'}</TableCell>
             <TableCell>Sede</TableCell>
             <TableCell>Qué</TableCell>
-            <TableCell>Fechas</TableCell>
             <TableCell>Motivo</TableCell>
-            <TableCell>Pedido / autorizado</TableCell>
             <TableCell>Estado</TableCell>
-            {actions && <TableCell align="right" />}
+            {actions && <TableCell align="right" sx={stickySx} />}
           </TableRow>
         </TableHead>
         <TableBody>
           {rows.map((row) => {
             const status = supportStatus(row);
-            const rowActions = actions?.(row) ?? [];
             return (
               <TableRow key={row.id} hover>
-                {showEmployee && (
-                  <TableCell>
-                    <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                      {personName(row.user)}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      {row.user.username}
-                    </Typography>
-                  </TableCell>
-                )}
                 <TableCell>
-                  <Stack direction="row" spacing={1} alignItems="center">
-                    <SedeDot color={row.location.color} />
-                    <span>{row.location.name}</span>
-                  </Stack>
-                  {row.replaces && (
-                    <Typography variant="caption" color="text.secondary">
-                      desde el apoyo en {row.replaces.location.name}
-                    </Typography>
+                  {showEmployee && (
+                    <>
+                      <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                        {personName(row.user)}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary" display="block">
+                        {row.user.username}
+                        {row.requestedBy.id !== row.userId ? ` · pedido por ${personName(row.requestedBy)}` : ''}
+                      </Typography>
+                    </>
                   )}
-                </TableCell>
-                <TableCell>{supportKindLabel(row)}</TableCell>
-                <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                  {row.kind === 'RETURN' ? '—' : formatSupportRange(row.startDate, row.endDate)}
-                </TableCell>
-                <TableCell sx={{ maxWidth: 260 }}>
-                  <Typography variant="body2">{row.reason}</Typography>
-                  {row.reviewNotes && (
-                    <Typography variant="caption" color="text.secondary" display="block">
-                      Gerencia: {row.reviewNotes}
-                    </Typography>
-                  )}
-                  {row.endReason && (
-                    <Typography variant="caption" color="text.secondary" display="block">
-                      Terminado por {personName(row.endedBy)}: {row.endReason}
-                    </Typography>
-                  )}
-                </TableCell>
-                <TableCell>
-                  <Typography variant="body2">{personName(row.requestedBy)}</Typography>
+                  {!showEmployee && <Typography variant="body2">{personName(row.requestedBy)}</Typography>}
                   {row.reviewedBy && row.reviewedBy.id !== row.requestedBy.id && (
-                    <Typography variant="caption" color="text.secondary">
+                    <Typography variant="caption" color="text.secondary" display="block">
                       {row.status === 'REJECTED' ? 'rechazó' : 'autorizó'} {personName(row.reviewedBy)}
                     </Typography>
                   )}
                 </TableCell>
                 <TableCell>
+                  <Sede row={row} />
+                </TableCell>
+                <TableCell>
+                  <Typography variant="body2">{supportKindLabel(row)}</Typography>
+                  <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>
+                    {dates(row)}
+                  </Typography>
+                </TableCell>
+                <TableCell sx={{ maxWidth: 280 }}>
+                  <Reason row={row} />
+                </TableCell>
+                <TableCell>
                   <Chip size="small" label={status.label} color={status.color} />
                 </TableCell>
                 {actions && (
-                  <TableCell align="right">
-                    <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
-                      {rowActions.map((action) => (
-                        <Button
-                          key={action.label}
-                          size="small"
-                          color={action.color ?? 'primary'}
-                          variant={action.variant ?? 'text'}
-                          onClick={() => action.onClick(row)}
-                          sx={{ whiteSpace: 'nowrap' }}
-                        >
-                          {action.label}
-                        </Button>
-                      ))}
-                    </Box>
+                  <TableCell align="right" sx={stickySx}>
+                    <Actions row={row} actions={actions(row)} />
                   </TableCell>
                 )}
               </TableRow>

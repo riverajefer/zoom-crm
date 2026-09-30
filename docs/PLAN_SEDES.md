@@ -6,7 +6,7 @@
 
 **Fuentes:** reunión con el cliente por Google Meet (apuntes de Gemini) y respuestas del cliente del 2026-09-27.
 
-**Cómo leer este plan:** las **fases de implementación** están en §12. Las demás secciones son el diseño de referencia que cada fase cita: qué es de cada sede (§1–§5), el admin (§6), el dashboard (§7), el modo consulta (§8), los PDF (§9), los reportes (§10), los usuarios de prueba (§11), las preguntas abiertas (§13), la Matriz (§14) y las decisiones técnicas (§15).
+**Cómo leer este plan:** las **fases de implementación** están en §12. Las demás secciones son el diseño de referencia que cada fase cita: qué es de cada sede (§1–§5), el admin (§6), el dashboard (§7), el modo consulta (§8), los PDF (§9), los reportes (§10), los usuarios de prueba (§11), las preguntas abiertas (§13), la Matriz (§14), las decisiones técnicas (§15) y el apoyo en otra sede (§16).
 
 ---
 
@@ -91,6 +91,7 @@ Cambios técnicos:
 
 - Cada usuario tiene una **sede predeterminada** y una lista de **sedes permitidas** (tabla `UserLocation`).
 - Al iniciar sesión, un usuario con una sola sede entra directo. Si tiene varias, entra a la predeterminada y puede cambiar desde el Topbar. Esto cubre el caso del personal del 125 que apoya en el 119 a la hora del almuerzo o por ausencias.
+- **Apoyo ocasional en otra sede** (un empleado del 104 que unos días trabaja en el 125): necesita autorización de Gerencia, dura un rango de fechas y mientras dura el empleado queda fijo en esa sede. Diseño en §16.
 - La sede activa viaja en cada request y un **guard central** valida que el usuario la tenga permitida. El filtrado es central, no con `if` repartidos por los servicios. Cómo se implementa: §15.1.
 - Admin y contabilidad pueden ver **todas las sedes** (opción "Todas" en el selector) para reportes y consolidados. Es un permiso (`view_all_locations`), no un nombre de rol.
 - **La venta cuenta para la sede donde se hizo**: la OP queda con la sede activa del asesor en ese momento, y suma en las ventas de esa sede y en las del asesor. La meta es del asesor, sin importar la sede.
@@ -311,7 +312,8 @@ Cada uno queda también como `Employee` de su sede predeterminada (menos `admins
 | 5 | PDF por sede | 2 | S | — |
 | 6 | Dashboard consolidado y reportes | 3 | M | — |
 | 7 | Matriz y cierre general diario | 3 | M | preguntas del cierre general (§14) |
-| 8 | Aceptación en staging y salida a producción | 1–7 | M | — |
+| 9 | Apoyo en otra sede con autorización de Gerencia (§16) | 3 | M | — |
+| 8 | Aceptación en staging y salida a producción | 1–7 y 9 | M | — |
 
 Las fases 3, 4 y 5 son independientes entre sí y pueden ir en cualquier orden después de la 2.
 
@@ -436,6 +438,22 @@ Todavía **no toca documentos**: al terminar, la app funciona como hoy, pero ya 
 
 **Se acepta cuando**: `contabilidad.lina` cierra un día con las 4 cajas, el día queda bloqueado, y `admin.zoom` recibe el resumen y puede reabrirlo con motivo.
 
+### Fase 9 · Apoyo en otra sede
+
+Diseño en §16. Se numera después de la 8 porque se decidió cuando la 8 ya estaba en curso, pero **va antes de la salida a producción**.
+
+- Modelo `LocationSupport` y su migración; permiso `authorize_location_support` en el catálogo, el seed (`admin` y `soporte`) y la etiqueta del selector de roles (grupo Sedes).
+- `LocationContextInterceptor`: con un apoyo vigente, la única sede permitida es la del apoyo. Destinatarios de las notificaciones de operación según el apoyo. Regla de caja.
+- Endpoints de `/location-supports` y el apoyo vigente en `GET /auth/me`.
+- Frontend: banner del apoyo, "Pedir apoyo en otra sede" y "Pedir cambio de sede" en el selector del Topbar, página "Apoyos entre sedes" para Gerencia, pendientes en la barra de aprobaciones, historial en la ficha del usuario y cambio de sede automático al aprobar o terminar.
+
+**Se acepta cuando**:
+- `admin.zoom` programa a `asesor.104` en el 125 para hoy. Al entrar, `asesor.104` queda en el 125 con el banner, el Topbar no le deja volver al 104, y la OP que crea sale `125-OP-…`.
+- `asesor.104` pide volver al 104; cuando `admin.zoom` lo aprueba, su pantalla cambia sola al 104.
+- `caja.119` pide apoyo en el 125 para hoy, `admin.zoom` lo aprueba y `caja.119` abre la caja del 125. Aprobarle volver al 119 falla mientras esa caja siga abierta y funciona después de cerrarla.
+- Un apoyo que terminó ayer ya no da acceso al 125.
+- `asesor.apoyo` sigue cambiando libremente entre el 125 y el 119.
+
 ### Fase 8 · Aceptación y producción
 
 #### Preparación de staging (ensayada en local el 2026-09-29)
@@ -477,6 +495,7 @@ Con los usuarios del §11 (contraseña `zoom123`), los criterios de cada fase:
 - [ ] **Fase 5**: una OP del 104 y una del 119 imprimen cada una su dirección y su teléfono (PDF y tirilla).
 - [ ] **Fase 6**: el Dashboard por sede cuadra, sede por sede, con el listado de OP y su mini dashboard en el mismo periodo.
 - [ ] **Fase 7a**: con la Matriz activa el menú solo muestra gastos, nómina, caja y dashboards; crear una OP desde la Matriz pide un local.
+- [ ] **Fase 9**: apoyo programado, cambio aprobado que mueve la pantalla sola, regla de caja, vencimiento y sedes fijas intactas (criterios de la fase 9).
 - [ ] Además, el recorrido de la fase 9 del plan del fork (login, PDF, adjuntos, Excel, logs en Grafana con `env="staging"`).
 
 #### Producción
@@ -490,6 +509,8 @@ Con los usuarios del §11 (contraseña `zoom123`), los criterios de cada fase:
 ## 13. Preguntas abiertas
 
 Resueltas (2026-09-27): producción sale con sedes · teléfono por sede y correo común · DTF por sede · ciudad Bogotá · metas por asesor · empleados por sede · áreas de producción comunes · consumo de insumos por sede · mismos precios · co-propiedad entre sedes · kanban con las mismas columnas y tarjetas por sede · usuarios de prueba inventados (§11) · consulta de OP de otra sede (§8).
+
+Resueltas (2026-09-30): apoyo ocasional en otra sede con autorización de Gerencia (§16).
 
 - [x] ~~Modo consulta~~ → OP, COT y OT.
 - [x] ~~Asistencia de quien apoya en otro local~~ → se anota dónde estuvo.
@@ -599,3 +620,57 @@ Aprobadas el 2026-09-27. No dependen del cliente, pero se fijan antes de la prim
 
 - **Las 4 sedes las crea la migración**, no el seed: la columna `locationId` es obligatoria y necesita las filas antes. Así producción las trae sin correr el seed. El seed solo crea los usuarios de prueba.
 - **Los datos existentes**: producción está vacía. Staging y local tienen datos de prueba sin sede. La recomendación es **reiniciar la base de staging** y sembrarla con `SEED_DEMO=true` ya con sedes, en lugar de inventarles una sede a esos datos. Si se prefiere conservarlos, la migración los asigna todos al 125.
+
+---
+
+## 16. Apoyo en otra sede (autorizado por Gerencia)
+
+Decidido con el cliente el 2026-09-30. Un empleado del 104 puede trabajar algunos días en el 125, pero solo con autorización de Gerencia.
+
+### Dos formas de trabajar en otra sede
+
+| | Sedes fijas (§5) | Apoyo en otra sede (esta sección) |
+|---|---|---|
+| Para qué | Lo rutinario: el del 125 que cubre el almuerzo en el 119 | Lo ocasional: vacaciones, una ausencia, un día de mucho trabajo |
+| Quién lo da | El admin, en la ficha del usuario | Gerencia, programándolo o aprobando una solicitud |
+| Cuánto dura | Hasta que se quite | Un rango de fechas; vence solo |
+| Cambiar de sede | Libre, desde el Topbar | Fijo en la sede del apoyo; cambiar pide autorización |
+
+Las sedes fijas se quedan como están.
+
+### Decisiones (2026-09-30)
+
+1. **Lo inician los dos.** Gerencia lo programa de antemano, y así nace aprobado. Para un imprevisto, el empleado lo pide en el momento y Gerencia lo aprueba.
+2. **"Gerencia" es un permiso, no un rol**: `authorize_location_support` ("Autorizar apoyos en otra sede", grupo Sedes). El seed se lo da a `admin` (Oscar Herrera) y a `soporte`, y el admin puede dárselo a otro rol.
+3. **Dura un rango de fechas**, uno o varios días de Bogotá, y vence solo al terminar el último.
+4. **Mientras dura, el empleado queda fijo en la sede del apoyo.** Cambiar de sede antes de que venza, sea para volver a la suya o para ir a otra, también pide autorización de Gerencia. La regla es una sola, incluso para quien tiene sedes fijas: **con un apoyo vigente, cambiar de sede pide Gerencia**.
+5. **Con la caja abierta no se cambia.** Si el empleado tiene abierta una sesión de caja en la sede del apoyo, debe cerrarla antes de que se apruebe un cambio o se termine el apoyo.
+6. **El login no pregunta nada**, porque la sede ya la decidió Gerencia al autorizar. Con un apoyo vigente entra directo a esa sede; sin apoyo, a la suya, como hoy.
+
+### Cómo se ve
+
+- **Empleado con apoyo vigente**: un banner fijo con el color de la sede, *"Estás de apoyo en el Local 125 · autorizado por Oscar Herrera · hasta el 5 de oct."* El selector del Topbar muestra solo el 125 y la opción **"Pedir cambio de sede"** (a qué sede y por qué). Mientras espera la respuesta sigue trabajando en el 125. Si la pide con la caja abierta, se le avisa de entrada que tendrá que cerrarla.
+- **Empleado sin apoyo**: en el selector del Topbar, **"Pedir apoyo en otra sede"**: sede, fechas (por defecto hoy) y motivo.
+- **Gerencia**: página **"Apoyos entre sedes"** (con `authorize_location_support`), con pestañas Pendientes · Vigentes · Programados · Historial y el botón **"Programar apoyo"** (empleado, sede, fechas y motivo). Las solicitudes pendientes suman en la barra de aprobaciones y llegan como notificación. Desde Vigentes, Gerencia puede terminar un apoyo antes de tiempo, con motivo y con la misma regla de caja.
+- **Al programar un apoyo**, el empleado recibe una notificación: *"Del 1 al 5 de oct. estás de apoyo en el Local 125."*
+- **Al aprobar o terminar**, la pantalla del empleado pasa sola a la sede nueva (evento de socket) con un aviso. Si no tenía la app abierta, cambia en la siguiente petición: el 403 `LOCATION_NOT_ALLOWED` ya refresca las sedes permitidas (`api/axios.ts`).
+- **Ficha del usuario**: el historial de sus apoyos.
+
+### Qué cambia y qué no
+
+- **Lo que hace en el 125 es del 125**: OP, COT, caja, consecutivos y asistencia llevan la sede activa, como siempre. La venta cuenta para el 125 y para el asesor (§5).
+- **La nómina no cambia**: sigue siendo empleado del 104 (`Employee.locationId`). La asistencia de esos días queda en el 125 porque se marca con la sede activa.
+- **Notificaciones de operación**: mientras dura el apoyo le llegan las de la sede del apoyo y no las de su sede.
+- **Auditoría**: programar, pedir, aprobar, rechazar, terminar y cambiar quedan en `audit_logs`, y el apoyo guarda quién lo pidió y quién lo autorizó.
+- **Quien tiene `view_all_locations`** (admin, contabilidad) ya opera en todas las sedes: no se le programan apoyos.
+
+### Backend
+
+- **Modelo `LocationSupport`**: usuario, sede, `startDate` y `endDate` (fechas sin hora), motivo, estado (`PENDING`, `APPROVED`, `REJECTED`, `CANCELLED`), quién lo pidió, quién lo revisó y cuándo, nota de revisión, `endedAt`, `endedById` y `endReason` si se terminó antes, y `replacesId` si es un cambio a mitad de otro apoyo. Un usuario no puede tener dos apoyos aprobados que se crucen.
+- **Vigente** = `APPROVED`, hoy (`businessToday()`) entre `startDate` y `endDate`, y sin `endedAt`.
+- **`LocationContextInterceptor`**: con un apoyo vigente, las sedes permitidas del usuario son **solo la del apoyo**, que es también su sede por defecto. Sin apoyo, las fijas de `UserLocation`, como hoy. Es un solo punto: la extensión de Prisma, la caja y los consecutivos no se enteran.
+- **Notificaciones**: hoy el destinatario "de la sede" es quien la tiene entre sus sedes fijas (`notifications.service.ts`, `locations: { some: { locationId } }`). Pasa a ser quien la tiene fija y no está de apoyo en otra, o quien está de apoyo vigente en ella.
+- **Un cambio a mitad del apoyo** es una solicitud nueva con `replacesId`. Al aprobarla, el apoyo actual termina en ese momento. Si el destino es otra sede ajena, el nuevo queda vigente hasta la fecha pedida; si es su propia sede, no da acceso nuevo y el empleado vuelve a sus sedes fijas.
+- **Regla de caja**: aprobar un cambio o terminar un apoyo mientras ese usuario tiene abierta una sesión de caja en la sede del apoyo es un 400 `CASH_SESSION_OPEN`. **Si el apoyo vence con la caja abierta**, sigue vigente solo para esa sede hasta que la cierre, para que pueda cerrarla, y aparece en Vigentes marcado como *"vencido, caja abierta"*.
+- **Endpoints** (`/location-supports`): pedir para uno mismo y cancelar la propia solicitud pendiente (sin permiso especial); programar, aprobar, rechazar, terminar y listar todos (con `authorize_location_support`); listar los propios. `GET /auth/me` devuelve el apoyo vigente, si hay.
+- **Sin cron nuevo**: la vigencia se calcula en cada petición con la fecha de Bogotá, así que vencer no necesita una tarea programada.

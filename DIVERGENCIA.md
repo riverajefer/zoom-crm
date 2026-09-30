@@ -71,6 +71,7 @@ El `--ff-only` es la red de seguridad del salto directo: si `staging` tuviera al
 | 2026-09-27 | **Saldo a favor** usable en cualquier sede; cuenta en la sede donde se aplica (en el dashboard, en línea aparte del recaudo) | respuesta del cliente |
 | 2026-09-27 | Técnicas: sede activa por header `X-Location-Id` + `AsyncLocalStorage` + extensión de Prisma que filtra; sala de socket.io por sede; las sedes las crea la migración; staging se reinicia en vez de asignarle sede a los datos viejos | aprobadas. Detalle en [docs/PLAN_SEDES.md §15](./docs/PLAN_SEDES.md#15-decisiones-técnicas) |
 | 2026-09-27 | Plan de sedes organizado en **fases 0 a 8** | [docs/PLAN_SEDES.md §12](./docs/PLAN_SEDES.md#12-fases-de-implementación) |
+| 2026-09-30 | **Apoyo en otra sede**: un empleado puede trabajar unos días en otra sede con autorización de Gerencia (permiso `authorize_location_support`), por un rango de fechas; mientras dura queda fijo en esa sede y cambiar pide autorización; con la caja abierta no se cambia. Las sedes fijas siguen igual | decisión del cliente. Diseño en [docs/PLAN_SEDES.md §16](./docs/PLAN_SEDES.md#16-apoyo-en-otra-sede-autorizado-por-gerencia); fase 9 del plan |
 
 ### Restricciones heredadas que no se pueden tocar
 

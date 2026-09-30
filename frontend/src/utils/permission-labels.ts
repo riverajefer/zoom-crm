@@ -272,6 +272,14 @@ export const PERMISSION_LABELS: Record<string, string> = {
   export_sales_by_advisor: 'Exportar Ventas por Asesor a Excel',
   manage_sales_goals: 'Gestionar Metas de Ventas',
   read_all_advisors_tracking: 'Ver el Seguimiento de OP de todos los asesores',
+
+  // Sedes (solo Zoom)
+  view_all_locations: 'Ver y Operar en Todas las Sedes',
+  read_other_locations: 'Consultar OP, COT y OT de Otras Sedes',
+  manage_user_locations: 'Asignar Sedes a Usuarios',
+  read_all_cash_sessions: 'Ver las Cajas de Todas las Sedes',
+  perform_general_closing: 'Hacer el Cierre General de Cajas',
+  manage_locations: 'Crear y Editar Sedes (Soporte)',
 };
 
 /**

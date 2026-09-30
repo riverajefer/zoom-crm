@@ -132,6 +132,14 @@ const PERMISSION_GROUPS: Record<string, string[]> = {
   Comentarios: ['create_comments', 'read_comments', 'delete_comments'],
   Auditoría: ['read_audit_logs', 'read_session_logs'],
 
+  Sedes: [
+    'view_all_locations',
+    'read_other_locations',
+    'manage_user_locations',
+    'read_all_cash_sessions',
+    'perform_general_closing',
+    'manage_locations',
+  ],
   Otros: [],
 };
 
@@ -195,6 +203,7 @@ const TABS = [
       'Archivos',
       'Comentarios',
       'Auditoría',
+      'Sedes',
       'Otros',
     ],
   },

@@ -167,6 +167,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose, collapsed = fal
       path: ROUTES.DASHBOARD_SEDES,
       permission: PERMISSIONS.VIEW_ALL_LOCATIONS,
     },
+    // Solo Zoom: aprobaciones de Gerencia a la vista, no dentro de un grupo (docs/PLAN_SEDES.md §16)
+    {
+      label: 'Apoyos entre sedes',
+      icon: <HandshakeOutlinedIcon />,
+      path: ROUTES.LOCATION_SUPPORTS,
+      permission: PERMISSIONS.AUTHORIZE_LOCATION_SUPPORT,
+    },
     {
       label: isHeadquarters ? 'Gastos' : 'Comercial',
       icon: <ShoppingCartIcon />,
@@ -417,19 +424,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose, collapsed = fal
           path: ROUTES.PRODUCTION_AREAS,
           permission: PERMISSIONS.READ_PRODUCTION_AREAS,
         },
-        // Solo Zoom: docs/PLAN_SEDES.md §16
-        {
-          label: 'Apoyos entre sedes',
-          icon: <HandshakeOutlinedIcon />,
-          path: ROUTES.LOCATION_SUPPORTS,
-          permission: PERMISSIONS.AUTHORIZE_LOCATION_SUPPORT,
-        },
       ],
       permissions: [
         PERMISSIONS.READ_USERS,
         PERMISSIONS.READ_CARGOS,
         PERMISSIONS.READ_PRODUCTION_AREAS,
-        PERMISSIONS.AUTHORIZE_LOCATION_SUPPORT,
       ],
     },
     {

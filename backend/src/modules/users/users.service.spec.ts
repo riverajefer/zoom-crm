@@ -184,6 +184,17 @@ describe('UsersService', () => {
       expect(callArg).not.toHaveProperty('cargo');
     });
 
+    it('guarda nombre y apellido en mayúscula sostenida, con tildes y sin espacios de sobra', async () => {
+      await service.create(
+        { ...createDto, firstName: '  josé   Ángel ', lastName: 'muñoz peña' },
+        'actor-role',
+      );
+
+      expect(mockUsersRepository.create).toHaveBeenCalledWith(
+        expect.objectContaining({ firstName: 'JOSÉ ÁNGEL', lastName: 'MUÑOZ PEÑA' }),
+      );
+    });
+
     it('should create user with cargo connect when cargoId is provided and active', async () => {
       mockCargosRepository.findById.mockResolvedValue(mockCargo);
       const dtoWithCargo = { ...createDto, cargoId: 'cargo-1' };
@@ -245,6 +256,15 @@ describe('UsersService', () => {
       await service.update('user-1', { firstName: 'Updated' }, 'actor-role');
 
       expect(bcrypt.hash).not.toHaveBeenCalled();
+    });
+
+    it('al editar el nombre lo guarda en mayúscula sostenida', async () => {
+      await service.update('user-1', { firstName: 'carolina ', lastName: 'gonzález pérez' }, 'actor-role');
+
+      expect(mockUsersRepository.update).toHaveBeenCalledWith(
+        'user-1',
+        expect.objectContaining({ firstName: 'CAROLINA', lastName: 'GONZÁLEZ PÉREZ' }),
+      );
     });
 
     it('should hash new password when password field is provided', async () => {

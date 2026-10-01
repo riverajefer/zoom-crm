@@ -16,6 +16,16 @@ import {
   SUPPORT_ROLE_NAME,
 } from '../../common/constants/roles.constants';
 
+/**
+ * Los nombres de usuario se guardan en mayúscula sostenida, sin espacios de
+ * sobra. Va en el servicio y no en el DTO porque nómina también crea usuarios
+ * (`PayrollEmployeesService.createSystemUser`) llamando a `create` directamente.
+ * Conserva tildes y ñ: «José Muñoz» → «JOSÉ MUÑOZ».
+ */
+function toPersonName(value: string): string {
+  return value.trim().replace(/\s+/g, ' ').toLocaleUpperCase('es-CO');
+}
+
 @Injectable()
 export class UsersService {
   private readonly SALT_ROUNDS = 12;
@@ -174,8 +184,8 @@ export class UsersService {
       ...(createUserDto.email && { email: createUserDto.email }),
       ...(createUserDto.phone && { phone: createUserDto.phone }),
       password: hashedPassword,
-      firstName: createUserDto.firstName,
-      lastName: createUserDto.lastName,
+      firstName: toPersonName(createUserDto.firstName),
+      lastName: toPersonName(createUserDto.lastName),
       mustChangePassword: true,
       role: {
         connect: { id: createUserDto.roleId },
@@ -252,6 +262,13 @@ export class UsersService {
 
     // Preparar datos de actualización
     const { password, roleId, cargoId, username, isActive, ...updateData } = updateUserDto;
+
+    if (typeof updateData.firstName === 'string') {
+      updateData.firstName = toPersonName(updateData.firstName);
+    }
+    if (typeof updateData.lastName === 'string') {
+      updateData.lastName = toPersonName(updateData.lastName);
+    }
 
     // Incluir username si fue provisto
     if (username) {

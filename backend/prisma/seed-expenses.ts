@@ -1,4 +1,5 @@
 import { PrismaClient } from '../src/generated/prisma';
+import { normName } from '../src/common/utils/normalize.util';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
 import 'dotenv/config';
@@ -59,12 +60,21 @@ async function main() {
     },
   ];
 
+  // Se busca por nombre normalizado, no exacto: si alguien renombró
+  // «Producción» a «PRODUCCIÓN», un upsert por `name` crearía un segundo tipo
+  // (y hoy chocaría contra `expense_types_name_normalized_unique`).
+  const existingTypes = await prisma.expenseType.findMany({ select: { id: true, name: true } });
+
   for (const typeData of expenseTypesData) {
-    const expenseType = await prisma.expenseType.upsert({
-      where: { name: typeData.name },
-      update: { description: typeData.description },
-      create: { name: typeData.name, description: typeData.description },
-    });
+    const existing = existingTypes.find((t) => normName(t.name) === normName(typeData.name));
+    const expenseType = existing
+      ? await prisma.expenseType.update({
+          where: { id: existing.id },
+          data: { description: typeData.description },
+        })
+      : await prisma.expenseType.create({
+          data: { name: typeData.name, description: typeData.description },
+        });
     console.log(`  ✓ ExpenseType: ${typeData.name}`);
 
     for (const subcatName of typeData.subcategories) {

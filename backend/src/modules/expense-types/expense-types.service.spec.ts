@@ -1,11 +1,12 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { ExpenseTypesService } from './expense-types.service';
 import { ExpenseTypesRepository } from './expense-types.repository';
 
 const mockRepository = {
   findAllTypes: jest.fn(),
   findTypeById: jest.fn(),
+  findAllTypeNames: jest.fn(),
   createType: jest.fn(),
   updateType: jest.fn(),
   deleteType: jest.fn(),
@@ -86,6 +87,8 @@ describe('ExpenseTypesService', () => {
   });
 
   describe('createType', () => {
+    beforeEach(() => mockRepository.findAllTypeNames.mockResolvedValue([]));
+
     it('should delegate creation to repository', async () => {
       const dto = { name: 'Servicios', description: 'Servicios externos' };
       mockRepository.createType.mockResolvedValue({ id: 'new-id', ...dto });
@@ -94,11 +97,87 @@ describe('ExpenseTypesService', () => {
 
       expect(mockRepository.createType).toHaveBeenCalledWith(dto);
     });
+
+    it('guarda el nombre sin espacios sobrantes', async () => {
+      await service.createType({ name: '  Servicios  ' });
+
+      expect(mockRepository.createType).toHaveBeenCalledWith({ name: 'Servicios' });
+    });
+
+    it.each(['PRODUCCION', 'Producción', 'producción ', 'PRODUCCIÓN'])(
+      'rechaza «%s» si ya existe «PRODUCCIÓN» activo',
+      async (name) => {
+        mockRepository.findAllTypeNames.mockResolvedValue([
+          { id: 'prod', name: 'PRODUCCIÓN', isActive: true },
+        ]);
+
+        await expect(service.createType({ name })).rejects.toThrow(
+          new ConflictException('Ya existe el tipo de gasto «PRODUCCIÓN»'),
+        );
+        expect(mockRepository.createType).not.toHaveBeenCalled();
+      },
+    );
+
+    it('reactiva el tipo eliminado con el mismo nombre en vez de crear otro', async () => {
+      mockRepository.findAllTypeNames.mockResolvedValue([
+        { id: 'prod', name: 'PRODUCCION', isActive: false },
+      ]);
+
+      await service.createType({ name: 'Producción', description: 'Nueva' });
+
+      expect(mockRepository.createType).not.toHaveBeenCalled();
+      expect(mockRepository.updateType).toHaveBeenCalledWith('prod', {
+        name: 'Producción',
+        description: 'Nueva',
+        isActive: true,
+      });
+    });
+
+    it('rechaza un nombre sin letras ni números', async () => {
+      await expect(service.createType({ name: ' -- ' })).rejects.toThrow(BadRequestException);
+      expect(mockRepository.createType).not.toHaveBeenCalled();
+    });
+
+    // Dos guardados simultáneos pasan la validación; el perdedor choca contra
+    // el índice. Forma real del error con el adaptador `PrismaPg`: `meta.target`
+    // vacío y el nombre del índice en `meta.driverAdapterError`.
+    it('convierte el choque contra el índice normalizado en un 409', async () => {
+      mockRepository.createType.mockRejectedValue(
+        Object.assign(new Error('Unique constraint failed'), {
+          code: 'P2002',
+          meta: {
+            driverAdapterError: {
+              cause: {
+                originalMessage:
+                  'duplicate key value violates unique constraint "expense_types_name_normalized_unique"',
+              },
+            },
+          },
+        }),
+      );
+
+      await expect(service.createType({ name: 'Producción' })).rejects.toThrow(
+        new ConflictException('Ya existe un tipo de gasto con ese nombre'),
+      );
+    });
+
+    it('no confunde otros errores con un nombre duplicado', async () => {
+      const boom = new Error('connection lost');
+      mockRepository.createType.mockRejectedValue(boom);
+
+      await expect(service.createType({ name: 'Producción' })).rejects.toBe(boom);
+    });
   });
 
   describe('updateType', () => {
-    it('should validate existence then update', async () => {
+    beforeEach(() => {
       mockRepository.findTypeById.mockResolvedValue(mockType);
+      mockRepository.findAllTypeNames.mockResolvedValue([
+        { id: TYPE_ID, name: 'Materiales', isActive: true },
+      ]);
+    });
+
+    it('should validate existence then update', async () => {
       const dto = { name: 'Materiales Actualizado' };
       mockRepository.updateType.mockResolvedValue({ ...mockType, ...dto });
 
@@ -106,6 +185,42 @@ describe('ExpenseTypesService', () => {
 
       expect(mockRepository.findTypeById).toHaveBeenCalledWith(TYPE_ID);
       expect(mockRepository.updateType).toHaveBeenCalledWith(TYPE_ID, dto);
+    });
+
+    it('permite cambiar solo mayúsculas o tildes del propio tipo', async () => {
+      await service.updateType(TYPE_ID, { name: 'MATERIALES' });
+
+      expect(mockRepository.updateType).toHaveBeenCalledWith(TYPE_ID, { name: 'MATERIALES' });
+    });
+
+    it('rechaza renombrar a un nombre que ya usa otro tipo', async () => {
+      mockRepository.findAllTypeNames.mockResolvedValue([
+        { id: TYPE_ID, name: 'Materiales', isActive: true },
+        { id: 'prod', name: 'PRODUCCIÓN', isActive: true },
+      ]);
+
+      await expect(service.updateType(TYPE_ID, { name: 'produccion' })).rejects.toThrow(
+        new ConflictException('Ya existe el tipo de gasto «PRODUCCIÓN»'),
+      );
+      expect(mockRepository.updateType).not.toHaveBeenCalled();
+    });
+
+    it('avisa cuando el nombre lo tiene un tipo eliminado', async () => {
+      mockRepository.findAllTypeNames.mockResolvedValue([
+        { id: TYPE_ID, name: 'Materiales', isActive: true },
+        { id: 'old', name: 'PRODUCCION', isActive: false },
+      ]);
+
+      await expect(service.updateType(TYPE_ID, { name: 'Producción' })).rejects.toThrow(
+        new ConflictException('Ya existe el tipo de gasto «PRODUCCION», que fue eliminado'),
+      );
+    });
+
+    it('no consulta nombres si el nombre no cambia', async () => {
+      await service.updateType(TYPE_ID, { description: 'otra' });
+
+      expect(mockRepository.findAllTypeNames).not.toHaveBeenCalled();
+      expect(mockRepository.updateType).toHaveBeenCalledWith(TYPE_ID, { description: 'otra' });
     });
 
     it('should throw NotFoundException when type does not exist', async () => {

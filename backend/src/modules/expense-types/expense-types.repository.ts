@@ -32,6 +32,13 @@ export class ExpenseTypesRepository {
     });
   }
 
+  /** Todos los tipos, activos e inactivos: la unicidad del nombre los cubre a ambos. */
+  async findAllTypeNames() {
+    return this.prisma.expenseType.findMany({
+      select: { id: true, name: true, isActive: true },
+    });
+  }
+
   async createType(data: { name: string; description?: string }) {
     return this.prisma.expenseType.create({ data });
   }

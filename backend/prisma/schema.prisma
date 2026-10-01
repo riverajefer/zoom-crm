@@ -1547,6 +1547,10 @@ model ExpenseType {
   expenseOrders   ExpenseOrder[]
   accountsPayable AccountPayable[]
 
+  // Además del UNIQUE exacto de `name`, la base tiene
+  // `expense_types_name_normalized_unique` sobre `normalize_catalog_name(name)`
+  // (sin mayúsculas, tildes ni espacios). Prisma no expresa índices sobre
+  // expresiones: vive solo en la migración 20260930000000.
   @@map("expense_types")
 }
 

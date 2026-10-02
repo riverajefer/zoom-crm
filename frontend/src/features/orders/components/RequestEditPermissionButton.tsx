@@ -47,14 +47,6 @@ export const RequestEditPermissionButton: React.FC<
     defaultValues: { observations: '' },
   });
 
-  const isAdmin = user?.role?.name === 'admin';
-  const isDraft = orderStatus === 'DRAFT';
-  const hasActivePermission = !!activePermissionQuery.data;
-
-  if (isAdmin || isDraft || hasActivePermission || orderStatus === 'ANULADO') {
-    return null;
-  }
-
   const handleOpen = () => setOpen(true);
   const handleClose = () => {
     setOpen(false);
@@ -64,10 +56,20 @@ export const RequestEditPermissionButton: React.FC<
   // `react-hook-form` 7.71 NO bloquea envíos reentrantes: `handleSubmit` marca
   // `isSubmitting` pero ejecuta el handler igual, así que dos clics en el mismo
   // frame llegan los dos.
+  // Va antes del `return null`: es un hook, y el permiso activo llega después
+  // del primer render, así que con el return primero cambia el número de hooks.
   const onSubmit = useSingleFlight(async (data: FormData) => {
     await createMutation.mutateAsync(data);
     handleClose();
   });
+
+  const isAdmin = user?.role?.name === 'admin';
+  const isDraft = orderStatus === 'DRAFT';
+  const hasActivePermission = !!activePermissionQuery.data;
+
+  if (isAdmin || isDraft || hasActivePermission || orderStatus === 'ANULADO') {
+    return null;
+  }
 
   return (
     <>

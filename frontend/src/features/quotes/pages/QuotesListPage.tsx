@@ -37,7 +37,7 @@ import type { Quote, QuoteStatus, FilterQuotesDto } from '../../../types/quote.t
 import { QuoteStatus as QStatus, QUOTE_STATUS_CONFIG, type QuoteLookupItem } from '../../../types/quote.types';
 import { OtherSedesLookupHint } from '../../sedes/components/OtherSedesLookupHint';
 import { ALL_LOCATIONS, useLocationStore } from '../../../store/locationStore';
-import { SedeGroupedTable } from '../../sedes/components/SedeGroupedTable';
+import { sedeColumn } from '../../sedes/components/sedeColumn';
 import { SedeQuickSelector } from '../../sedes/components/SedeQuickSelector';
 import { ExportDialog } from '../../../components/common/ExportDialog';
 import { fetchAllPages } from '../../../utils/excelExport';
@@ -127,7 +127,7 @@ export const QuotesListPage: React.FC = () => {
     ? users.find((u: any) => u.id === filters.createdById)
     : null;
 
-  // Vista "Todas" del admin: una tabla por sede (docs/PLAN_SEDES.md §6.2).
+  // Vista "Todas" del admin: una sola tabla con la columna de la sede de cada COT.
   const isAllSedes = useLocationStore((st) => st.activeLocationId === ALL_LOCATIONS);
 
   const handleFilterChange = (key: keyof FilterQuotesDto, value: any) => {
@@ -185,6 +185,7 @@ export const QuotesListPage: React.FC = () => {
         <Box sx={{ fontWeight: 600, color: 'secondary.main' }}>{params.value}</Box>
       ),
     },
+    ...sedeColumn<Quote>(isAllSedes),
     {
       field: 'client',
       headerName: 'Cliente',
@@ -284,7 +285,7 @@ export const QuotesListPage: React.FC = () => {
         );
       },
     },
-  ], [navigate, setConfirmDelete, setConfirmConvert, setChangeStatusQuote]);
+  ], [navigate, setConfirmDelete, setConfirmConvert, setChangeStatusQuote, isAllSedes]);
 
   const columns = useResponsiveColumns(rawColumns);
 
@@ -396,45 +397,30 @@ export const QuotesListPage: React.FC = () => {
           </Stack>
 
           <SedeQuickSelector />
-          {isAllSedes ? (
-            <SedeGroupedTable<Quote>
-              unit="COT"
-              storesOnly
-              queryKey={['quotes', filters]}
-              fetchGroup={(locationId, limit) => quotesApi.findAll({ ...filters, page: 1, limit }, locationId)}
-              columns={columns}
-              getRowId={(row) => row.id}
-              onRowClick={(row) => navigate(`/quotes/${row.id}`)}
-              search={filters.search || ''}
-              onSearchChange={(value) => handleFilterChange('search', value)}
-              searchPlaceholder="Buscar por número o cliente..."
-            />
-          ) : (
-            <DataTable
-              density="compact"
-              rows={quotes}
-              columns={columns}
-              loading={quotesQuery.isLoading || quotesQuery.isFetching}
-              getRowId={(row) => row.id}
-              onRowClick={(row) => navigate(`/quotes/${row.id}`)}
-              pageSize={filters.limit ?? 20}
-              pageSizeOptions={[20, 50, 100]}
-              rowCount={quotesQuery.data?.meta.total ?? 0}
-              currentPage={(filters.page ?? 1) - 1}
-              onPaginationModelChange={(model) =>
-                setFilters((prev) => ({
-                  ...prev,
-                  page: model.page + 1,
-                  limit: model.pageSize,
-                }))
-              }
-              searchValue={filters.search || ''}
-              onSearchChange={(value) => handleFilterChange('search', value)}
-              serverSideSearch
-              searchPlaceholder="Buscar por número o cliente..."
-              emptyMessage="No se encontraron cotizaciones"
-            />
-          )}
+          <DataTable
+            density="compact"
+            rows={quotes}
+            columns={columns}
+            loading={quotesQuery.isLoading || quotesQuery.isFetching}
+            getRowId={(row) => row.id}
+            onRowClick={(row) => navigate(`/quotes/${row.id}`)}
+            pageSize={filters.limit ?? 20}
+            pageSizeOptions={[20, 50, 100]}
+            rowCount={quotesQuery.data?.meta.total ?? 0}
+            currentPage={(filters.page ?? 1) - 1}
+            onPaginationModelChange={(model) =>
+              setFilters((prev) => ({
+                ...prev,
+                page: model.page + 1,
+                limit: model.pageSize,
+              }))
+            }
+            searchValue={filters.search || ''}
+            onSearchChange={(value) => handleFilterChange('search', value)}
+            serverSideSearch
+            searchPlaceholder="Buscar por número o cliente..."
+            emptyMessage="No se encontraron cotizaciones"
+          />
           <OtherSedesLookupHint<QuoteLookupItem>
             type="COT"
             search={filters.search}

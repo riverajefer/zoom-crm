@@ -150,6 +150,8 @@ Por qué así:
 
 La regla de no mezclar se mantiene: **una sola tabla, agrupada por sede**.
 
+> **Cambio (2026-10-01): ya no se agrupa por sede.** El admin pidió ver todo en una sola tabla. En "Todas", los listados de OP, COT y OT usan el listado normal (paginado, con los filtros y el orden de siempre) y agregan la columna **Sede** con el chip de color (`sedeColumn`, en `features/sedes/components`). Las filas de distintas sedes se intercalan, y se perdieron el subtotal y el conteo por sede de los encabezados de grupo. `SedeGroupedTable` se borró. Lo de abajo sobre encabezados, filas limitadas y orden por grupo queda como historia.
+
 - **Encabezado por grupo**: color de la sede, nombre, cantidad de documentos y subtotal (por ejemplo, "Local 119 · 48 OP · $ 12.400.000"). Cada grupo se puede plegar.
 - **Filas limitadas por grupo**: cada sede muestra sus primeras 10 filas y un enlace "Ver las 48 del Local 119", que filtra la tabla a esa sede. Así ninguna sede tapa a las otras y no hace falta paginar entre grupos.
 - **El orden y los filtros se aplican dentro de cada grupo**: ordenar por fecha ordena cada sede por separado, nunca intercala filas de sedes distintas.

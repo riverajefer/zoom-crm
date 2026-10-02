@@ -21,14 +21,13 @@ import { DataTable } from '../../../components/common/DataTable';
 import { ConfirmDialog } from '../../../components/common/ConfirmDialog';
 import { ActionsCell } from '../../../components/common/DataTable/ActionsCell';
 import { useWorkOrders } from '../hooks';
-import { workOrdersKeys } from '../hooks/useWorkOrders';
 import { WorkOrderStatusChip } from '../components';
 import { useAuthStore } from '../../../store/authStore';
 import { PERMISSIONS, ROUTES } from '../../../utils/constants';
 import { WorkOrderStatus, WORK_ORDER_STATUS_CONFIG, type WorkOrderLookupItem } from '../../../types/work-order.types';
 import { OtherSedesLookupHint } from '../../sedes/components/OtherSedesLookupHint';
 import { ALL_LOCATIONS, useLocationStore } from '../../../store/locationStore';
-import { SedeGroupedTable } from '../../sedes/components/SedeGroupedTable';
+import { sedeColumn } from '../../sedes/components/sedeColumn';
 import { SedeQuickSelector } from '../../sedes/components/SedeQuickSelector';
 import type { WorkOrder, FilterWorkOrdersDto } from '../../../types/work-order.types';
 import { ExportDialog } from '../../../components/common/ExportDialog';
@@ -90,7 +89,7 @@ export const WorkOrdersListPage = () => {
   const canExport = hasPermission(PERMISSIONS.EXPORT_WORK_ORDERS);
   const [exportOpen, setExportOpen] = useState(false);
 
-  // Vista "Todas" del admin: una tabla por sede (docs/PLAN_SEDES.md §6.2).
+  // Vista "Todas" del admin: una sola tabla con la columna de la sede de cada OT.
   const isAllSedes = useLocationStore((st) => st.activeLocationId === ALL_LOCATIONS);
 
   const handleFilterChange = (key: keyof FilterWorkOrdersDto, value: unknown) => {
@@ -119,6 +118,7 @@ export const WorkOrdersListPage = () => {
       headerName: 'Nº OT',
       width: 150,
     },
+    ...sedeColumn<WorkOrder>(isAllSedes),
     {
       field: 'orderNumber',
       headerName: 'Nº Orden',
@@ -230,7 +230,7 @@ export const WorkOrdersListPage = () => {
         />
       ),
     },
-  ], [navigate, canUpdate, canDelete]);
+  ], [navigate, canUpdate, canDelete, isAllSedes]);
 
   const columns = useResponsiveColumns(rawColumns);
 
@@ -283,42 +283,27 @@ export const WorkOrdersListPage = () => {
       </Stack>
 
       <SedeQuickSelector />
-      {isAllSedes ? (
-        <SedeGroupedTable<WorkOrder>
-          unit="OT"
-          storesOnly
-          queryKey={workOrdersKeys.list(filters)}
-          fetchGroup={(locationId, limit) => workOrdersApi.getAll({ ...filters, page: 1, limit }, locationId)}
-          columns={columns}
-          getRowId={(row) => row.id}
-          onRowClick={handleView}
-          search={filters.search ?? ''}
-          onSearchChange={(value) => handleFilterChange('search', value)}
-          searchPlaceholder="Buscar por OT, OP o cliente..."
-        />
-      ) : (
-        <DataTable
-          density="compact"
-          rows={workOrders}
-          columns={columns}
-          loading={workOrdersQuery.isLoading || workOrdersQuery.isFetching}
-          rowCount={workOrdersQuery.data?.meta?.total ?? 0}
-          currentPage={(filters.page ?? 1) - 1}
-          pageSize={filters.limit ?? 20}
-          pageSizeOptions={[20, 50, 100]}
-          onPaginationModelChange={(model) =>
-            setFilters((prev) => ({
-              ...prev,
-              page: model.page + 1,
-              limit: model.pageSize,
-            }))
-          }
-          searchValue={filters.search ?? ''}
-          onSearchChange={(value) => handleFilterChange('search', value)}
-          serverSideSearch
-          onRowClick={handleView}
-        />
-      )}
+      <DataTable
+        density="compact"
+        rows={workOrders}
+        columns={columns}
+        loading={workOrdersQuery.isLoading || workOrdersQuery.isFetching}
+        rowCount={workOrdersQuery.data?.meta?.total ?? 0}
+        currentPage={(filters.page ?? 1) - 1}
+        pageSize={filters.limit ?? 20}
+        pageSizeOptions={[20, 50, 100]}
+        onPaginationModelChange={(model) =>
+          setFilters((prev) => ({
+            ...prev,
+            page: model.page + 1,
+            limit: model.pageSize,
+          }))
+        }
+        searchValue={filters.search ?? ''}
+        onSearchChange={(value) => handleFilterChange('search', value)}
+        serverSideSearch
+        onRowClick={handleView}
+      />
 
       <OtherSedesLookupHint<WorkOrderLookupItem>
         type="OT"

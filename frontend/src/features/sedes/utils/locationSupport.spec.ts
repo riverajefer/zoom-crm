@@ -1,6 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import type { LocationSupport } from '../../../types';
-import { apiErrorMessage, formatSupportDay, formatSupportRange, supportKindLabel, supportStatus } from './locationSupport';
+import {
+  addSupportDays,
+  apiErrorMessage,
+  describeSupportPeriod,
+  formatSupportDay,
+  formatSupportMoment,
+  formatSupportRange,
+  nextSaturday,
+  supportKindLabel,
+  supportMoments,
+  supportStatus,
+} from './locationSupport';
 
 const support = (overrides: Partial<LocationSupport> = {}) =>
   ({
@@ -34,6 +45,45 @@ describe('locationSupport', () => {
     expect(supportStatus(support({ endedAt: '2026-10-02T15:00:00Z' }), '2026-10-03').label).toBe('Terminado antes');
     expect(supportStatus(support({ overdue: true }), '2026-10-06').label).toBe('Vencido, caja abierta');
     expect(supportStatus(support({ status: 'PENDING' })).label).toBe('Pendiente');
+  });
+
+  it('muestra cuándo se pidió y cuándo se respondió, en hora de Bogotá', () => {
+    // 14:15 UTC son las 9:15 a. m. en Bogotá.
+    expect(formatSupportMoment('2026-09-30T14:15:00.000Z')).toMatch(/^30 .*9:15/);
+
+    const asesor = { id: 'u-1', username: 'asesor.104', firstName: 'ASESOR', lastName: '104' };
+    const admin = { id: 'u-2', username: 'admin.zoom', firstName: 'ADMIN', lastName: 'ZOOM' };
+    const base = { createdAt: '2026-09-30T14:15:00.000Z', requestedBy: asesor, reviewedBy: null, reviewedAt: null };
+
+    expect(supportMoments({ ...base, status: 'PENDING' })).toEqual([expect.stringMatching(/^Solicitada el 30 /)]);
+    const approved = supportMoments({
+      ...base,
+      status: 'APPROVED',
+      reviewedBy: admin,
+      reviewedAt: '2026-09-30T15:02:00.000Z',
+    });
+    expect(approved).toHaveLength(2);
+    expect(approved[1]).toMatch(/^Aprobada el 30 .*10:02.* por ADMIN ZOOM$/);
+    expect(
+      supportMoments({ ...base, status: 'REJECTED', reviewedBy: admin, reviewedAt: '2026-09-30T15:02:00.000Z' })[1],
+    ).toMatch(/^Rechazada el /);
+    // Lo que programa Gerencia nace aprobado.
+    expect(
+      supportMoments({ ...base, status: 'APPROVED', requestedBy: admin, reviewedBy: admin, reviewedAt: base.createdAt }),
+    ).toEqual([expect.stringMatching(/^Programado el 30 /)]);
+  });
+
+  it('dice el periodo como se dice', () => {
+    // 2026-10-01 es jueves.
+    expect(addSupportDays('2026-09-30', 2)).toBe('2026-10-02');
+    expect(nextSaturday('2026-10-01')).toBe('2026-10-03');
+    expect(nextSaturday('2026-10-03')).toBe('2026-10-03');
+    expect(nextSaturday('2026-10-04')).toBe('2026-10-10');
+    expect(describeSupportPeriod('2026-10-01', '2026-10-01', '2026-10-01')).toBe('Solo hoy');
+    expect(describeSupportPeriod('2026-10-02', '2026-10-02', '2026-10-01')).toBe('Solo mañana');
+    expect(describeSupportPeriod('2026-10-01', '2026-10-03', '2026-10-01')).toMatch(
+      /^Desde hoy hasta el sábado, 3 .* · 3 días$/,
+    );
   });
 
   it('toma el mensaje del backend, o el de respaldo', () => {

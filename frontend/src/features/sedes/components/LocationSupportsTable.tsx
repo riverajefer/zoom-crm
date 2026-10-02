@@ -17,7 +17,14 @@ import {
 } from '@mui/material';
 import { SedeDot } from '../../../components/layout/LocationSelector';
 import type { LocationSupport } from '../../../types';
-import { formatSupportRange, personName, supportKindLabel, supportStatus } from '../utils/locationSupport';
+import {
+  formatSupportMoment,
+  formatSupportRange,
+  personName,
+  supportKindLabel,
+  supportMoments,
+  supportStatus,
+} from '../utils/locationSupport';
 
 export interface LocationSupportAction {
   label: string;
@@ -62,9 +69,21 @@ const Reason: React.FC<{ row: LocationSupport }> = ({ row }) => (
     )}
     {row.endReason && (
       <Typography variant="caption" color="text.secondary" display="block">
-        Terminado por {personName(row.endedBy)}: {row.endReason}
+        Terminado {row.endedAt && `el ${formatSupportMoment(row.endedAt)} `}por {personName(row.endedBy)}:{' '}
+        {row.endReason}
       </Typography>
     )}
+  </>
+);
+
+/** Fecha y hora de la solicitud y de la respuesta, y quién respondió. */
+const Moments: React.FC<{ row: LocationSupport }> = ({ row }) => (
+  <>
+    {supportMoments(row).map((line) => (
+      <Typography key={line} variant="caption" color="text.secondary" display="block">
+        {line}
+      </Typography>
+    ))}
   </>
 );
 
@@ -74,11 +93,7 @@ const Requested: React.FC<{ row: LocationSupport; withLabel?: boolean }> = ({ ro
       {withLabel ? 'Pedido por ' : ''}
       {personName(row.requestedBy)}
     </Typography>
-    {row.reviewedBy && row.reviewedBy.id !== row.requestedBy.id && (
-      <Typography variant="caption" color="text.secondary">
-        {row.status === 'REJECTED' ? 'rechazó' : 'autorizó'} {personName(row.reviewedBy)}
-      </Typography>
-    )}
+    <Moments row={row} />
   </>
 );
 
@@ -201,11 +216,7 @@ export const LocationSupportsTable: React.FC<Props> = ({ rows, actions, showEmpl
                     </>
                   )}
                   {!showEmployee && <Typography variant="body2">{personName(row.requestedBy)}</Typography>}
-                  {row.reviewedBy && row.reviewedBy.id !== row.requestedBy.id && (
-                    <Typography variant="caption" color="text.secondary" display="block">
-                      {row.status === 'REJECTED' ? 'rechazó' : 'autorizó'} {personName(row.reviewedBy)}
-                    </Typography>
-                  )}
+                  <Moments row={row} />
                 </TableCell>
                 <TableCell>
                   <Sede row={row} />

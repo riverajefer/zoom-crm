@@ -18,7 +18,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useSnackbar } from 'notistack';
 import { SedeDot } from '../../../components/layout/LocationSelector';
-import { SupportDateField } from './SupportDateField';
+import { SupportPeriodField } from './SupportPeriodField';
 import { useUsers } from '../../users/hooks/useUsers';
 import type { User } from '../../../types';
 import { useActiveSedes } from '../hooks/useSedes';
@@ -61,11 +61,11 @@ export const ScheduleLocationSupportDialog: React.FC<Props> = ({ open, onClose }
     [usersQuery.data],
   );
 
-  const { control, handleSubmit, reset, formState } = useForm<FormData>({
+  const { control, handleSubmit, reset, setValue, formState } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: { userId: '', locationId: '', startDate: today, endDate: today, reason: '' },
   });
-  const [userId, startDate] = useWatch({ control, name: ['userId', 'startDate'] });
+  const [userId, startDate, endDate] = useWatch({ control, name: ['userId', 'startDate', 'endDate'] });
   const employee = employees.find((u) => u.id === userId);
   const homeIds = employee?.locations?.map((l) => l.location.id) ?? [];
   // En su sede predeterminada no se programa un apoyo.
@@ -160,36 +160,15 @@ export const ScheduleLocationSupportDialog: React.FC<Props> = ({ open, onClose }
                 </TextField>
               )}
             />
-            <Stack direction="row" spacing={2}>
-              <Controller
-                name="startDate"
-                control={control}
-                render={({ field, fieldState }) => (
-                  <SupportDateField
-                    label="Desde"
-                    value={field.value}
-                    onChange={field.onChange}
-                    minDate={today}
-                    error={!!fieldState.error}
-                    helperText={fieldState.error?.message}
-                  />
-                )}
-              />
-              <Controller
-                name="endDate"
-                control={control}
-                render={({ field, fieldState }) => (
-                  <SupportDateField
-                    label="Hasta"
-                    value={field.value}
-                    onChange={field.onChange}
-                    minDate={startDate}
-                    error={!!fieldState.error}
-                    helperText={fieldState.error?.message}
-                  />
-                )}
-              />
-            </Stack>
+            <SupportPeriodField
+              startDate={startDate}
+              endDate={endDate}
+              onStartChange={(day) => setValue('startDate', day, { shouldValidate: formState.isSubmitted })}
+              onEndChange={(day) => setValue('endDate', day, { shouldValidate: formState.isSubmitted })}
+              nowHint="Empieza apenas lo programes: el empleado cambia de sede ya."
+              startError={formState.errors.startDate?.message}
+              endError={formState.errors.endDate?.message}
+            />
             <Controller
               name="reason"
               control={control}

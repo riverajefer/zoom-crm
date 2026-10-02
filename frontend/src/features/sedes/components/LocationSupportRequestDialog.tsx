@@ -20,7 +20,7 @@ import { useLocationStore } from '../../../store/locationStore';
 import { useAuthStore } from '../../../store/authStore';
 import { PERMISSIONS } from '../../../utils/constants';
 import { SedeDot } from '../../../components/layout/LocationSelector';
-import { SupportDateField } from './SupportDateField';
+import { SupportPeriodField } from './SupportPeriodField';
 import { useActiveSedes } from '../hooks/useSedes';
 import { useLocationSupportMutations } from '../hooks/useLocationSupports';
 import { apiErrorMessage, bogotaToday, formatSupportDay } from '../utils/locationSupport';
@@ -28,8 +28,8 @@ import { apiErrorMessage, bogotaToday, formatSupportDay } from '../utils/locatio
 const schema = z
   .object({
     locationId: z.string().min(1, 'Elige la sede'),
-    startDate: z.string(),
-    endDate: z.string(),
+    startDate: z.string().min(1, 'Elige el primer día'),
+    endDate: z.string().min(1, 'Elige el último día'),
     reason: z.string().trim().min(3, 'Cuéntale a Gerencia por qué'),
   })
   .refine((v) => !v.startDate || !v.endDate || v.endDate >= v.startDate, {
@@ -62,11 +62,11 @@ export const LocationSupportRequestDialog: React.FC<Props> = ({ open, onClose })
     ? sedes.filter((s) => s.id !== activeSupport.locationId)
     : sedes.filter((s) => !locations.some((l) => l.id === s.id));
 
-  const { control, handleSubmit, reset, formState } = useForm<FormData>({
+  const { control, handleSubmit, reset, setValue, formState } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: { locationId: '', startDate: today, endDate: activeSupport?.endDate ?? today, reason: '' },
   });
-  const [locationId, startDate] = useWatch({ control, name: ['locationId', 'startDate'] });
+  const [locationId, startDate, endDate] = useWatch({ control, name: ['locationId', 'startDate', 'endDate'] });
   const isReturn = !!activeSupport && homeIds.includes(locationId);
 
   // El valor elegido en una línea: punto de color y nombre.
@@ -137,39 +137,22 @@ export const LocationSupportRequestDialog: React.FC<Props> = ({ open, onClose })
             {isReturn ? (
               <Alert severity="info">Vuelves a tu sede en cuanto Gerencia lo apruebe.</Alert>
             ) : (
-              <Stack direction="row" spacing={2}>
-                {!activeSupport && (
-                  <Controller
-                    name="startDate"
-                    control={control}
-                    render={({ field }) => (
-                      <SupportDateField
-                        label="Desde"
-                        value={field.value}
-                        onChange={field.onChange}
-                        minDate={today}
-                      />
-                    )}
-                  />
-                )}
-                <Controller
-                  name="endDate"
-                  control={control}
-                  render={({ field, fieldState }) => (
-                    <SupportDateField
-                      label="Hasta"
-                      value={field.value}
-                      onChange={field.onChange}
-                      minDate={activeSupport ? today : startDate}
-                      error={!!fieldState.error}
-                      helperText={
-                        fieldState.error?.message ??
-                        (activeSupport ? `Tu apoyo actual va hasta el ${formatSupportDay(activeSupport.endDate)}` : undefined)
-                      }
-                    />
-                  )}
-                />
-              </Stack>
+              <SupportPeriodField
+                startDate={startDate}
+                endDate={endDate}
+                onStartChange={(day) => setValue('startDate', day, { shouldValidate: formState.isSubmitted })}
+                onEndChange={(day) => setValue('endDate', day, { shouldValidate: formState.isSubmitted })}
+                showStart={!activeSupport}
+                extraEnd={
+                  activeSupport && {
+                    label: `Lo que queda de mi apoyo (${formatSupportDay(activeSupport.endDate)})`,
+                    value: activeSupport.endDate,
+                  }
+                }
+                nowHint="Empiezas en cuanto Gerencia lo apruebe."
+                startError={formState.errors.startDate?.message}
+                endError={formState.errors.endDate?.message}
+              />
             )}
 
             <Controller

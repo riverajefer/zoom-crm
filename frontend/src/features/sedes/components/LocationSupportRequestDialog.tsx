@@ -106,7 +106,7 @@ export const LocationSupportRequestDialog: React.FC<Props> = ({ open, onClose })
   return (
     <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
       <form onSubmit={handleSubmit(onSubmit)} noValidate>
-        <DialogTitle>{activeSupport ? 'Pedir cambio de sede' : 'Pedir apoyo en otra sede'}</DialogTitle>
+        <DialogTitle>{activeSupport ? 'Pedir cambio de sede' : 'Apoyar en otra sede'}</DialogTitle>
         <DialogContent>
           <Stack spacing={2.5} sx={{ mt: 1 }}>
             <Controller

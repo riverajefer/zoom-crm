@@ -47,7 +47,7 @@ describe('LocationSelector', () => {
     fireEvent.click(screen.getByRole('button', { name: /Sede activa: Local 125/ }));
     expect(screen.getAllByRole('menuitem').map((i) => i.textContent)).toEqual([
       'Local 125',
-      'Pedir apoyo en otra sede',
+      'Apoyar en otra sede',
       'Mis solicitudes de sede',
     ]);
   });
@@ -86,7 +86,7 @@ describe('LocationSelector', () => {
     renderSelector();
 
     fireEvent.click(screen.getByRole('button', { name: /Sede activa/ }));
-    expect(screen.queryByText('Pedir apoyo en otra sede')).not.toBeInTheDocument();
+    expect(screen.queryByText('Apoyar en otra sede')).not.toBeInTheDocument();
   });
 
   it('con varias sedes permite cambiar y "Todas" solo con view_all_locations', () => {

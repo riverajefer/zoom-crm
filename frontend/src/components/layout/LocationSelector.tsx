@@ -160,7 +160,7 @@ export const LocationSelector: React.FC = () => {
             <ListItemIcon>
               {activeSupport ? <SwapHorizIcon fontSize="small" /> : <AddLocationAltOutlinedIcon fontSize="small" />}
             </ListItemIcon>
-            <ListItemText primary={activeSupport ? 'Pedir cambio de sede' : 'Pedir apoyo en otra sede'} />
+            <ListItemText primary={activeSupport ? 'Pedir cambio de sede' : 'Apoyar en otra sede'} />
           </MenuItem>,
           <MenuItem
             key="mine"

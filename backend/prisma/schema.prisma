@@ -855,6 +855,10 @@ model OrderItem {
   quantity    Decimal // Cantidad
   unitPrice   Decimal @map("unit_price") // Precio unitario
   total       Decimal // quantity * unitPrice
+  // Cantidad anulada por anulaciones parciales ya aplicadas. El ítem no se borra
+  // ni cambia de valor: la venta que deja de existir vive en
+  // `Order.reversedAmount`, y esto solo dice de qué ítem salió.
+  annulledQuantity Decimal @default(0) @map("annulled_quantity")
 
   // Especificaciones técnicas (JSON flexible)
   specifications Json? // { color: "rojo", material: "acero", dimensiones: "10x20" }
@@ -869,6 +873,7 @@ model OrderItem {
   product         Product?                  @relation(fields: [productId], references: [id])
   productionAreas OrderItemProductionArea[]
   workOrderItems  WorkOrderItem[]
+  refundRequestItems RefundRequestItem[]
 
   @@index([orderId])
   @@index([productId])
@@ -2623,6 +2628,10 @@ model RefundRequest {
   // igual a `refundAmount`: una OP de $500.000 con $200.000 abonados que se cae
   // entera anula $500.000 de venta y devuelve $200.000 de dinero.
   reversedAmount         Decimal           @default(0) @map("reversed_amount")
+  // Anulación parcial por ítems: de lo que valían los ítems anulados, lo que la
+  // empresa se queda (muestras, material ya gastado). Ya viene descontado de
+  // `reversedAmount`; se guarda aparte para poder explicar la cuenta después.
+  retainedAmount         Decimal           @default(0) @map("retained_amount")
   refundReason           RefundReason      @default(CREDIT_BALANCE) @map("refund_reason")
   paymentMethod          PaymentMethod     @map("payment_method")
   bankEntity             String?           @map("bank_entity") // Entidad bancaria de origen (solo transferencias)
@@ -2663,6 +2672,8 @@ model RefundRequest {
   reviewedBy   User?         @relation("ReviewedRefundRequests", fields: [reviewedById], references: [id])
   executedBy   User?         @relation("ExecutedRefundRequests", fields: [executedById], references: [id])
   cashMovement CashMovement? @relation(fields: [cashMovementId], references: [id])
+  // Ítems que esta solicitud anula. Vacío en las devoluciones por monto.
+  items        RefundRequestItem[]
 
   @@index([orderId])
   @@index([requestedById])
@@ -2672,6 +2683,29 @@ model RefundRequest {
   @@index([receiptFileId])
   @@index([executionReceiptFileId])
   @@map("refund_requests")
+}
+
+// Ítem de la OP que una solicitud anula, total o parcialmente.
+//
+// Guarda descripción y precio como estaban al pedirla: el ítem de la OP se puede
+// editar o borrar después, y el historial tiene que seguir diciendo qué se anuló.
+model RefundRequestItem {
+  id              String  @id @default(uuid())
+  refundRequestId String  @map("refund_request_id")
+  orderItemId     String? @map("order_item_id")
+  description     String
+  quantity        Decimal // Cantidad que se anula
+  unitPrice       Decimal @map("unit_price")
+  amount          Decimal // quantity * unitPrice, sin IVA ni descuentos
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  refundRequest RefundRequest @relation(fields: [refundRequestId], references: [id], onDelete: Cascade)
+  orderItem     OrderItem?    @relation(fields: [orderItemId], references: [id], onDelete: SetNull)
+
+  @@index([refundRequestId])
+  @@index([orderItemId])
+  @@map("refund_request_items")
 }
 
 // =============================================================================

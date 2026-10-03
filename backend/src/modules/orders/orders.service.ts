@@ -135,6 +135,12 @@ export interface AuthorizationHistoryEvent {
    */
   reversedAmount?: string | null;
   /**
+   * Anulación por ítems (solo `REFUND`): qué ítems se cayeron y cuánto retuvo
+   * la empresa de lo que valían. Vacío y null en las devoluciones por monto.
+   */
+  annulledItems?: { description: string; quantity: string; amount: string }[];
+  retainedAmount?: string | null;
+  /**
    * Tercer hito de una devolución (solo `REFUND`): gerencia autoriza y Caja
    * paga, así que "aprobada" no significa que el dinero ya salió. Null mientras
    * siga pendiente de pago.
@@ -1399,6 +1405,25 @@ export class OrdersService {
           const idsToDelete = [...currentIds].filter(
             (dbId) => !keepIds.has(dbId),
           );
+          // Un ítem con anulación aplicada respalda venta ya anulada en
+          // `reversedAmount`. Borrarlo, o dejarlo con menos cantidad de la que
+          // se anuló, dejaría esa anulación sin ítem que la explique.
+          for (const current of currentItems) {
+            const annulled = new Prisma.Decimal(current.annulledQuantity ?? 0);
+            if (annulled.lessThanOrEqualTo(0)) continue;
+            const incoming = itemsToUpdate.find((i) => i.id === current.id);
+            if (!incoming) {
+              throw new BadRequestException(
+                `No puedes quitar «${current.description.trim()}»: tiene una anulación aplicada y debe quedar en la orden como rastro`,
+              );
+            }
+            if (new Prisma.Decimal(incoming.quantity).lessThan(annulled)) {
+              throw new BadRequestException(
+                `«${current.description.trim()}» ya tiene ${annulled.toString()} unidades anuladas: la cantidad no puede ser menor`,
+              );
+            }
+          }
+
           if (idsToDelete.length > 0) {
             // El borrado se propaga a la OT (FK en CASCADE). Hay que leer qué se
             // lleva por delante mientras todavía existe; el rastro en auditoría
@@ -3357,6 +3382,9 @@ export class OrdersService {
             requestedBy: { select: USER_SELECT },
             reviewedBy: { select: USER_SELECT },
             executedBy: { select: USER_SELECT },
+            items: {
+              select: { description: true, quantity: true, amount: true },
+            },
           },
         }),
         this.prisma.orderStatusChangeRequest.findMany({
@@ -3491,6 +3519,14 @@ export class OrdersService {
         reversedAmount: r.reversedAmount?.greaterThan(0)
           ? r.reversedAmount.toString()
           : null,
+        retainedAmount: r.retainedAmount?.greaterThan(0)
+          ? r.retainedAmount.toString()
+          : null,
+        annulledItems: (r.items ?? []).map((item) => ({
+          description: item.description,
+          quantity: item.quantity.toString(),
+          amount: item.amount.toString(),
+        })),
         advisor: null,
         createdAt: r.createdAt,
         reviewedAt: r.reviewedAt,

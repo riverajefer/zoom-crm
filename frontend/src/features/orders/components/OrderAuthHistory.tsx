@@ -175,6 +175,10 @@ const refundStatusChip = (
   event: OrderAuthHistoryEvent,
 ): { label: string; color: 'warning' | 'success' | 'error' | 'default' } | null => {
   if (event.type !== 'REFUND' || event.status !== 'APPROVED') return null;
+  // Anulación de ítems sin devolución: no hubo nada que pagar.
+  if (event.executedAt && !(parseFloat(event.amount ?? '0') > 0)) {
+    return { label: 'Aplicada', color: 'success' };
+  }
   return event.executedAt
     ? { label: 'Pagada', color: 'success' }
     : { label: 'Autorizada · falta pago', color: 'warning' };
@@ -330,8 +334,13 @@ export const OrderAuthHistory: React.FC<OrderAuthHistoryProps> = ({
             const isLast = index === events.length - 1;
 
             // Título principal del evento — el monto se resalta en negrita + color
+            const isItemAnnulment =
+              event.type === 'REFUND' && !!event.annulledItems?.length;
+            const hasMoney = parseFloat(event.amount ?? '0') > 0;
             const showAmount =
               event.amount != null &&
+              // Una anulación de ítems puede no devolver nada: "de $0" confunde.
+              (!isItemAnnulment || hasMoney) &&
               (event.type === 'ADVANCE_PAYMENT' ||
                 event.type === 'PAYMENT_EDIT' ||
                 event.type === 'PAYMENT_VOID' ||
@@ -339,11 +348,17 @@ export const OrderAuthHistory: React.FC<OrderAuthHistoryProps> = ({
                 event.type === 'REFUND');
             // Caja anulando con la caja abierta, o quien podía aprobar haciéndolo
             // directamente, no "solicitó" nada: lo hizo.
-            const verbText = event.direct
-              ? directVerb(event)
-              : event.type === 'STATUS_CHANGE'
-                ? statusRequestVerb(event)
-                : typeCfg.verb;
+            const verbText = isItemAnnulment
+              ? `Solicitó anular ítems (${event
+                  .annulledItems!.map(
+                    (i) => `${Number(i.quantity)} × ${i.description.trim()}`,
+                  )
+                  .join(', ')})${hasMoney ? ' con devolución' : ''}`
+              : event.direct
+                ? directVerb(event)
+                : event.type === 'STATUS_CHANGE'
+                  ? statusRequestVerb(event)
+                  : typeCfg.verb;
             const titleNode = (
               <>
                 {verbText}
@@ -387,6 +402,9 @@ export const OrderAuthHistory: React.FC<OrderAuthHistoryProps> = ({
                     {' de la venta'}
                   </>
                 )}
+                {event.type === 'REFUND' &&
+                  event.retainedAmount &&
+                  ` (la empresa retiene ${formatCurrency(event.retainedAmount)})`}
                 {'.'}
               </>
             );
@@ -428,7 +446,9 @@ export const OrderAuthHistory: React.FC<OrderAuthHistoryProps> = ({
             // esta línea el timeline no dice si el dinero ya salió de la caja.
             let executionLine: string | null = null;
             if (event.type === 'REFUND' && event.status === 'APPROVED') {
-              executionLine = event.executedAt
+              executionLine = event.executedAt && !hasMoney
+                ? 'Aplicada al autorizar — no hubo devolución de dinero.'
+                : event.executedAt
                 ? `Pagada en caja por: ${userName(event.executedBy)} · ${formatDateTime(event.executedAt)}`
                 : 'Pendiente de pago en Caja — el dinero aún no ha salido.';
             }

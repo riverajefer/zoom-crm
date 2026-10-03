@@ -212,6 +212,18 @@ const PendingRefundRequestsPanel: React.FC<{ hideWhenEmpty?: boolean }> = ({ hid
                         </Typography>
                       </Box>
 
+                      {/* Ítems anulados */}
+                      {!!req.items?.length && (
+                        <Typography variant="caption" color="error.main" sx={{ mt: 0.5, display: 'block' }}>
+                          Anula:{' '}
+                          {req.items
+                            .map((i) => `${Number(i.quantity)} × ${i.description.trim()}`)
+                            .join(', ')}
+                          {Number(req.retainedAmount ?? 0) > 0 &&
+                            ` · retiene ${formatCurrency(req.retainedAmount ?? 0)}`}
+                        </Typography>
+                      )}
+
                       {/* Observation */}
                       {req.observation && (
                         <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
@@ -284,6 +296,25 @@ const PendingRefundRequestsPanel: React.FC<{ hideWhenEmpty?: boolean }> = ({ hid
               <Typography variant="body2">
                 <strong>Motivo:</strong> {reviewTarget.request.observation}
               </Typography>
+              {!!reviewTarget.request.items?.length && (
+                <Typography variant="body2" sx={{ mt: 1 }}>
+                  <strong>Ítems que se anulan:</strong>{' '}
+                  {reviewTarget.request.items
+                    .map((i) => `${Number(i.quantity)} × ${i.description.trim()} (${formatCurrency(i.amount)})`)
+                    .join(', ')}
+                  {Number(reviewTarget.request.retainedAmount ?? 0) > 0 &&
+                    `. La empresa retiene ${formatCurrency(reviewTarget.request.retainedAmount ?? 0)}`}
+                  .
+                </Typography>
+              )}
+              {reviewTarget.action === 'approve' &&
+                !!reviewTarget.request.items?.length &&
+                Number(reviewTarget.request.refundAmount) === 0 && (
+                  <Typography variant="body2" color="warning.main" sx={{ mt: 1 }}>
+                    No hay dinero que devolver: al autorizar, la anulación se
+                    aplica de inmediato y baja el saldo de la orden.
+                  </Typography>
+                )}
               {Number(reviewTarget.request.reversedAmount ?? 0) > 0 && (
                 <Typography variant="body2" color="error.main" sx={{ mt: 1 }}>
                   <strong>Anula venta:</strong>{' '}
@@ -292,7 +323,8 @@ const PendingRefundRequestsPanel: React.FC<{ hideWhenEmpty?: boolean }> = ({ hid
                   facturarse.
                 </Typography>
               )}
-              {reviewTarget.action === 'approve' && (
+              {reviewTarget.action === 'approve' &&
+                Number(reviewTarget.request.refundAmount) > 0 && (
                 <Typography variant="body2" color="warning.main" sx={{ mt: 1 }}>
                   Autorizar no mueve dinero: la devolución queda pendiente de
                   pago y Caja la registra desde su panel.

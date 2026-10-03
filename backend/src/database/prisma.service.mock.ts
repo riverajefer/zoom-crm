@@ -410,6 +410,10 @@ export const createMockPrismaService = () => ({
     update: jest.fn(),
     delete: jest.fn(),
   },
+  refundRequestItem: {
+    // La mayoría de devoluciones no anulan ítems: vacío por defecto.
+    findMany: jest.fn().mockResolvedValue([]),
+  },
   refundRequest: {
     findUnique: jest.fn(),
     findFirst: jest.fn(),

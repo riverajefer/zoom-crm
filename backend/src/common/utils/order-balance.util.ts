@@ -133,6 +133,32 @@ export function computeMaxRetainableOnAnnul(
 }
 
 /**
+ * Lo que valen unos ítems dentro del total de la orden.
+ *
+ * Los ítems se valoran a `cantidad * precio`, sin IVA ni descuentos, y lo que se
+ * anula de la venta está en pesos del total. El prorrateo lleva una cifra a la
+ * otra: si los ítems son la mitad del subtotal, valen la mitad del total. Así,
+ * anular todos los ítems anula exactamente el total, con su redondeo comercial.
+ *
+ * Un subtotal en cero no tiene nada que prorratear.
+ *
+ * El frontend repite esta fórmula en `features/orders/utils/partialAnnulment.ts`:
+ * si cambias una, cambia la otra.
+ */
+export function computeItemsSaleValue(
+  itemsAmount: DecimalLike,
+  total: DecimalLike,
+  subtotal: DecimalLike,
+): Prisma.Decimal {
+  const subtotalDecimal = toDecimal(subtotal);
+  if (subtotalDecimal.isZero()) return new Prisma.Decimal(0);
+  return toDecimal(itemsAmount)
+    .mul(toDecimal(total))
+    .div(subtotalDecimal)
+    .toDecimalPlaces(0, Prisma.Decimal.ROUND_HALF_UP);
+}
+
+/**
  * Porción de venta anulada llevada a la base comisionable (`subtotal - descuento`).
  *
  * `reversedAmount` está en pesos con IVA y con el redondeo comercial del total,

@@ -12,6 +12,7 @@ export { OrderChangeHistoryTab } from './OrderChangeHistoryTab';
 export { OrderPdfButton } from './OrderPdfButton';
 export { ApplyDiscountDialog } from './ApplyDiscountDialog';
 export { RefundRequestDialog } from './RefundRequestDialog';
+export { PartialAnnulmentDialog } from './PartialAnnulmentDialog';
 export { DiscountsSection } from './DiscountsSection';
 export { ToolbarButton } from './ToolbarButton';
 export { SalesGoalsSection } from './SalesGoalsSection';

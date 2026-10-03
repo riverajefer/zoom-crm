@@ -57,6 +57,12 @@ export interface OrderAuthHistoryEvent {
    */
   reversedAmount?: string | null;
   /**
+   * Anulación por ítems (solo `REFUND`): qué se cayó y cuánto retuvo la empresa.
+   * Vacío y null en las devoluciones por monto.
+   */
+  annulledItems?: { description: string; quantity: string; amount: string }[];
+  retainedAmount?: string | null;
+  /**
    * Tercer hito de una devolución (solo `REFUND`): gerencia autoriza y Caja
    * paga. "Autorizada" no significa que el dinero ya salió; null mientras siga
    * pendiente de pago.

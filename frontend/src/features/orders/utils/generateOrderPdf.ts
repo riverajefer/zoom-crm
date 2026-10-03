@@ -367,10 +367,20 @@ async function drawItemsTable(doc: jsPDF, y: number, order: Order): Promise<numb
   for (let idx = 0; idx < order.items.length; idx++) {
     const item = order.items[idx];
 
+    // Un ítem anulado sigue en el documento, marcado: quitarlo dejaría un total
+    // que no cuadra con lo que se ve, y el cliente ya tiene la versión anterior.
+    const annulledQuantity = parseFloat(item.annulledQuantity ?? '0') || 0;
+    const description =
+      annulledQuantity <= 0
+        ? item.description
+        : annulledQuantity >= Number(item.quantity)
+          ? `[ANULADO] ${item.description}`
+          : `[ANULADO: ${annulledQuantity} de ${item.quantity}] ${item.description}`;
+
     // Calculate required row height based on description wrapping
     const descColIndex = hasImages ? 3 : 2;
     const prodColIndex = hasImages ? 2 : 1;
-    const descLines = calcLineCount(doc, item.description, colWidths[descColIndex] - 4);
+    const descLines = calcLineCount(doc, description, colWidths[descColIndex] - 4);
     const prodLines = calcLineCount(doc, item.product?.name || 'N/A', colWidths[prodColIndex] - 4);
     const maxTextLines = Math.max(descLines, prodLines);
     
@@ -404,14 +414,14 @@ async function drawItemsTable(doc: jsPDF, y: number, order: Order): Promise<numb
           '', // Image placeholder
           String(item.quantity),
           item.product?.name || 'N/A',
-          item.description,
+          description,
           formatCurrency(item.unitPrice),
           formatCurrency(item.total),
         ]
       : [
           String(item.quantity),
           item.product?.name || 'N/A',
-          item.description,
+          description,
           formatCurrency(item.unitPrice),
           formatCurrency(item.total),
         ];
@@ -564,6 +574,19 @@ function drawFinancials(doc: jsPDF, y: number, order: Order): number {
   doc.text('Total:', labelX, y);
   doc.text(formatCurrency(order.total), valueRight, y, { align: 'right' });
   y += lineH + 1;
+
+  // Venta anulada — solo si hubo anulación. Sin esta línea, Total − Abono no da
+  // el Saldo que se imprime abajo.
+  const reversedAmount = parseFloat(order.reversedAmount ?? '0') || 0;
+  if (reversedAmount > 0) {
+    doc.setFontSize(PDF_FONTS.totalLabel);
+    doc.setFont('helvetica', 'normal');
+    setTextColor(doc, [220, 53, 69]);
+    doc.text('Venta anulada:', labelX, y);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`-${formatCurrency(reversedAmount)}`, valueRight, y, { align: 'right' });
+    y += lineH;
+  }
 
   // Abono
   doc.setFontSize(PDF_FONTS.totalLabel);

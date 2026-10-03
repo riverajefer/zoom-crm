@@ -1,4 +1,6 @@
 import {
+  ArrayMinSize,
+  IsArray,
   IsEnum,
   IsNotEmpty,
   IsNumber,
@@ -7,9 +9,25 @@ import {
   IsUUID,
   MinLength,
   Min,
+  ValidateNested,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { PaymentMethod, RefundReason } from '../../../generated/prisma';
+
+export class RefundRequestItemDto {
+  @ApiProperty({ description: 'ID del ítem de la orden que se anula' })
+  @IsUUID()
+  orderItemId: string;
+
+  @ApiProperty({
+    description: 'Cantidad que se anula (hasta lo que le queda vivo al ítem)',
+    example: 150,
+  })
+  @IsNumber()
+  @Min(0.0001)
+  quantity: number;
+}
 
 export class CreateRefundRequestDto {
   @ApiProperty({ description: 'ID de la orden' })
@@ -21,8 +39,34 @@ export class CreateRefundRequestDto {
     example: 50000,
   })
   @IsNumber()
-  @Min(0.01)
+  @Min(0)
   refundAmount: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Ítems de la orden que se anulan. Con ítems, el valor de venta anulado ' +
+      'lo calcula el servidor (`reversedAmount` se ignora) y `refundAmount` ' +
+      'puede ser 0: la anulación solo baja el saldo de la orden.',
+    type: () => [RefundRequestItemDto],
+  })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => RefundRequestItemDto)
+  @IsOptional()
+  items?: RefundRequestItemDto[];
+
+  @ApiPropertyOptional({
+    description:
+      'De lo que valían los ítems anulados, lo que retiene la empresa (COP). ' +
+      'Solo aplica cuando vienen ítems.',
+    example: 100000,
+    default: 0,
+  })
+  @IsNumber()
+  @Min(0)
+  @IsOptional()
+  retainedAmount?: number;
 
   @ApiPropertyOptional({
     description:
@@ -46,12 +90,15 @@ export class CreateRefundRequestDto {
   @IsOptional()
   refundReason?: RefundReason;
 
-  @ApiProperty({
-    description: 'Método de pago por el que saldrá el dinero de caja',
+  @ApiPropertyOptional({
+    description:
+      'Método de pago por el que saldrá el dinero de caja. Obligatorio cuando ' +
+      '`refundAmount` es mayor que cero.',
     enum: PaymentMethod,
   })
   @IsEnum(PaymentMethod)
-  paymentMethod: PaymentMethod;
+  @IsOptional()
+  paymentMethod?: PaymentMethod;
 
   @ApiPropertyOptional({
     description: 'Entidad bancaria de origen (solo aplica a transferencias)',

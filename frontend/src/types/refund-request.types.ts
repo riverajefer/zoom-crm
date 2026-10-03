@@ -53,13 +53,29 @@ export interface RefundRequestCashMovement {
   createdAt?: string;
 }
 
+/** Ítem de la orden que una solicitud anula, total o parcialmente. */
+export interface RefundRequestItem {
+  id: string;
+  /** Null si el ítem se borró de la orden después de pedir la anulación. */
+  orderItemId: string | null;
+  description: string;
+  quantity: string;
+  unitPrice?: string;
+  /** quantity * unitPrice, sin IVA ni descuentos. */
+  amount: string;
+}
+
 export interface RefundRequest {
   id: string;
   orderId: string;
-  /** Dinero que sale de la caja hacia el cliente. */
+  /** Dinero que sale de la caja hacia el cliente. '0' si solo se anulan ítems. */
   refundAmount: string;
   /** Valor de la venta que se anula. '0' en una devolución de saldo a favor. */
   reversedAmount: string;
+  /** De lo que valían los ítems anulados, lo que retiene la empresa. */
+  retainedAmount?: string;
+  /** Ítems anulados. Vacío en las devoluciones por monto. */
+  items?: RefundRequestItem[];
   refundReason: RefundReason;
   paymentMethod: RefundPaymentMethod;
   bankEntity?: string | null;
@@ -98,8 +114,14 @@ export interface CreateRefundRequestDto {
   orderId: string;
   refundAmount: number;
   reversedAmount?: number;
+  /**
+   * Anulación por ítems. Con ítems el servidor calcula la venta anulada y
+   * `refundAmount` puede ser 0 (sin `paymentMethod`).
+   */
+  items?: { orderItemId: string; quantity: number }[];
+  retainedAmount?: number;
   refundReason?: RefundReason;
-  paymentMethod: RefundPaymentMethod;
+  paymentMethod?: RefundPaymentMethod;
   bankEntity?: string | null;
   receiptFileId?: string;
   observation: string;

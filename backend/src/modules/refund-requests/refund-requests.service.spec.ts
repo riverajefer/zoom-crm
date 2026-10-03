@@ -281,6 +281,200 @@ describe('RefundRequestsService', () => {
       expect(result.id).toBe('req-1');
     });
 
+    // Caso real: OP-2026-3431. Marca en rígido por $750.000 que se cayó y un
+    // DTF UV de $70.000 que sí se entregó; el cliente había abonado $410.000 y
+    // la empresa retuvo parte por las muestras.
+    describe('anulación por ítems', () => {
+      const op3431 = (overrides: Record<string, unknown> = {}) => ({
+        id: orderId,
+        orderNumber: 'OP-2026-3431',
+        status: 'READY',
+        subtotal: '820000',
+        discountAmount: '0',
+        total: '820000',
+        paidAmount: '410000',
+        appliedCreditAmount: '0',
+        refundedAmount: '0',
+        reversedAmount: '0',
+        balance: '410000',
+        payrollDeduction: null,
+        ...overrides,
+      });
+      const rigido = (overrides: Record<string, unknown> = {}) => ({
+        id: 'item-rigido',
+        description: 'MARCA RIGIDO COLOR Y BLANCO ',
+        quantity: '150',
+        unitPrice: '5000',
+        annulledQuantity: '0',
+        ...overrides,
+      });
+      const dto = (overrides: Record<string, unknown> = {}) => ({
+        orderId,
+        items: [{ orderItemId: 'item-rigido', quantity: 150 }],
+        retainedAmount: 100000,
+        refundAmount: 240000,
+        paymentMethod: 'TRANSFER' as const,
+        refundReason: 'CLIENT_WITHDRAWAL' as const,
+        observation: 'Se cayó la marca en rígido; se retienen las muestras',
+        ...overrides,
+      });
+
+      beforeEach(() => {
+        prisma.order.findUnique.mockResolvedValue(op3431());
+        prisma.refundRequest.findFirst.mockResolvedValue(null);
+        prisma.orderItem.findMany.mockResolvedValue([rigido()]);
+        prisma.refundRequest.create.mockResolvedValue({
+          id: 'req-1',
+          orderId,
+          status: EditRequestStatus.PENDING,
+        });
+      });
+
+      const createdData = () => prisma.refundRequest.create.mock.calls[0][0].data;
+
+      it('la venta anulada es lo que valía el ítem menos lo que retiene la empresa', async () => {
+        await service.create(userId, dto());
+
+        const data = createdData();
+        expect(Number(data.reversedAmount.toString())).toBe(650000);
+        expect(Number(data.retainedAmount.toString())).toBe(100000);
+        expect(Number(data.refundAmount.toString())).toBe(240000);
+      });
+
+      it('guarda qué ítem se anuló, con su descripción y valor de ese momento', async () => {
+        await service.create(userId, dto());
+
+        const [line] = createdData().items.create;
+        expect(line.orderItemId).toBe('item-rigido');
+        expect(line.description).toBe('MARCA RIGIDO COLOR Y BLANCO ');
+        expect(Number(line.quantity.toString())).toBe(150);
+        expect(Number(line.amount.toString())).toBe(750000);
+      });
+
+      it('ignora un valor anulado suelto: manda la cuenta de los ítems', async () => {
+        await service.create(userId, dto({ reversedAmount: 1 }));
+
+        expect(Number(createdData().reversedAmount.toString())).toBe(650000);
+      });
+
+      it('no deja devolver más de lo que le sobra al cliente tras la anulación', async () => {
+        // Queda valiendo 170.000 (DTF + retención) y abonó 410.000: sobran 240.000.
+        await expect(
+          service.create(userId, dto({ refundAmount: 240001 })),
+        ).rejects.toThrow(BadRequestException);
+      });
+
+      it('admite anular sin devolver dinero cuando el cliente no ha abonado de más', async () => {
+        // Abonó 50.000: tras anular sigue debiendo, no sobra nada que devolver.
+        prisma.order.findUnique.mockResolvedValue(
+          op3431({ paidAmount: '50000', balance: '770000' }),
+        );
+
+        await service.create(
+          userId,
+          dto({ refundAmount: 0, paymentMethod: undefined }),
+        );
+
+        const data = createdData();
+        expect(Number(data.refundAmount.toString())).toBe(0);
+        expect(Number(data.reversedAmount.toString())).toBe(650000);
+      });
+
+      it('exige método de pago si sale dinero', async () => {
+        await expect(
+          service.create(userId, dto({ paymentMethod: undefined })),
+        ).rejects.toThrow('método de pago');
+      });
+
+      it('permite anular solo una parte de la cantidad', async () => {
+        await service.create(
+          userId,
+          dto({
+            items: [{ orderItemId: 'item-rigido', quantity: 50 }],
+            retainedAmount: 0,
+            refundAmount: 0,
+            paymentMethod: undefined,
+          }),
+        );
+
+        expect(Number(createdData().reversedAmount.toString())).toBe(250000);
+      });
+
+      it('no deja anular más cantidad de la que le queda viva al ítem', async () => {
+        prisma.orderItem.findMany.mockResolvedValue([
+          rigido({ annulledQuantity: '100' }),
+        ]);
+
+        await expect(service.create(userId, dto())).rejects.toThrow(
+          'solo le quedan 50',
+        );
+      });
+
+      it('rechaza un ítem que no es de la orden', async () => {
+        prisma.orderItem.findMany.mockResolvedValue([]);
+
+        await expect(service.create(userId, dto())).rejects.toThrow(
+          'no pertenece a esta orden',
+        );
+      });
+
+      it('retener todo lo que valía el ítem no es una anulación', async () => {
+        await expect(
+          service.create(userId, dto({ retainedAmount: 750000 })),
+        ).rejects.toThrow('debe ser menor');
+      });
+
+      it('prorratea el valor del ítem al total cuando la orden tiene IVA', async () => {
+        // Subtotal 820.000 + IVA 19 % = 975.800: el rígido vale 892.500 con IVA.
+        prisma.order.findUnique.mockResolvedValue(
+          op3431({ total: '975800', paidAmount: '975800', balance: '0' }),
+        );
+
+        await service.create(
+          userId,
+          dto({ retainedAmount: 0, refundAmount: 892500 }),
+        );
+
+        expect(Number(createdData().reversedAmount.toString())).toBe(892500);
+      });
+
+      it('una orden anulada no admite anular ítems', async () => {
+        prisma.order.findUnique.mockResolvedValue(
+          op3431({ status: 'ANULADO' }),
+        );
+
+        await expect(service.create(userId, dto())).rejects.toThrow(
+          BadRequestException,
+        );
+      });
+
+      it('el aviso a gerencia dice qué se anula, cuánto se retiene y cuánto sale', async () => {
+        await service.create(userId, dto());
+
+        const { title, message } =
+          notifications.notifyUsersWithPermission.mock.calls[0][1];
+        expect(title).toBe('Nueva solicitud de anulación de ítems');
+        expect(message).toContain('150 × MARCA RIGIDO COLOR Y BLANCO');
+        expect(message).toContain('retiene $100.000');
+        expect(message).toContain('Se devuelven $240.000 vía Transferencia');
+      });
+    });
+
+    it('una devolución por monto sigue exigiendo un monto mayor que cero', async () => {
+      prisma.order.findUnique.mockResolvedValue({
+        id: orderId,
+        orderNumber: 'OP-1',
+        total: '500',
+        paidAmount: '700',
+        balance: '-200',
+      });
+      prisma.refundRequest.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.create(userId, { ...baseDto, refundAmount: 0 }),
+      ).rejects.toThrow('mayor a 0');
+    });
+
     // El `findFirst` de arriba es un check-then-act: dos peticiones concurrentes
     // lo pasan las dos. Quien cierra la carrera es el índice parcial
     // `refund_requests_pending_unique`, y la petición perdedora llega acá con
@@ -531,6 +725,110 @@ describe('RefundRequestsService', () => {
         BadRequestException,
       );
     });
+
+    // Sin dinero de por medio no hay nada que Caja tenga que pagar: si la
+    // solicitud quedara "pendiente de pago", nadie la cerraría nunca.
+    describe('anulación de ítems sin devolución de dinero', () => {
+      const sinDinero = () =>
+        pendiente({
+          refundAmount: '0',
+          reversedAmount: '750000',
+          order: orden({
+            status: OrderStatus.READY,
+            subtotal: '820000',
+            total: '820000',
+            paidAmount: '50000',
+            balance: '770000',
+          }),
+        });
+
+      beforeEach(() => {
+        const request = sinDinero();
+        prisma.refundRequest.findFirst.mockResolvedValue(request);
+        prisma.user.findUnique.mockResolvedValue(revisorConPermiso());
+        prisma.order.findUnique.mockResolvedValue(request.order);
+        prisma.refundRequest.updateMany.mockResolvedValue({ count: 1 });
+        prisma.refundRequest.update.mockResolvedValue({
+          id: requestId,
+          status: EditRequestStatus.APPROVED,
+          orderId: 'o1',
+        });
+        prisma.refundRequestItem.findMany.mockResolvedValue([
+          {
+            orderItemId: 'item-rigido',
+            description: 'MARCA RIGIDO',
+            quantity: '150',
+            orderItem: { quantity: '150', annulledQuantity: '0' },
+          },
+        ]);
+      });
+
+      it('autorizarla la aplica de una vez: baja el saldo y marca el ítem', async () => {
+        await service.approve(requestId, reviewerId, {});
+
+        const { data } = prisma.order.update.mock.calls[0][0];
+        expect(Number(data.reversedAmount.toString())).toBe(750000);
+        expect(Number(data.paidAmount.toString())).toBe(50000);
+        expect(Number(data.balance.toString())).toBe(20000);
+        expect(prisma.orderItem.update).toHaveBeenCalledWith({
+          where: { id: 'item-rigido' },
+          data: { annulledQuantity: { increment: '150' } },
+        });
+      });
+
+      it('no toca la caja ni le avisa a Caja', async () => {
+        prisma.cashSession.findMany.mockResolvedValue([]);
+
+        await service.approve(requestId, reviewerId, {});
+
+        expect(prisma.cashMovement.create).not.toHaveBeenCalled();
+        expect(consecutives.generateNumber).not.toHaveBeenCalled();
+        expect(notifications.notifyUsersWithPermission).not.toHaveBeenCalledWith(
+          'execute_refunds',
+          expect.anything(),
+        );
+      });
+
+      it('queda ejecutada, para que no aparezca en la bandeja de pagos de Caja', async () => {
+        await service.approve(requestId, reviewerId, {});
+
+        expect(prisma.refundRequest.update).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({
+              executedAt: expect.any(Date),
+              executedById: reviewerId,
+            }),
+          }),
+        );
+      });
+
+      it('si otra aprobación ganó la carrera, no anula dos veces', async () => {
+        prisma.refundRequest.updateMany.mockResolvedValue({ count: 0 });
+
+        await expect(
+          service.approve(requestId, reviewerId, {}),
+        ).rejects.toThrow(NotFoundException);
+        expect(prisma.order.update).not.toHaveBeenCalled();
+      });
+    });
+
+    it('no autoriza si el ítem a anular ya no existe en la orden', async () => {
+      prisma.refundRequest.findFirst.mockResolvedValue(pendiente());
+      prisma.user.findUnique.mockResolvedValue(revisorConPermiso());
+      // La FK quedó en null: el ítem se borró en una edición de la OP.
+      prisma.refundRequestItem.findMany.mockResolvedValue([
+        {
+          orderItemId: null,
+          description: 'MARCA RIGIDO',
+          quantity: '150',
+          orderItem: null,
+        },
+      ]);
+
+      await expect(service.approve(requestId, reviewerId, {})).rejects.toThrow(
+        'ya no existe en la orden',
+      );
+    });
   });
 
   describe('execute', () => {
@@ -688,6 +986,63 @@ describe('RefundRequestsService', () => {
       expect(Number(data.balance.toString())).toBe(0);
       // Sigue entregada: la entrega ocurrió sobre la parte buena del trabajo.
       expect(data.status).toBeUndefined();
+    });
+
+    it('al pagar una anulación por ítems marca la cantidad anulada en cada ítem', async () => {
+      // OP-2026-3431: se cae el rígido (750.000), la empresa retiene 100.000.
+      prisma.refundRequest.findFirst.mockResolvedValue(
+        aprobada({
+          refundAmount: '240000',
+          reversedAmount: '650000',
+          paymentMethod: 'TRANSFER',
+          order: orden({
+            status: OrderStatus.READY,
+            subtotal: '820000',
+            total: '820000',
+            paidAmount: '410000',
+            balance: '410000',
+          }),
+        }),
+      );
+      prisma.refundRequestItem.findMany.mockResolvedValue([
+        {
+          orderItemId: 'item-rigido',
+          description: 'MARCA RIGIDO',
+          quantity: '150',
+          orderItem: { quantity: '150', annulledQuantity: '0' },
+        },
+      ]);
+
+      await service.execute(requestId, executorId);
+
+      expect(prisma.orderItem.update).toHaveBeenCalledWith({
+        where: { id: 'item-rigido' },
+        data: { annulledQuantity: { increment: '150' } },
+      });
+      const { data } = prisma.order.update.mock.calls[0][0];
+      // Queda valiendo 170.000 (DTF + retención), pagada y sin saldo.
+      expect(Number(data.reversedAmount.toString())).toBe(650000);
+      expect(Number(data.paidAmount.toString())).toBe(170000);
+      expect(Number(data.balance.toString())).toBe(0);
+      // Sigue lista para entrega: el DTF todavía se le debe entregar.
+      expect(data.status).toBeUndefined();
+    });
+
+    it('no paga si el ítem ya se anuló por otra solicitud', async () => {
+      prisma.refundRequest.findFirst.mockResolvedValue(aprobada());
+      prisma.refundRequestItem.findMany.mockResolvedValue([
+        {
+          orderItemId: 'item-rigido',
+          description: 'MARCA RIGIDO',
+          quantity: '150',
+          orderItem: { quantity: '150', annulledQuantity: '150' },
+        },
+      ]);
+
+      await expect(service.execute(requestId, executorId)).rejects.toThrow(
+        'ya no tiene esa cantidad por anular',
+      );
+      expect(prisma.cashMovement.create).not.toHaveBeenCalled();
     });
 
     it('anular la venta completa pasa la OP a Devolución de dinero', async () => {

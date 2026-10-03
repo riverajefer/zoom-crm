@@ -139,6 +139,9 @@ export class WorkOrdersRepository {
             quantity: true,
             unitPrice: true,
             total: true,
+            // Anulación parcial en la OP: el ítem sigue en la OT, pero el
+            // taller tiene que ver que ya no se produce (o que se produce menos).
+            annulledQuantity: true,
           },
         },
         productionAreas: {

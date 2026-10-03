@@ -1028,6 +1028,74 @@ describe('RefundRequestsService', () => {
       expect(data.status).toBeUndefined();
     });
 
+    // El ítem anulado sigue en la OT, marcado. La marca solo la ve quien abre
+    // la OT: sin aviso, el taller puede seguir produciendo algo dado de baja.
+    describe('ítem anulado que ya está en una OT', () => {
+      const lineaEnOt = (workOrder: Record<string, unknown>) => ({
+        orderItemId: 'item-rigido',
+        description: 'MARCA RIGIDO ',
+        quantity: '150',
+        orderItem: {
+          quantity: '150',
+          annulledQuantity: '0',
+          workOrderItems: [{ workOrder }],
+        },
+      });
+
+      beforeEach(() => {
+        prisma.refundRequest.findFirst.mockResolvedValue(aprobada());
+      });
+
+      it('avisa al asesor y al diseñador de la OT', async () => {
+        prisma.refundRequestItem.findMany.mockResolvedValue([
+          lineaEnOt({
+            workOrderNumber: 'OT-2026-0581',
+            advisorId: 'asesor-1',
+            designerId: 'disenador-1',
+          }),
+        ]);
+
+        await service.execute(requestId, executorId);
+
+        const avisos = notifications.create.mock.calls
+          .map(([dto]) => dto)
+          .filter((dto) => dto.title === 'Ítems anulados en OT-2026-0581');
+        expect(avisos.map((a) => a.userId).sort()).toEqual([
+          'asesor-1',
+          'disenador-1',
+        ]);
+        expect(avisos[0].message).toContain('150 × MARCA RIGIDO');
+      });
+
+      it('no repite el aviso si asesor y diseñador son la misma persona', async () => {
+        prisma.refundRequestItem.findMany.mockResolvedValue([
+          lineaEnOt({
+            workOrderNumber: 'OT-2026-0581',
+            advisorId: 'asesor-1',
+            designerId: 'asesor-1',
+          }),
+        ]);
+
+        await service.execute(requestId, executorId);
+
+        const avisos = notifications.create.mock.calls.filter(([dto]) =>
+          dto.title.startsWith('Ítems anulados'),
+        );
+        expect(avisos).toHaveLength(1);
+      });
+
+      it('si el aviso falla, la devolución ya pagada no se cae', async () => {
+        prisma.refundRequestItem.findMany
+          .mockResolvedValueOnce([])
+          .mockResolvedValueOnce([])
+          .mockRejectedValueOnce(new Error('db caída'));
+
+        await expect(
+          service.execute(requestId, executorId),
+        ).resolves.toBeDefined();
+      });
+    });
+
     it('no paga si el ítem ya se anuló por otra solicitud', async () => {
       prisma.refundRequest.findFirst.mockResolvedValue(aprobada());
       prisma.refundRequestItem.findMany.mockResolvedValue([

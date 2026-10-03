@@ -54,7 +54,14 @@ export class WorkOrdersService {
     const order = await this.prisma.order.findUnique({
       where: { id: dto.orderId },
       include: {
-        items: { select: { id: true, description: true } },
+        items: {
+          select: {
+            id: true,
+            description: true,
+            quantity: true,
+            annulledQuantity: true,
+          },
+        },
       },
     });
 
@@ -96,6 +103,21 @@ export class WorkOrdersService {
 
     // 3. Build items with productDescription from OrderItem if not provided
     const orderItemMap = new Map(order.items.map((item) => [item.id, item]));
+
+    // Un ítem anulado por completo en la OP ya no se produce: mandarlo al
+    // taller sería fabricar algo que nadie va a pagar.
+    for (const item of dto.items) {
+      const orderItem = orderItemMap.get(item.orderItemId)!;
+      const annulled = new Prisma.Decimal(orderItem.annulledQuantity ?? 0);
+      if (
+        annulled.greaterThan(0) &&
+        annulled.greaterThanOrEqualTo(orderItem.quantity)
+      ) {
+        throw new BadRequestException(
+          `El ítem «${orderItem.description.trim()}» está anulado en la orden y no puede incluirse en la OT`,
+        );
+      }
+    }
     const itemsData = dto.items.map((item) => ({
       orderItemId: item.orderItemId,
       productDescription: item.productDescription ?? orderItemMap.get(item.orderItemId)!.description,

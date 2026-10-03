@@ -147,6 +147,44 @@ describe('WorkOrdersService', () => {
       );
     });
 
+    // Anulación parcial de la OP: lo anulado por completo ya no se produce.
+    it('rechaza un ítem anulado por completo en la orden', async () => {
+      (prisma.order.findUnique as jest.Mock).mockResolvedValue({
+        ...mockOrder,
+        items: [
+          {
+            id: 'oi-1',
+            description: 'MARCA RIGIDO ',
+            quantity: '150',
+            annulledQuantity: '150',
+          },
+        ],
+      });
+
+      await expect(service.create(createDto as any, 'user-1')).rejects.toThrow(
+        'está anulado en la orden',
+      );
+      expect(mockWorkOrdersRepository.create).not.toHaveBeenCalled();
+    });
+
+    it('admite un ítem anulado solo en parte: el resto sí se produce', async () => {
+      (prisma.order.findUnique as jest.Mock).mockResolvedValue({
+        ...mockOrder,
+        items: [
+          {
+            id: 'oi-1',
+            description: 'MARCA RIGIDO',
+            quantity: '150',
+            annulledQuantity: '50',
+          },
+        ],
+      });
+
+      await service.create(createDto as any, 'user-1');
+
+      expect(mockWorkOrdersRepository.create).toHaveBeenCalled();
+    });
+
     it('should throw BadRequestException when order is in DRAFT status', async () => {
       (prisma.order.findUnique as jest.Mock).mockResolvedValue({
         ...mockOrder,

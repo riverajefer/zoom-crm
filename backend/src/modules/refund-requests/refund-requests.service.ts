@@ -35,6 +35,7 @@ import {
   PayrollDeductionStatus,
   Prisma,
   RefundReason,
+  WorkOrderStatus,
 } from '../../generated/prisma';
 import {
   computeAvailableOverpayment,
@@ -621,6 +622,12 @@ export class RefundRequestsService
       relatedType: 'Order',
     });
 
+    await this.notifyWorkshopOfAnnulledItems(
+      request.id,
+      request.orderId,
+      request.order.orderNumber,
+    );
+
     this.wsEventsGateway.emitApprovalUpdated(updated);
 
     return updated;
@@ -835,6 +842,88 @@ export class RefundRequestsService
     });
   }
 
+  /**
+   * Avisa al taller cuando se anula un ítem que ya está en una OT.
+   *
+   * El ítem no sale de la OT —queda marcado—, pero la marca solo la ve quien
+   * abre la OT. Sin este aviso producción puede seguir fabricando algo que la
+   * OP ya dio de baja. Va al asesor y al diseñador de la OT, que son los dos
+   * usuarios que la orden de trabajo conoce.
+   *
+   * Corre después de la transacción y nunca la tumba: la anulación ya quedó
+   * aplicada, un aviso que falla no la deshace.
+   */
+  private async notifyWorkshopOfAnnulledItems(
+    requestId: string,
+    orderId: string,
+    orderNumber: string,
+  ): Promise<void> {
+    try {
+      const lines =
+        (await this.prisma.refundRequestItem.findMany({
+          where: { refundRequestId: requestId, orderItemId: { not: null } },
+          select: {
+            description: true,
+            quantity: true,
+            orderItem: {
+              select: {
+                workOrderItems: {
+                  where: {
+                    workOrder: { status: { not: WorkOrderStatus.CANCELLED } },
+                  },
+                  select: {
+                    workOrder: {
+                      select: {
+                        workOrderNumber: true,
+                        advisorId: true,
+                        designerId: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        })) ?? [];
+
+      // Una OT puede tener varios ítems anulados: un solo aviso por OT.
+      const byWorkOrder = new Map<
+        string,
+        { recipients: Set<string>; items: string[] }
+      >();
+      for (const line of lines) {
+        const label = `${Number(line.quantity).toLocaleString('es-CO')} × ${line.description.trim()}`;
+        for (const { workOrder } of line.orderItem?.workOrderItems ?? []) {
+          const entry = byWorkOrder.get(workOrder.workOrderNumber) ?? {
+            recipients: new Set<string>(),
+            items: [],
+          };
+          entry.recipients.add(workOrder.advisorId);
+          if (workOrder.designerId) entry.recipients.add(workOrder.designerId);
+          entry.items.push(label);
+          byWorkOrder.set(workOrder.workOrderNumber, entry);
+        }
+      }
+
+      for (const [workOrderNumber, { recipients, items }] of byWorkOrder) {
+        for (const userId of recipients) {
+          await this.notificationsService.create({
+            userId,
+            type: NotificationType.REFUND_REQUEST_APPROVED,
+            title: `Ítems anulados en ${workOrderNumber}`,
+            message: `La orden ${orderNumber} anuló ítems que están en la ${workOrderNumber}: ${items.join(', ')}. Ya no deben producirse.`,
+            relatedId: orderId,
+            relatedType: 'Order',
+          });
+        }
+      }
+    } catch (error) {
+      this.logger.error(
+        `No se pudo avisar al taller de la anulación ${requestId}: ${error.message}`,
+      );
+    }
+  }
+
   /** «150 × MARCA RIGIDO, 1 × DTF UV», para notificaciones de una línea. */
   private describeItemLines(lines: AnnulledItemLine[]): string {
     return lines
@@ -958,6 +1047,12 @@ export class RefundRequestsService
       relatedId: request.orderId,
       relatedType: 'Order',
     });
+
+    await this.notifyWorkshopOfAnnulledItems(
+      request.id,
+      request.orderId,
+      request.order.orderNumber,
+    );
 
     this.wsEventsGateway.emitApprovalUpdated(updated);
 

@@ -323,8 +323,21 @@ function drawProductsTable(doc: jsPDF, y: number, workOrder: WorkOrder): number 
       : '-';
 
     const obsText = item.observations || '-';
-    const descText = item.productDescription;
-    const qtyText = String(item.orderItem.quantity);
+    // Ítem anulado en la OP: sigue en la OT, pero el papel que llega al taller
+    // tiene que decir que no se produce (o cuánto queda por producir).
+    const annulledQuantity =
+      parseFloat(item.orderItem.annulledQuantity ?? '0') || 0;
+    const totalQuantity = Number(item.orderItem.quantity);
+    const fullyAnnulled = annulledQuantity > 0 && annulledQuantity >= totalQuantity;
+    const descText =
+      annulledQuantity <= 0
+        ? item.productDescription
+        : fullyAnnulled
+          ? `[ANULADO - NO PRODUCIR] ${item.productDescription}`
+          : `[ANULADAS ${annulledQuantity} DE ${totalQuantity}] ${item.productDescription}`;
+    const qtyText = fullyAnnulled
+      ? '0'
+      : String(annulledQuantity > 0 ? totalQuantity - annulledQuantity : item.orderItem.quantity);
 
     // Calculate required row height
     const descLines = calcLineCount(doc, descText, colWidths[1] - 4);

@@ -49,6 +49,8 @@ export interface WorkOrderItem {
     quantity: string;
     unitPrice: string;
     total: string;
+    /** Cantidad anulada en la OP por una anulación parcial. '0' si no hay. */
+    annulledQuantity?: string;
   };
   productionAreas: WorkOrderItemProductionArea[];
   supplies: WorkOrderItemSupply[];

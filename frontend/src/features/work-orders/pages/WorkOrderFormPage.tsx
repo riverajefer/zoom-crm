@@ -35,6 +35,7 @@ import {
 import { PageHeader } from '../../../components/common/PageHeader';
 import { useWorkOrders, useWorkOrder } from '../hooks';
 import { useOrders, useOrder } from '../../orders/hooks';
+import { getAliveQuantity } from '../../orders/utils/partialAnnulment';
 import { useProductionAreas } from '../../production-areas/hooks/useProductionAreas';
 import { useSupplies } from '../../portfolio/supplies/hooks/useSupplies';
 import { useUsers } from '../../users/hooks/useUsers';
@@ -354,7 +355,10 @@ export const WorkOrderFormPage = () => {
   useEffect(() => {
     if (selectedOrder && !isEdit) {
       setItemsForms(
-        selectedOrder.items.map((item) => ({
+        // Lo anulado por completo en la OP ya no se produce: no entra a la OT.
+        selectedOrder.items
+          .filter((item) => getAliveQuantity(item) > 0)
+          .map((item) => ({
           orderItemId: item.id,
           productDescription: item.description,
           productionAreaIds: item.productionAreas?.map((pa) => pa.productionArea.id) ?? [],
@@ -908,7 +912,11 @@ export const WorkOrderFormPage = () => {
       {itemsForms.map((itemForm, i) => {
         const sourceItem = isEdit
           ? workOrderQuery.data?.items[i]?.orderItem
-          : selectedOrder?.items[i];
+          : // Por id y no por posición: los ítems anulados se filtran arriba y
+            // los índices dejan de coincidir con los de la OP.
+            selectedOrder?.items.find((it) => it.id === itemForm.orderItemId);
+        const annulledQuantity =
+          parseFloat(sourceItem?.annulledQuantity ?? '0') || 0;
 
         return (
           <Card key={itemForm.orderItemId} variant="outlined" sx={{ borderRadius: 2 }}>
@@ -918,7 +926,16 @@ export const WorkOrderFormPage = () => {
                   Producto {i + 1}
                 </Typography>
                 {sourceItem?.quantity != null && (
-                  <Chip label={`Cant: ${sourceItem.quantity}`} size="small" variant="outlined" />
+                  <Chip
+                    label={
+                      annulledQuantity > 0
+                        ? `Cant: ${Number(sourceItem.quantity) - annulledQuantity} (${annulledQuantity} anuladas en la OP)`
+                        : `Cant: ${sourceItem.quantity}`
+                    }
+                    size="small"
+                    variant="outlined"
+                    color={annulledQuantity > 0 ? 'error' : 'default'}
+                  />
                 )}
               </Stack>
               <Typography variant="caption" color="text.secondary" display="block" gutterBottom>

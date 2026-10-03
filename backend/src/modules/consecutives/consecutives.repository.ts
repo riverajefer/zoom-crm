@@ -2,17 +2,19 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 
 /**
- * Contadores de numeración. En Zoom hay uno por (tipo, sede) y no se reinician
- * por año: `125-OP-0001`, `125-OP-0002`… (docs/PLAN_SEDES.md §3). La columna
- * `year` se conserva por el esquema heredado de High y queda en 0.
+ * Contadores de numeración. En Zoom hay uno por tipo, **global para todas las
+ * sedes**, y no se reinicia por año: `104-OP-0011`, `119-OP-0012`… El número
+ * lleva el código de la sede que lo emite, pero la secuencia es una sola
+ * (docs/PLAN_SEDES.md §3). La columna `year` se conserva por el esquema
+ * heredado de High y queda en 0.
  */
 @Injectable()
 export class ConsecutivesRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * Genera el siguiente número consecutivo de un tipo en una sede.
-   * Usa INSERT ... ON CONFLICT atómico para evitar race conditions.
+   * Genera el siguiente número consecutivo de un tipo, con el código de la sede
+   * que lo emite. Usa INSERT ... ON CONFLICT atómico para evitar race conditions.
    *
    * Con `source` (tabla y columna donde vive el número), el incremento se toma
    * contra el máximo real de esa tabla, no solo contra el contador. Es lo que
@@ -27,18 +29,18 @@ export class ConsecutivesRepository {
   async getNextNumber(
     type: string,
     prefix: string,
-    location: { id: string; code: string },
+    locationCode: string,
     source?: { table: string; column: string },
   ): Promise<string> {
     const result = source
-      ? await this.getNextNumberFromSource(type, prefix, location, source)
-      : await this.getNextNumberFromCounter(type, prefix, location.id);
+      ? await this.getNextNumberFromSource(type, prefix, source)
+      : await this.getNextNumberFromCounter(type, prefix);
 
     if (!result || result.length === 0) {
       throw new Error(`Failed to generate next number for ${type}`);
     }
 
-    return formatNumber(location.code, prefix, Number(result[0].last_number));
+    return formatNumber(locationCode, prefix, Number(result[0].last_number));
   }
 
   /**
@@ -48,12 +50,11 @@ export class ConsecutivesRepository {
   private async getNextNumberFromCounter(
     type: string,
     prefix: string,
-    locationId: string,
   ): Promise<Array<{ last_number: number }>> {
     return this.prisma.$queryRaw<Array<{ last_number: number }>>`
-      INSERT INTO consecutives (id, type, prefix, year, last_number, location_id, created_at, updated_at)
-      VALUES (gen_random_uuid(), ${type}, ${prefix}, 0, 1, ${locationId}, NOW(), NOW())
-      ON CONFLICT (type, location_id) DO UPDATE SET
+      INSERT INTO consecutives (id, type, prefix, year, last_number, created_at, updated_at)
+      VALUES (gen_random_uuid(), ${type}, ${prefix}, 0, 1, NOW(), NOW())
+      ON CONFLICT (type) DO UPDATE SET
         last_number = consecutives.last_number + 1,
         updated_at = NOW()
       RETURNING last_number
@@ -62,8 +63,9 @@ export class ConsecutivesRepository {
 
   /**
    * Incremento atómico contra el mayor entre el contador y el máximo real de la
-   * tabla destino. Una sola sentencia: el GREATEST se evalúa con la fila del
-   * contador ya bloqueada, así que dos peticiones concurrentes siguen sin poder
+   * tabla destino, **en todas las sedes**. Una sola sentencia: el GREATEST se
+   * evalúa con la fila del contador ya bloqueada, así que dos peticiones
+   * concurrentes (de la misma sede o de sedes distintas) siguen sin poder
    * obtener el mismo número.
    *
    * El máximo sale de los dígitos finales convertidos a número, no del texto:
@@ -72,56 +74,53 @@ export class ConsecutivesRepository {
   private async getNextNumberFromSource(
     type: string,
     prefix: string,
-    location: { id: string; code: string },
     source: { table: string; column: string },
   ): Promise<Array<{ last_number: number }>> {
     const safeTable = source.table.replace(/[^a-z0-9_]/gi, '');
     const safeColumn = source.column.replace(/[^a-z0-9_]/gi, '');
-    const pattern = numberPattern(location.code, prefix);
 
     const maxInTable = `
       SELECT COALESCE(
         MAX(CAST(SUBSTRING("${safeColumn}" FROM '([0-9]+)$') AS INTEGER)), 0
       )
       FROM "${safeTable}"
-      WHERE "${safeColumn}" LIKE $4
+      WHERE "${safeColumn}" ~ $3
     `;
 
     return this.prisma.$queryRawUnsafe<Array<{ last_number: number }>>(
       `
-      INSERT INTO consecutives (id, type, prefix, year, last_number, location_id, created_at, updated_at)
-      VALUES (gen_random_uuid(), $1, $2, 0, (${maxInTable}) + 1, $3, NOW(), NOW())
-      ON CONFLICT (type, location_id) DO UPDATE SET
+      INSERT INTO consecutives (id, type, prefix, year, last_number, created_at, updated_at)
+      VALUES (gen_random_uuid(), $1, $2, 0, (${maxInTable}) + 1, NOW(), NOW())
+      ON CONFLICT (type) DO UPDATE SET
         last_number = GREATEST(consecutives.last_number, (${maxInTable})) + 1,
         updated_at = NOW()
       RETURNING last_number
       `,
       type,
       prefix,
-      location.id,
-      pattern,
+      numberPattern(prefix),
     );
   }
 
   /**
    * Obtiene el valor actual de un consecutivo sin incrementarlo.
    */
-  async getCurrentNumber(type: string, locationId: string): Promise<number> {
+  async getCurrentNumber(type: string): Promise<number> {
     const consecutive = await this.prisma.consecutive.findUnique({
-      where: { type_locationId: { type, locationId } },
+      where: { type },
     });
     return consecutive ? consecutive.lastNumber : 0;
   }
 
   async findAll() {
     return this.prisma.consecutive.findMany({
-      orderBy: [{ type: 'asc' }, { locationId: 'asc' }],
+      orderBy: { type: 'asc' },
     });
   }
 
-  async reset(type: string, locationId: string) {
+  async reset(type: string) {
     return this.prisma.consecutive.update({
-      where: { type_locationId: { type, locationId } },
+      where: { type },
       data: { lastNumber: 0 },
     });
   }
@@ -135,7 +134,7 @@ export class ConsecutivesRepository {
   }
 
   /**
-   * Sincroniza el contador de un tipo en una sede con el máximo existente en una tabla.
+   * Sincroniza el contador de un tipo con el máximo existente en una tabla, en todas las sedes.
    * Útil para recuperar de desincronización entre el consecutivo y los registros reales.
    */
   async syncCounterFromTable(
@@ -143,9 +142,7 @@ export class ConsecutivesRepository {
     tableName: string,
     columnName: string,
     prefix: string,
-    location: { id: string; code: string },
   ): Promise<void> {
-    const pattern = numberPattern(location.code, prefix);
     const safeTable = tableName.replace(/[^a-z0-9_]/gi, '');
     const safeColumn = columnName.replace(/[^a-z0-9_]/gi, '');
 
@@ -156,15 +153,15 @@ export class ConsecutivesRepository {
     >(
       `SELECT MAX(CAST(SUBSTRING("${safeColumn}" FROM '([0-9]+)$') AS INTEGER)) as max_num
        FROM "${safeTable}"
-       WHERE "${safeColumn}" LIKE $1`,
-      pattern,
+       WHERE "${safeColumn}" ~ $1`,
+      numberPattern(prefix),
     );
 
     const maxNum = Number(maxResult[0]?.max_num ?? 0);
 
     await this.prisma.consecutive.upsert({
-      where: { type_locationId: { type, locationId: location.id } },
-      create: { type, prefix, year: 0, lastNumber: maxNum, locationId: location.id },
+      where: { type },
+      create: { type, prefix, year: 0, lastNumber: maxNum },
       update: { lastNumber: maxNum },
     });
   }
@@ -175,7 +172,11 @@ export function formatNumber(locationCode: string, prefix: string, n: number): s
   return `${locationCode}-${prefix}-${n.toString().padStart(4, '0')}`;
 }
 
-/** Patrón LIKE de los números de una sede. Los códigos de sede son `[A-Z0-9]`, sin comodines. */
-function numberPattern(locationCode: string, prefix: string): string {
-  return `${locationCode}-${prefix}-%`;
+/**
+ * Expresión regular de los números de un prefijo en cualquier sede
+ * (`{sede}-{prefijo}-{número}`). Los códigos de sede son `[A-Z0-9]`, así que los
+ * números con formato de High (`OP-2026-0001`) que conviven en staging quedan fuera.
+ */
+function numberPattern(prefix: string): string {
+  return `^[A-Z0-9]+-${prefix}-[0-9]+$`;
 }

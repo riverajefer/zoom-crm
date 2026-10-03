@@ -2,7 +2,7 @@ import { NotFoundException } from '@nestjs/common';
 import { ConsecutivesService } from './consecutives.service';
 
 /**
- * Numeración por sede y sin año (solo Zoom, docs/PLAN_SEDES.md §3).
+ * Numeración global por tipo, con el código de la sede y sin año (solo Zoom, docs/PLAN_SEDES.md §3).
  */
 describe('ConsecutivesService', () => {
   let repository: any;
@@ -28,13 +28,13 @@ describe('ConsecutivesService', () => {
     ['ACCOUNT_PAYABLE', 'CP', 'accounts_payable'],
     ['CASH_RECEIPT', 'RC', 'cash_movements'],
     ['DTF_UV', 'DTF-UV', 'dtf_records'],
-  ] as const)('%s usa el prefijo %s y la tabla %s, en la sede pedida', async (type, prefix, table) => {
+  ] as const)('%s usa el prefijo %s y la tabla %s, con el código de la sede pedida', async (type, prefix, table) => {
     await service.generateNumber(type, 'loc-125');
 
     expect(repository.getNextNumber).toHaveBeenCalledWith(
       type,
       prefix,
-      { id: 'loc-125', code: '125' },
+      '125',
       expect.objectContaining({ table }),
     );
   });
@@ -42,7 +42,7 @@ describe('ConsecutivesService', () => {
   it('PRODUCTION no tiene tabla: usa solo el contador', async () => {
     await service.generateNumber('PRODUCTION', 'loc-125');
 
-    expect(repository.getNextNumber).toHaveBeenCalledWith('PRODUCTION', 'PROD', { id: 'loc-125', code: '125' }, undefined);
+    expect(repository.getNextNumber).toHaveBeenCalledWith('PRODUCTION', 'PROD', '125', undefined);
   });
 
   it('cachea el código de la sede', async () => {
@@ -58,33 +58,31 @@ describe('ConsecutivesService', () => {
     await expect(service.generateNumber('ORDER', 'loc-x')).rejects.toThrow(NotFoundException);
   });
 
-  it('syncCounter sincroniza el contador de esa sede', async () => {
-    await service.syncCounter('QUOTE', 'loc-125');
+  it('syncCounter sincroniza el contador global del tipo', async () => {
+    await service.syncCounter('QUOTE');
 
     expect(repository.syncCounterFromTable).toHaveBeenCalledWith(
       'QUOTE',
       'quotes',
       'quote_number',
       'COT',
-      { id: 'loc-125', code: '125' },
     );
   });
 
   it('syncWorkOrderCounter es el syncCounter de OT', async () => {
-    await service.syncWorkOrderCounter('loc-125');
+    await service.syncWorkOrderCounter();
 
     expect(repository.syncCounterFromTable).toHaveBeenCalledWith(
       'WORK_ORDER',
       'work_orders',
       'work_order_number',
       'OT',
-      { id: 'loc-125', code: '125' },
     );
   });
 
-  it('reset delega con la sede', async () => {
-    await service.reset('ORDER', 'loc-125');
+  it('reset delega con el tipo', async () => {
+    await service.reset('ORDER');
 
-    expect(repository.reset).toHaveBeenCalledWith('ORDER', 'loc-125');
+    expect(repository.reset).toHaveBeenCalledWith('ORDER');
   });
 });

@@ -116,7 +116,7 @@ export class DtfService {
         error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === 'P2002'
       ) {
-        await this.consecutivesService.syncCounter(consecutiveType, locationId);
+        await this.consecutivesService.syncCounter(consecutiveType);
         const consecutive = await this.consecutivesService.generateNumber(consecutiveType, locationId);
         return await this.dtfRepository.create(buildData(consecutive));
       }

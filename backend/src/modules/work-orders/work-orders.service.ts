@@ -131,7 +131,7 @@ export class WorkOrdersService {
         const isUniqueViolation = error?.code === 'P2002';
         if (isUniqueViolation && attempt < MAX_RETRIES - 1) {
           // Sync the counter with actual DB values and retry
-          await this.consecutivesService.syncWorkOrderCounter(order.locationId);
+          await this.consecutivesService.syncWorkOrderCounter();
           continue;
         }
         throw error;

@@ -1,10 +1,10 @@
 import { ConsecutivesRepository, formatNumber } from './consecutives.repository';
 
 /**
- * Numeración por sede y sin año (solo Zoom, docs/PLAN_SEDES.md §3).
+ * Numeración global por tipo, con el código de la sede y sin año (solo Zoom, docs/PLAN_SEDES.md §3).
  */
 describe('ConsecutivesRepository', () => {
-  const LOC = { id: 'loc-125', code: '125' };
+  const LOC = '125';
   let prisma: any;
   let repository: ConsecutivesRepository;
 
@@ -35,18 +35,19 @@ describe('ConsecutivesRepository', () => {
   });
 
   describe('getNextNumber', () => {
-    it('sin tabla de origen usa el contador de (tipo, sede) y no reinicia por año', async () => {
+    it('sin tabla de origen usa el contador del tipo, sin sede, y no reinicia por año', async () => {
       prisma.$queryRaw.mockResolvedValue([{ last_number: 7 }]);
 
       const result = await repository.getNextNumber('PRODUCTION', 'PROD', LOC);
 
       expect(result).toBe('125-PROD-0007');
       const sql = prisma.$queryRaw.mock.calls[0][0].join('?');
-      expect(sql).toContain('ON CONFLICT (type, location_id)');
+      expect(sql).toContain('ON CONFLICT (type)');
+      expect(sql).not.toContain('location_id');
       expect(sql).not.toContain('year =');
     });
 
-    it('con tabla de origen toma el máximo real de esa sede y ese prefijo', async () => {
+    it('con tabla de origen toma el máximo real de ese prefijo en todas las sedes', async () => {
       prisma.$queryRawUnsafe.mockResolvedValue([{ last_number: 12 }]);
 
       const result = await repository.getNextNumber('ORDER', 'OP', LOC, {
@@ -55,11 +56,24 @@ describe('ConsecutivesRepository', () => {
       });
 
       expect(result).toBe('125-OP-0012');
-      const [sql, type, prefix, locationId, pattern] = prisma.$queryRawUnsafe.mock.calls[0];
+      const [sql, type, prefix, pattern] = prisma.$queryRawUnsafe.mock.calls[0];
       expect(sql).toContain('FROM "orders"');
-      expect(sql).toContain('ON CONFLICT (type, location_id)');
+      expect(sql).toContain('ON CONFLICT (type)');
+      expect(sql).not.toContain('location_id');
       expect(sql).toContain('AS INTEGER'); // máximo numérico, no de texto
-      expect([type, prefix, locationId, pattern]).toEqual(['ORDER', 'OP', 'loc-125', '125-OP-%']);
+      expect([type, prefix, pattern]).toEqual(['ORDER', 'OP', '^[A-Z0-9]+-OP-[0-9]+$']);
+    });
+
+    it('el patrón cubre cualquier sede y deja fuera otros prefijos y el formato de High', async () => {
+      prisma.$queryRawUnsafe.mockResolvedValue([{ last_number: 1 }]);
+
+      await repository.getNextNumber('ORDER', 'OP', LOC, { table: 'orders', column: 'order_number' });
+
+      const pattern = new RegExp(prisma.$queryRawUnsafe.mock.calls[0][3]);
+      expect(pattern.test('104-OP-0011')).toBe(true);
+      expect(pattern.test('MAT-OP-10000')).toBe(true);
+      expect(pattern.test('104-OPROD-0011')).toBe(false);
+      expect(pattern.test('OP-2026-0001')).toBe(false);
     });
 
     it('limpia los nombres de tabla y columna antes de interpolarlos', async () => {
@@ -89,28 +103,28 @@ describe('ConsecutivesRepository', () => {
   });
 
   describe('syncCounterFromTable', () => {
-    it('alinea el contador de (tipo, sede) con el máximo real de esa sede', async () => {
+    it('alinea el contador del tipo con el máximo real de todas las sedes', async () => {
       prisma.$queryRawUnsafe.mockResolvedValue([{ max_num: 9 }]);
 
-      await repository.syncCounterFromTable('QUOTE', 'quotes', 'quote_number', 'COT', LOC);
+      await repository.syncCounterFromTable('QUOTE', 'quotes', 'quote_number', 'COT');
 
-      expect(prisma.$queryRawUnsafe.mock.calls[0][1]).toBe('125-COT-%');
+      expect(prisma.$queryRawUnsafe.mock.calls[0][1]).toBe('^[A-Z0-9]+-COT-[0-9]+$');
       expect(prisma.consecutive.upsert).toHaveBeenCalledWith({
-        where: { type_locationId: { type: 'QUOTE', locationId: 'loc-125' } },
-        create: { type: 'QUOTE', prefix: 'COT', year: 0, lastNumber: 9, locationId: 'loc-125' },
+        where: { type: 'QUOTE' },
+        create: { type: 'QUOTE', prefix: 'COT', year: 0, lastNumber: 9 },
         update: { lastNumber: 9 },
       });
     });
   });
 
   describe('reset y getCurrentNumber', () => {
-    it('trabajan sobre el contador de (tipo, sede)', async () => {
+    it('trabajan sobre el contador del tipo', async () => {
       prisma.consecutive.findUnique.mockResolvedValue({ lastNumber: 5 });
 
-      expect(await repository.getCurrentNumber('ORDER', 'loc-125')).toBe(5);
-      await repository.reset('ORDER', 'loc-125');
+      expect(await repository.getCurrentNumber('ORDER')).toBe(5);
+      await repository.reset('ORDER');
 
-      const where = { type_locationId: { type: 'ORDER', locationId: 'loc-125' } };
+      const where = { type: 'ORDER' };
       expect(prisma.consecutive.findUnique).toHaveBeenCalledWith({ where });
       expect(prisma.consecutive.update).toHaveBeenCalledWith({ where, data: { lastNumber: 0 } });
     });

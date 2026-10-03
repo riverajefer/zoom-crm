@@ -180,7 +180,6 @@ model Location {
   employees          Employee[]
   attendanceRecords  AttendanceRecord[]
   inventoryMovements InventoryMovement[]
-  consecutives       Consecutive[]
   locationSupports   LocationSupport[]
 
   @@map("locations")
@@ -615,18 +614,14 @@ enum QuoteStatus {
 
 model Consecutive {
   id         String   @id @default(uuid())
-  type       String // "ORDER", "QUOTE", "WORK_ORDER"…
+  // Solo Zoom: un contador por tipo, global para todas las sedes. Ver docs/PLAN_SEDES.md §3.
+  type       String   @unique // "ORDER", "QUOTE", "WORK_ORDER"…
   prefix     String // "OP", "PROD", "GAS", "COT"
   year       Int // Heredado de High: en Zoom la numeración no se reinicia por año (queda en 0)
   lastNumber Int      @default(0) @map("last_number") // Último número generado
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
 
-  // Solo Zoom: un contador por (tipo, sede). Ver docs/PLAN_SEDES.md §3.
-  locationId String   @map("location_id")
-  location   Location @relation(fields: [locationId], references: [id])
-
-  @@unique([type, locationId])
   @@map("consecutives")
 }
 

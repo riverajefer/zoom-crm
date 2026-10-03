@@ -220,7 +220,7 @@ export class QuotesService {
 
         if (isUniqueViolation && attempt < MAX_RETRIES - 1) {
           // Realinea el contador con el máximo real de la tabla y reintenta.
-          await this.consecutivesService.syncCounter('QUOTE', locationId);
+          await this.consecutivesService.syncCounter('QUOTE');
           continue;
         }
         throw error;

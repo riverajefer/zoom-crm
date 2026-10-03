@@ -61,14 +61,14 @@ Formato: **`{sede}-{prefijo}-{número}`**, por ejemplo `125-OP-0001`.
 
 - **Sin año**, a diferencia de High (`OP-2026-0001`). El contador **nunca se reinicia**: crece indefinidamente.
 - El número se rellena a 4 dígitos como mínimo y sigue creciendo sin tope (`125-OP-9999` → `125-OP-10000`).
-- Hay un contador por (tipo, sede).
+- Hay **un contador por tipo, global para todas las sedes** (desde 2026-10-03; antes era por (tipo, sede)). El código de sede dice dónde se emitió el documento, pero la secuencia es una sola: después de `104-OP-0011`, la siguiente OP del 119 es `119-OP-0012`. El número de un documento, sin el prefijo de sede, es único en toda la empresa.
 
-Documentos afectados: COT, OP, OT, OPROD, OG, CP, RC (recibo de caja; va por sede porque la caja es de la sede) y DTF (`125-DTF-UV-0001`, `125-DTF-TEXTIL-0001`).
+Documentos afectados: COT, OP, OT, OPROD, OG, CP, RC (recibo de caja) y DTF (`125-DTF-UV-0001`, `125-DTF-TEXTIL-0001`).
 
 Cambios técnicos:
 
-- `Consecutive`: se quita `year` del cálculo y la unicidad pasa de `type` a `(type, locationId)`.
-- `ConsecutivesRepository.getNextNumberFromSource` calcula el máximo sobre la tabla real con el patrón `{prefijo}-{año}-%`. Pasa a usar `{sede}-{prefijo}-%`, y el máximo tiene que salir **numérico, no lexicográfico**: como el número crece sin tope, `10000` < `9999` si se compara como texto.
+- `Consecutive`: se quita `year` del cálculo. La unicidad es por `type` (la fase 2a la pasó a `(type, locationId)`; la migración `global_consecutives` la devolvió a `type`, quitó `location_id` y dejó de cada tipo el contador más alto).
+- `ConsecutivesRepository.getNextNumberFromSource` calcula el máximo sobre la tabla real con el patrón `{prefijo}-{año}-%`. Pasa a buscar `{cualquier sede}-{prefijo}-{número}` (expresión regular `^[A-Z0-9]+-{prefijo}-[0-9]+$`, que deja fuera el formato de High), y el máximo tiene que salir **numérico, no lexicográfico**: como el número crece sin tope, `10000` < `9999` si se compara como texto.
 - **Las CP no usan `ConsecutivesService`**: tienen su propio `generateApNumber()` (`CP-{año}-001`, relleno a 3). Se unifica dentro del servicio.
 - Producción arranca con la base vacía, así que no hay números viejos que migrar. En staging conviven los de formato High; no importa.
 - ⚠️ **Portabilidad**: este cambio reescribe `consecutives.*`, así que cualquier cherry-pick de High que toque consecutivos va a chocar.
@@ -360,7 +360,7 @@ Todavía **no toca documentos**: al terminar, la app funciona como hoy, pero ya 
 - **`locationId`** en las entidades del §2 (`Quote`, `Order`, `WorkOrder`, `ProductionOrder`, `ExpenseOrder`, `AccountPayable`, `CashRegister`, `DtfRecord`, `Employee`, `AttendanceRecord`) y en `InventoryMovement`.
 - **Extensión de Prisma** que filtra y asigna la sede (§15.1), con sus salidas explícitas. **Revisar a mano cada `$queryRaw`**, con test.
 - **Herencia de sede**: OP desde COT, OT y OPROD desde OP. Sin traslados.
-- **Numeración** (§3): `{sede}-{prefijo}-{número}`, sin año, contador por (tipo, sede), máximo numérico. Las CP pasan a `ConsecutivesService`.
+- **Numeración** (§3): `{sede}-{prefijo}-{número}`, sin año, contador por (tipo, sede) —global por tipo desde 2026-10-03—, máximo numérico. Las CP pasan a `ConsecutivesService`.
 - **Reglas de dinero** (§4): rechazo de abonos cruzados en el backend; saldo a favor aplicable en cualquier sede.
 - **Notificaciones** (§5): de operación solo a la sede, con una sala de socket.io por sede; las de aprobación al admin, con la sede en el mensaje. **Los 10 crons** recorren las sedes a propósito (§15.2).
 - **Frontend**: listados, formularios y tablero de cotizaciones filtrados por la sede activa; el número con sede en todas partes.

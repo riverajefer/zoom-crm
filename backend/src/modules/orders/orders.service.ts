@@ -1028,7 +1028,7 @@ export class OrdersService {
 
         if (isOrderNumberCollision) {
           // Sincronizar el contador de consecutivos y generar un nuevo número de orden
-          await this.consecutivesService.syncCounter('ORDER', locationId);
+          await this.consecutivesService.syncCounter('ORDER');
           currentOrderNumber = await this.consecutivesService.generateNumber('ORDER', locationId);
           continue;
         }
@@ -1036,7 +1036,7 @@ export class OrdersService {
         if (isReceiptNumberCollision) {
           // Sincronizar el contador de CASH_RECEIPT; los nuevos receiptNumbers
           // se generarán automáticamente al inicio del siguiente intento (buildPayments).
-          await this.consecutivesService.syncCounter('CASH_RECEIPT', locationId);
+          await this.consecutivesService.syncCounter('CASH_RECEIPT');
           continue;
         }
 

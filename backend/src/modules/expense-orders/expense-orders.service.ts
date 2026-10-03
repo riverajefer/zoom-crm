@@ -231,7 +231,7 @@ export class ExpenseOrdersService {
           (error.meta?.modelName === 'ExpenseOrder' && (error.meta?.target === undefined || target === '""'));
 
         if (isUniqueConstraintError && isNumberTarget && attempts < maxAttempts) {
-          await this.consecutivesService.syncCounter('EXPENSE', locationId);
+          await this.consecutivesService.syncCounter('EXPENSE');
           currentOgNumber = await this.consecutivesService.generateNumber('EXPENSE', locationId);
           continue;
         }

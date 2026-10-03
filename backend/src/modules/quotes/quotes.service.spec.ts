@@ -417,7 +417,7 @@ describe('QuotesService', () => {
 
       const result = await service.create(createQuoteDto, 'user-1');
 
-      expect(mockConsecutivesService.syncCounter).toHaveBeenCalledWith('QUOTE', 'loc-125');
+      expect(mockConsecutivesService.syncCounter).toHaveBeenCalledWith('QUOTE');
       expect(mockConsecutivesService.generateNumber).toHaveBeenCalledTimes(2);
       expect(mockQuotesRepository.create).toHaveBeenCalledTimes(2);
       // El reintento debe usar el número nuevo, no repetir el que falló.

@@ -92,6 +92,8 @@ cp_atrapadas_por_centavos AS (
 
 -- El contador nunca puede ir por detrás del último documento emitido: si va
 -- atrás, la próxima creación intenta repetir un número que ya existe.
+-- En Zoom hay un contador por tipo, global para todas las sedes, y el número es
+-- `{sede}-{prefijo}-{número}`.
 consecutivos_atrasados AS (
   SELECT count(*) AS n, count(*) AS n30 FROM (
     SELECT c.type
@@ -99,21 +101,23 @@ consecutivos_atrasados AS (
     CROSS JOIN LATERAL (
       SELECT CASE c.type
         WHEN 'ORDER' THEN (SELECT max(CAST(substring(order_number FROM '([0-9]+)$') AS int))
-                             FROM orders WHERE order_number LIKE 'OP-' || c.year || '-%')
+          FROM orders WHERE order_number ~ '^[A-Z0-9]+-OP-[0-9]+$')
         WHEN 'QUOTE' THEN (SELECT max(CAST(substring(quote_number FROM '([0-9]+)$') AS int))
-                             FROM quotes WHERE quote_number LIKE 'COT-' || c.year || '-%')
+          FROM quotes WHERE quote_number ~ '^[A-Z0-9]+-COT-[0-9]+$')
         WHEN 'EXPENSE' THEN (SELECT max(CAST(substring(og_number FROM '([0-9]+)$') AS int))
-                               FROM expense_orders WHERE og_number LIKE 'OG-' || c.year || '-%')
+          FROM expense_orders WHERE og_number ~ '^[A-Z0-9]+-OG-[0-9]+$')
         WHEN 'WORK_ORDER' THEN (SELECT max(CAST(substring(work_order_number FROM '([0-9]+)$') AS int))
-                                  FROM work_orders WHERE work_order_number LIKE 'OT-' || c.year || '-%')
+          FROM work_orders WHERE work_order_number ~ '^[A-Z0-9]+-OT-[0-9]+$')
         WHEN 'CASH_RECEIPT' THEN (SELECT max(CAST(substring(receipt_number FROM '([0-9]+)$') AS int))
-                                    FROM cash_movements WHERE receipt_number LIKE 'RC-' || c.year || '-%')
+          FROM cash_movements WHERE receipt_number ~ '^[A-Z0-9]+-RC-[0-9]+$')
         WHEN 'PRODUCTION_ORDER' THEN (SELECT max(CAST(substring(oprod_number FROM '([0-9]+)$') AS int))
-                                        FROM production_orders WHERE oprod_number LIKE 'OPROD-' || c.year || '-%')
+          FROM production_orders WHERE oprod_number ~ '^[A-Z0-9]+-OPROD-[0-9]+$')
+        WHEN 'ACCOUNT_PAYABLE' THEN (SELECT max(CAST(substring(ap_number FROM '([0-9]+)$') AS int))
+          FROM accounts_payable WHERE ap_number ~ '^[A-Z0-9]+-CP-[0-9]+$')
         WHEN 'DTF_TEXTIL' THEN (SELECT max(CAST(substring(consecutive FROM '([0-9]+)$') AS int))
-                                  FROM dtf_records WHERE consecutive LIKE 'DTF-TEXTIL-' || c.year || '-%')
+          FROM dtf_records WHERE consecutive ~ '^[A-Z0-9]+-DTF-TEXTIL-[0-9]+$')
         WHEN 'DTF_UV' THEN (SELECT max(CAST(substring(consecutive FROM '([0-9]+)$') AS int))
-                              FROM dtf_records WHERE consecutive LIKE 'DTF-UV-' || c.year || '-%')
+          FROM dtf_records WHERE consecutive ~ '^[A-Z0-9]+-DTF-UV-[0-9]+$')
         ELSE NULL
       END AS max_real
     ) m

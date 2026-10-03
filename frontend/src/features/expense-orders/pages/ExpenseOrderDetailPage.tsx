@@ -30,7 +30,6 @@ import {
   InputAdornment,
   IconButton,
   Tooltip,
-  Paper,
   useTheme,
 } from '@mui/material';
 import {
@@ -70,6 +69,7 @@ import { StatusHighlight } from '../../../components/common/StatusHighlight';
 
 import { DocumentTypeBanner } from '../../../components/common/DocumentTypeBanner';
 import { ToolbarButton } from '../../orders/components/ToolbarButton';
+import { ActionToolbar } from '../../orders/components/ActionToolbar';
 import { ExpenseOrderAuthRequestDialog } from '../components/ExpenseOrderAuthRequestDialog';
 import { ExpenseOrderAuthHistory } from '../components/ExpenseOrderAuthHistory';
 import { expenseOrderAuthRequestsApi } from '../../../api/expense-order-auth-requests.api';
@@ -746,41 +746,7 @@ export const ExpenseOrderDetailPage = () => {
       })()}
 
       {/* Toolbar de Acciones */}
-      <Paper
-        elevation={0}
-        sx={{
-          mt: 2,
-          mb: 3,
-          p: 0,
-          borderRadius: 2,
-          display: 'flex',
-          alignItems: 'stretch',
-          justifyContent: 'center',
-          background: (theme) =>
-            theme.palette.mode === 'dark'
-              ? 'rgba(255, 255, 255, 0.04)'
-              : 'rgba(255, 255, 255, 0.8)',
-          backdropFilter: 'blur(8px)',
-          border: (theme) =>
-            `1px solid ${theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}`,
-          overflowX: 'auto',
-          '&::-webkit-scrollbar': { display: 'none' },
-          msOverflowStyle: 'none',
-          scrollbarWidth: 'none',
-        }}
-      >
-        <Stack
-          direction="row"
-          spacing={0}
-          alignItems="stretch"
-          divider={
-            <Divider
-              orientation="vertical"
-              flexItem
-              sx={{ my: 1.5, opacity: 0.5 }}
-            />
-          }
-        >
+      <ActionToolbar sx={{ mt: 2, mb: 3 }}>
           {canUpdate && isEditable && (
             <ToolbarButton
               icon={<EditIcon />}
@@ -844,8 +810,7 @@ export const ExpenseOrderDetailPage = () => {
           />
 
           <ExpenseOrderPdfButton expenseOrder={og} />
-        </Stack>
-      </Paper>
+      </ActionToolbar>
 
       <Grid container spacing={3}>
         {/* Left column */}

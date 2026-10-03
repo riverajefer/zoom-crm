@@ -106,6 +106,7 @@ import { getPendingAdvanceInfo } from '../utils/pendingAdvance';
 import { ActivePermissionBanner } from '../components/ActivePermissionBanner';
 import { RequestEditPermissionButton } from '../components/RequestEditPermissionButton';
 import { RequestAdvisorChangeButton } from '../components/RequestAdvisorChangeButton';
+import { ActionToolbar } from '../components/ActionToolbar';
 import { AdvisorChangeStatusAlert } from '../components/AdvisorChangeStatusAlert';
 import { useIsCashOpen } from '../../cash-register/hooks/useCashRegister';
 import { EditRequestsList } from '../components/EditRequestsList';
@@ -1260,51 +1261,11 @@ export const OrderDetailPage: React.FC = () => {
         sx={{ mt: 2 }}
       />
 
-      {/* Toolbar de Acciones */}
-      <Paper
-        elevation={0}
-        sx={{
-          mt: 2,
-          mb: 3,
-          p: 0,
-          borderRadius: 2,
-          display: 'flex',
-          alignItems: 'stretch',
-          justifyContent: 'center',
-          background: (theme) =>
-            theme.palette.mode === 'dark'
-              ? 'rgba(255, 255, 255, 0.04)'
-              : 'rgba(255, 255, 255, 0.8)',
-          backdropFilter: 'blur(8px)',
-          border: (theme) =>
-            `1px solid ${theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}`,
-          overflowX: 'auto',
-          '&::-webkit-scrollbar': { display: 'none' },
-          msOverflowStyle: 'none',
-          scrollbarWidth: 'none',
-        }}
-      >
-        <Stack
-          direction='row'
-          spacing={0}
-          alignItems='stretch'
-          sx={{
-            flexWrap: { xs: 'wrap', md: 'nowrap' },
-            gap: { xs: 0.5, sm: 0 },
-            minWidth: 0,
-          }}
-          divider={
-            <Divider
-              orientation='vertical'
-              flexItem
-              sx={{
-                my: 1.5,
-                opacity: 0.5,
-                display: { xs: 'none', sm: 'block' },
-              }}
-            />
-          }
-        >
+      {/* Toolbar de Acciones.
+          El orden es la prioridad: cuando no caben todas, las últimas son las
+          que pasan a «Más». Primero lo que mueve dinero o estado; al final lo
+          que solo consulta o imprime. */}
+      <ActionToolbar sx={{ mt: 2, mb: 3 }}>
           {canEdit && (
             <ToolbarButton
               icon={<EditIcon />}
@@ -1318,19 +1279,6 @@ export const OrderDetailPage: React.FC = () => {
             orderId={id!}
             orderStatus={order.status}
           />
-
-          {(permissions.includes('request_advisor_change') ||
-            permissions.includes('approve_advisor_change')) && (
-            <RequestAdvisorChangeButton
-              orderId={id!}
-              currentAdvisorId={order.createdBy.id}
-              currentAdvisorName={
-                order.createdBy.firstName && order.createdBy.lastName
-                  ? `${order.createdBy.firstName} ${order.createdBy.lastName}`
-                  : order.createdBy.email
-              }
-            />
-          )}
 
           {canAddPayment && (
             <ToolbarButton
@@ -1379,23 +1327,6 @@ export const OrderDetailPage: React.FC = () => {
             />
           )}
 
-          {canRegisterInvoice && (
-            <ToolbarButton
-              icon={<ReceiptIcon />}
-              label='Factura'
-              secondaryLabel={
-                order.electronicInvoiceNumber ? 'Actualizar' : 'Registrar'
-              }
-              onClick={handleOpenInvoiceDialog}
-              color={theme.palette.info.main}
-              tooltip={
-                order.electronicInvoiceNumber
-                  ? 'Actualizar Factura Electrónica'
-                  : 'Registrar Factura Electrónica'
-              }
-            />
-          )}
-
           {canChangeStatus && (
             <ToolbarButton
               icon={<RefreshIcon />}
@@ -1416,17 +1347,22 @@ export const OrderDetailPage: React.FC = () => {
             />
           )}
 
-          <OrderPdfButton order={order} />
-
-          <ToolbarButton
-            icon={<WhatsAppIcon />}
-            label='WhatsApp'
-            secondaryLabel='Compartir'
-            onClick={handleShareWhatsApp}
-            disabled={isGeneratingPdf}
-            color={theme.palette.success.main}
-            tooltip='Compartir por WhatsApp'
-          />
+          {canRegisterInvoice && (
+            <ToolbarButton
+              icon={<ReceiptIcon />}
+              label='Factura'
+              secondaryLabel={
+                order.electronicInvoiceNumber ? 'Actualizar' : 'Registrar'
+              }
+              onClick={handleOpenInvoiceDialog}
+              color={theme.palette.info.main}
+              tooltip={
+                order.electronicInvoiceNumber
+                  ? 'Actualizar Factura Electrónica'
+                  : 'Registrar Factura Electrónica'
+              }
+            />
+          )}
 
           {order.workOrders?.[0] ? (
             <ToolbarButton
@@ -1476,6 +1412,31 @@ export const OrderDetailPage: React.FC = () => {
             />
           )}
 
+          <OrderPdfButton order={order} />
+
+          <ToolbarButton
+            icon={<WhatsAppIcon />}
+            label='WhatsApp'
+            secondaryLabel='Compartir'
+            onClick={handleShareWhatsApp}
+            disabled={isGeneratingPdf}
+            color={theme.palette.success.main}
+            tooltip='Compartir por WhatsApp'
+          />
+
+          {(permissions.includes('request_advisor_change') ||
+            permissions.includes('approve_advisor_change')) && (
+            <RequestAdvisorChangeButton
+              orderId={id!}
+              currentAdvisorId={order.createdBy.id}
+              currentAdvisorName={
+                order.createdBy.firstName && order.createdBy.lastName
+                  ? `${order.createdBy.firstName} ${order.createdBy.lastName}`
+                  : order.createdBy.email
+              }
+            />
+          )}
+
           <ToolbarButton
             icon={<AccountTreeIcon />}
             label='Trazabilidad'
@@ -1489,8 +1450,7 @@ export const OrderDetailPage: React.FC = () => {
             onClick={() => navigate('/orders/new')}
             tooltip='Nueva Orden'
           />
-        </Stack>
-      </Paper>
+      </ActionToolbar>
 
       <Grid container spacing={{ xs: 2, sm: 2.5, md: 3 }} sx={{ mt: 1 }}>
         {/* Info General */}

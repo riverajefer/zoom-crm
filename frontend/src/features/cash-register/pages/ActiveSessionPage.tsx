@@ -15,7 +15,6 @@ import {
   MenuItem,
   ListItemIcon,
   ListItemText,
-  Paper,
   Stack,
   TextField,
   ToggleButton,
@@ -69,6 +68,7 @@ import InboxIcon from '@mui/icons-material/Inbox';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import { PageHeader } from '../../../components/common/PageHeader';
 import { ToolbarButton } from '../../orders/components/ToolbarButton';
+import { ActionToolbar } from '../../orders/components/ActionToolbar';
 import { exportMovementsPdf, exportMovementsExcel } from '../utils/exportMovements';
 import { generateMovementReceipt } from '../utils/generateMovementReceipt';
 import { useAuthStore } from '../../../store/authStore';
@@ -407,31 +407,7 @@ const ActiveSessionPage: React.FC = () => {
       </Card>
 
       {/* ── Toolbar de Acciones ───────────────────────────── */}
-      <Paper
-        elevation={0}
-        sx={{
-          mb: 2,
-          p: 0,
-          borderRadius: 2,
-          display: 'flex',
-          alignItems: 'stretch',
-          justifyContent: 'center',
-          background: (t) => t.palette.mode === 'dark'
-            ? 'rgba(255, 255, 255, 0.04)'
-            : 'rgba(255, 255, 255, 0.8)',
-          backdropFilter: 'blur(8px)',
-          border: (t) => `1px solid ${t.palette.mode === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}`,
-          overflowX: 'auto',
-          '&::-webkit-scrollbar': { display: 'none' },
-        }}
-      >
-        <Stack
-          direction="row"
-          spacing={0}
-          alignItems="stretch"
-          sx={{ flexWrap: 'wrap', gap: { xs: 0.5, sm: 0 } }}
-          divider={<Divider orientation="vertical" flexItem sx={{ my: 1.5, opacity: 0.5, display: { xs: 'none', sm: 'block' } }} />}
-        >
+      <ActionToolbar sx={{ mb: 2 }}>
         {/* {canCreateMovement && (
             <ToolbarButton icon={<TrendingUpIcon />} label="Ingreso" onClick={() => setDialogType('INCOME')} color={theme.palette.success.main} tooltip="Registrar Ingreso" />
           )}
@@ -450,8 +426,7 @@ const ActiveSessionPage: React.FC = () => {
           {canCloseSession && (
             <ToolbarButton icon={<LockIcon />} label="Cerrar Caja" onClick={() => navigate(PATHS.CASH_SESSION_CLOSE.replace(':id', id))} color={theme.palette.warning.main} tooltip="Cerrar Sesión de Caja" />
           )}
-        </Stack>
-      </Paper>
+      </ActionToolbar>
       <Menu
         anchorEl={exportAnchorEl}
         open={Boolean(exportAnchorEl)}

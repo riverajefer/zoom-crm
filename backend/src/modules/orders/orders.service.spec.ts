@@ -31,6 +31,13 @@ import { startOfDay, endOfDay, businessToday } from '../../common/utils/date-ran
 // test unitario no existe (docs/PLAN_SEDES.md §2).
 import { runWithAuditContext } from '../../common/utils/audit-context';
 import { getLocationScope } from '../../common/utils/location-context';
+import { reopenPaymentAccountingReview } from '../payment-verifications/payment-accounting.util';
+
+// La reapertura de la verificación contable tiene su propio spec; aquí solo
+// importa que la edición la dispare.
+jest.mock('../payment-verifications/payment-accounting.util', () => ({
+  reopenPaymentAccountingReview: jest.fn(),
+}));
 
 jest.mock('../../common/utils/location-context', () => ({
   ...jest.requireActual('../../common/utils/location-context'),
@@ -4188,6 +4195,18 @@ describe('OrdersService', () => {
         const { data } = mockPrisma.cashMovement.update.mock.calls[0][0];
         expect(data.description).toBeUndefined();
         expect(mockAuditLogsService.logUpdate).not.toHaveBeenCalled();
+      });
+
+      it('devuelve el pago editado a la bandeja de contabilidad', async () => {
+        setupEdit('OPEN');
+
+        await service.updatePayment('order-1', 'pay-1', { amount: 45000 }, 'user-1');
+
+        expect(reopenPaymentAccountingReview).toHaveBeenCalledWith(
+          expect.anything(),
+          'pay-1',
+          'user-1',
+        );
       });
 
       it('no anota nada si el monto no cambió, aunque la sesión esté cerrada', async () => {

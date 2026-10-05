@@ -221,6 +221,10 @@ export class OrdersRepository {
         bankEntity: true,
         receiptFileId: true,
         createdAt: true,
+        // Verificación contable (segunda revisión de contabilidad)
+        accountingStatus: true,
+        accountingNotes: true,
+        accountingReviewedAt: true,
         // Un pago anulado sobrevive en la lista: el Historial de Pagos lo
         // muestra marcado con su motivo en vez de dejar un hueco sin explicar.
         isVoided: true,
@@ -698,6 +702,10 @@ export class OrdersRepository {
         bankEntity: true,
         receiptFileId: true,
         createdAt: true,
+        // Verificación contable (segunda revisión de contabilidad)
+        accountingStatus: true,
+        accountingNotes: true,
+        accountingReviewedAt: true,
         // Un pago anulado sobrevive en la lista: el Historial de Pagos lo
         // muestra marcado con su motivo en vez de dejar un hueco sin explicar.
         isVoided: true,

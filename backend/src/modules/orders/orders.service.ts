@@ -15,6 +15,7 @@ import {
 import { ConsecutivesService } from '../consecutives/consecutives.service';
 import { isUniqueViolationOn } from '../../common/utils/unique-violation.util';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
+import { reopenPaymentAccountingReview } from '../payment-verifications/payment-accounting.util';
 import { StorageService } from '../storage/storage.service';
 import { OrderStatusChangeRequestsService } from '../order-status-change-requests/order-status-change-requests.service';
 import { AdvancePaymentApprovalsService } from '../advance-payment-approvals/advance-payment-approvals.service';
@@ -191,6 +192,9 @@ const PAYMENT_RESPONSE_SELECT = {
   bankEntity: true,
   receiptFileId: true,
   createdAt: true,
+  accountingStatus: true,
+  accountingNotes: true,
+  accountingReviewedAt: true,
   receivedBy: {
     select: {
       id: true,
@@ -2684,6 +2688,9 @@ export class OrdersService {
           cashMovementId: true,
         },
       });
+
+      // Lo que contabilidad revisó ya cambió: vuelve a su bandeja.
+      await reopenPaymentAccountingReview(tx, paymentId, userId);
 
       // Quien puede aprobar edita sin solicitud: se registra igual, ya aprobada,
       // con el antes y el después, para que el historial de la OP la muestre

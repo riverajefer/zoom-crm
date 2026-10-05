@@ -31,6 +31,7 @@ const mockUsersRepository = {
   delete: jest.fn(),
   setLocations: jest.fn(),
   countActiveLocations: jest.fn(),
+  roleHasPermission: jest.fn(),
 };
 
 const mockRolesRepository = {
@@ -203,6 +204,51 @@ describe('UsersService', () => {
 
       const callArg = mockUsersRepository.create.mock.calls[0][0];
       expect(callArg).toHaveProperty('cargo', { connect: { id: 'cargo-1' } });
+    });
+
+    it('no asigna sede cuando no se manda locationId', async () => {
+      await service.create(createDto, 'actor-role');
+
+      const callArg = mockUsersRepository.create.mock.calls[0][0];
+      expect(callArg).not.toHaveProperty('locations');
+      expect(callArg).not.toHaveProperty('defaultLocation');
+      expect(mockUsersRepository.roleHasPermission).not.toHaveBeenCalled();
+    });
+
+    it('deja la sede como permitida y predeterminada cuando se manda locationId', async () => {
+      mockUsersRepository.roleHasPermission.mockResolvedValue(true);
+      mockUsersRepository.countActiveLocations.mockResolvedValue(1);
+
+      await service.create({ ...createDto, locationId: 'sede-1' }, 'actor-role');
+
+      expect(mockUsersRepository.roleHasPermission).toHaveBeenCalledWith(
+        'actor-role',
+        'manage_user_locations',
+      );
+      const callArg = mockUsersRepository.create.mock.calls[0][0];
+      expect(callArg.defaultLocation).toEqual({ connect: { id: 'sede-1' } });
+      expect(callArg.locations).toEqual({
+        create: { location: { connect: { id: 'sede-1' } } },
+      });
+    });
+
+    it('rechaza la sede si quien crea no tiene manage_user_locations', async () => {
+      mockUsersRepository.roleHasPermission.mockResolvedValue(false);
+
+      await expect(
+        service.create({ ...createDto, locationId: 'sede-1' }, 'actor-role'),
+      ).rejects.toThrow(ForbiddenException);
+      expect(mockUsersRepository.create).not.toHaveBeenCalled();
+    });
+
+    it('rechaza una sede inexistente o inactiva', async () => {
+      mockUsersRepository.roleHasPermission.mockResolvedValue(true);
+      mockUsersRepository.countActiveLocations.mockResolvedValue(0);
+
+      await expect(
+        service.create({ ...createDto, locationId: 'sede-x' }, 'actor-role'),
+      ).rejects.toThrow('La sede no existe o está inactiva');
+      expect(mockUsersRepository.create).not.toHaveBeenCalled();
     });
 
     it('should throw BadRequestException when email already registered', async () => {

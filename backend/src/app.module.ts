@@ -36,6 +36,7 @@ import { AdvisorChangeRequestsModule } from './modules/advisor-change-requests/a
 import { QuoteRestoreRequestsModule } from './modules/quote-restore-requests/quote-restore-requests.module';
 import { ExpenseOrderAuthRequestsModule } from './modules/expense-order-auth-requests/expense-order-auth-requests.module';
 import { AdvancePaymentApprovalsModule } from './modules/advance-payment-approvals/advance-payment-approvals.module';
+import { PaymentVerificationsModule } from './modules/payment-verifications/payment-verifications.module';
 import { PaymentEditApprovalsModule } from './modules/payment-edit-approvals/payment-edit-approvals.module';
 import { DiscountApprovalsModule } from './modules/discount-approvals/discount-approvals.module';
 import { ClientOwnershipAuthRequestsModule } from './modules/client-ownership-auth-requests/client-ownership-auth-requests.module';
@@ -157,6 +158,7 @@ import { ClientErrorsModule } from './modules/client-errors/client-errors.module
     ExpenseOrderAuthRequestsModule,
     // Módulo de Aprobación de Anticipos
     AdvancePaymentApprovalsModule,
+    PaymentVerificationsModule,
     PaymentEditApprovalsModule,
     // Módulo de Aprobación de Descuentos
     DiscountApprovalsModule,

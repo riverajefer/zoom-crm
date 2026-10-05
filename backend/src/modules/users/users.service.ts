@@ -172,6 +172,22 @@ export class UsersService {
       }
     }
 
+    // Sede inicial (opcional): queda como la única permitida y la
+    // predeterminada; las demás se agregan en la ficha (`setLocations`). Pide
+    // el mismo permiso que esa pantalla.
+    const locationId = createUserDto.locationId;
+    if (locationId) {
+      if (
+        actorRoleId !== null &&
+        !(await this.usersRepository.roleHasPermission(actorRoleId, 'manage_user_locations'))
+      ) {
+        throw new ForbiddenException('No tienes permiso para asignar sedes a los usuarios');
+      }
+      if ((await this.usersRepository.countActiveLocations([locationId])) !== 1) {
+        throw new BadRequestException('La sede no existe o está inactiva');
+      }
+    }
+
     // Hashear el password
     const hashedPassword = await bcrypt.hash(
       createUserDto.password,
@@ -194,6 +210,10 @@ export class UsersService {
         cargo: {
           connect: { id: createUserDto.cargoId },
         },
+      }),
+      ...(locationId && {
+        defaultLocation: { connect: { id: locationId } },
+        locations: { create: { location: { connect: { id: locationId } } } },
       }),
     });
   }

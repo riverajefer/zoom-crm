@@ -63,7 +63,7 @@ const PERMISSION_GROUPS: Record<string, string[]> = {
 
   // Órdenes
   Órdenes: ['create_orders', 'read_orders', 'read_orders_dashboard', 'update_orders', 'delete_orders', 'export_orders', 'export_pending_payment_orders', 'export_profitability', 'approve_orders', 'change_order_status', 'register_order_payments', 'approve_discounts', 'apply_discounts', 'delete_discounts', 'read_pending_orders'],
-  'Pagos de Órdenes': ['edit_order_payments', 'approve_payment_edits', 'delete_payment_receipts'],
+  'Pagos de Órdenes': ['edit_order_payments', 'approve_payment_edits', 'delete_payment_receipts', 'verify_payments'],
   'Cambio de Asesor': ['request_advisor_change', 'approve_advisor_change'],
   DTF: ['create_dtf', 'read_dtf', 'update_dtf', 'export_dtf', 'change_dtf_status', 'convert_dtf_to_order'],
 

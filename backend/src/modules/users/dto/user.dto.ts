@@ -77,6 +77,15 @@ export class CreateUserDto {
   @IsUUID()
   @IsOptional()
   cargoId?: string;
+
+  @ApiPropertyOptional({
+    example: '123e4567-e89b-12d3-a456-426614174000',
+    description:
+      'Sede del usuario (opcional): queda como permitida y predeterminada. Exige manage_user_locations',
+  })
+  @IsUUID()
+  @IsOptional()
+  locationId?: string;
 }
 
 export class UpdateUserDto {

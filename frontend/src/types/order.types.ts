@@ -224,6 +224,10 @@ export interface Payment {
   bankEntity: string | null;
   receiptFileId: string | null;
   createdAt: string;
+  /** Verificación contable: segunda revisión de contabilidad (no frena la OP). */
+  accountingStatus?: 'PENDING' | 'VERIFIED' | 'OBSERVED';
+  accountingNotes?: string | null;
+  accountingReviewedAt?: string | null;
   /**
    * Un pago anulado sobrevive en el historial en vez de desaparecer: deja de
    * sumar al saldo, pero la fila sigue contando qué pasó y quién lo autorizó.

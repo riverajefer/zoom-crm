@@ -251,15 +251,20 @@ export class NotificationsService {
    * la caja del 104 recibía los anticipos del 119 (docs/PLAN_SEDES.md §5).
    * `orderId` resuelve la sede de la OP; `locationId` la da directa. Quien está
    * de apoyo en otra sede recibe los de esa sede y no los de la suya (§16).
+   *
+   * `excludeUserIds` deja por fuera a quien ya recibió el aviso por otro lado
+   * (o a quien lo causó), para no duplicarlo.
    */
   async notifyUsersWithPermission(
     permissionName: string,
     data: Omit<CreateNotificationDto, 'userId'>,
     scope?: { orderId?: string; locationId?: string },
+    excludeUserIds: string[] = [],
   ): Promise<void> {
     const locationId = await this.resolveScopeLocation(scope);
     const users = await this.prisma.user.findMany({
       where: {
+        ...(excludeUserIds.length > 0 && { id: { notIn: excludeUserIds } }),
         role: {
           permissions: {
             some: {

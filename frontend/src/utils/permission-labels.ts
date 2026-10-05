@@ -134,6 +134,7 @@ export const PERMISSION_LABELS: Record<string, string> = {
   edit_order_payments: 'Editar Pagos de Órdenes',
   approve_payment_edits: 'Aprobar Ediciones de Pagos',
   delete_payment_receipts: 'Eliminar Comprobantes de Pago',
+  verify_payments: 'Verificar Pagos (Contabilidad)',
 
   // Cambio de Asesor de Órdenes
   request_advisor_change: 'Solicitar Cambio de Asesor',

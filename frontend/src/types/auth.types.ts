@@ -76,6 +76,8 @@ export interface CreateUserDto {
   lastName?: string;
   roleId: string;
   cargoId?: string;
+  /** Sede inicial (opcional): queda como permitida y predeterminada. */
+  locationId?: string;
 }
 
 export interface UpdateUserDto {

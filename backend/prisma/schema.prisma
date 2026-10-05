@@ -40,6 +40,8 @@ model User {
   createdOrders                             Order[]
   receivedPayments                          Payment[]                              @relation("ReceivedPayments")
   voidedPayments                            Payment[]                              @relation("VoidedPayments")
+  accountingReviewedPayments                Payment[]                              @relation("AccountingReviewedPayments")
+  paymentAccountingReviews                  PaymentAccountingReview[]              @relation("PaymentAccountingReviews")
   requestedEditRequests                     OrderEditRequest[]                     @relation("RequestedEditRequests")
   reviewedEditRequests                      OrderEditRequest[]                     @relation("ReviewedEditRequests")
   requestedStatusChangeRequests             OrderStatusChangeRequest[]             @relation("RequestedStatusChangeRequests")
@@ -957,10 +959,22 @@ model Payment {
   // `paidAmount` y el arqueo de caja.
   idempotencyKey String? @unique @map("idempotency_key")
 
+  // Verificación contable (solo Zoom). Segunda revisión de contabilidad sobre
+  // un pago que Caja ya aprobó: es un control posterior, no frena la OP ni
+  // cambia el saldo. Aquí vive el estado vigente; la historia completa (una
+  // observación que luego se corrige y se verifica) está en
+  // `PaymentAccountingReview`.
+  accountingStatus       PaymentAccountingStatus @default(PENDING) @map("accounting_status")
+  accountingReviewedById String?                 @map("accounting_reviewed_by_id")
+  accountingReviewedAt   DateTime?               @map("accounting_reviewed_at")
+  accountingNotes        String?                 @map("accounting_notes")
+
   // Relaciones
   order                  Order                      @relation(fields: [orderId], references: [id], onDelete: Cascade)
   receivedBy             User                       @relation("ReceivedPayments", fields: [receivedById], references: [id])
   voidedBy               User?                      @relation("VoidedPayments", fields: [voidedById], references: [id])
+  accountingReviewedBy   User?                      @relation("AccountingReviewedPayments", fields: [accountingReviewedById], references: [id])
+  accountingReviews      PaymentAccountingReview[]
   advancePaymentApproval AdvancePaymentApproval?
   paymentEditApprovals   PaymentEditApproval[]
   cashMovement           CashMovement?              @relation(fields: [cashMovementId], references: [id])
@@ -977,7 +991,31 @@ model Payment {
   @@index([paymentDate])
   @@index([receiptFileId])
   @@index([pendingCashEntry])
+  @@index([accountingStatus])
   @@map("payments")
+}
+
+enum PaymentAccountingStatus {
+  PENDING // Aún no lo revisa contabilidad
+  VERIFIED // Contabilidad lo dio por bueno
+  OBSERVED // Contabilidad encontró algo: lleva motivo y espera corrección
+}
+
+/// Bitácora de la verificación contable de un pago: una fila por cada vez que
+/// cambia de estado, incluida la reapertura automática cuando el pago se edita.
+model PaymentAccountingReview {
+  id           String                  @id @default(uuid())
+  paymentId    String                  @map("payment_id")
+  status       PaymentAccountingStatus
+  notes        String?
+  reviewedById String                  @map("reviewed_by_id")
+  createdAt    DateTime                @default(now()) @map("created_at")
+
+  payment    Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  reviewedBy User    @relation("PaymentAccountingReviews", fields: [reviewedById], references: [id])
+
+  @@index([paymentId])
+  @@map("payment_accounting_reviews")
 }
 
 /// Consumo de saldo a favor: vincula un pago con método CREDIT_BALANCE con la(s)
@@ -1085,6 +1123,7 @@ enum NotificationType {
   PAYMENT_EDIT_APPROVAL_PENDING // Nueva solicitud de edición de pago
   PAYMENT_EDIT_APPROVAL_APPROVED // Edición de pago aprobada
   PAYMENT_EDIT_APPROVAL_REJECTED // Edición de pago rechazada
+  PAYMENT_ACCOUNTING_OBSERVED // Contabilidad observó un pago
   CASH_SESSION_CLOSED_WITH_DISCREPANCY // Sesión de caja cerrada con descuadre
   CASH_LARGE_WITHDRAWAL // Retiro grande de efectivo de caja
   CASH_VOID_REQUEST_PENDING // Nueva solicitud de anulación de movimiento de caja

@@ -109,6 +109,7 @@ import { useIsCashOpen } from '../../cash-register/hooks/useCashRegister';
 import { EditRequestsList } from '../components/EditRequestsList';
 import VoidPaymentDialog from '../components/VoidPaymentDialog';
 import { AdvancePaymentApprovalBadge } from '../components/AdvancePaymentApprovalBadge';
+import { PaymentAccountingBadge } from '../components/PaymentAccountingBadge';
 import { StatusChangeAuthRequestDialog } from '../components/StatusChangeAuthRequestDialog';
 import { AnnulOrderDialog } from '../components/AnnulOrderDialog';
 import { DirectActionReasonDialog } from '../../../components/common/DirectActionReasonDialog';
@@ -2510,6 +2511,12 @@ export const OrderDetailPage: React.FC = () => {
                                   />
                                 </Box>
                               )}
+                              <PaymentAccountingBadge
+                                payment={payment}
+                                awaitingCashApproval={pendingAdvance.pendingPaymentIds.includes(
+                                  payment.id,
+                                )}
+                              />
                             </TableCell>
                             <TableCell sx={{ maxWidth: 160 }}>
                               <TruncatedText

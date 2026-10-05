@@ -16,6 +16,12 @@ import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { NotFoundException, ForbiddenException } from '@nestjs/common';
 import { EditRequestStatus, Prisma } from '../../generated/prisma';
 
+// La reapertura de la verificación contable tiene su propio spec; aquí solo
+// importa que la edición la dispare.
+jest.mock('../payment-verifications/payment-accounting.util', () => ({
+  reopenPaymentAccountingReview: jest.fn(),
+}));
+
 describe('PaymentEditApprovalsService', () => {
   let service: PaymentEditApprovalsService;
   let prisma: any;

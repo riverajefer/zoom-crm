@@ -259,6 +259,13 @@ export class UsersRepository {
   /**
    * Actualiza un usuario
    */
+  async roleHasPermission(roleId: string, permissionName: string): Promise<boolean> {
+    const count = await this.prisma.rolePermission.count({
+      where: { roleId, permission: { name: permissionName } },
+    });
+    return count > 0;
+  }
+
   async countActiveLocations(ids: string[]): Promise<number> {
     return this.prisma.location.count({ where: { id: { in: ids }, isActive: true } });
   }

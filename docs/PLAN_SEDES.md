@@ -294,6 +294,7 @@ Estamos en fase de pruebas, así que estos usuarios son inventados y solo se cre
 | `caja.104` | `caja` | 104 | 104 | caja propia, rechazo de abono cruzado |
 | `caja.119` | `caja` | 119 | 119 | |
 | `caja.125` | `caja` | 125 | 125 | |
+| `asesorcaja.125` | `asesor_caja` | 125 | 125 | vende, cobra y aprueba en su propia caja; lo revisa contabilidad (verificación de pagos) |
 | `produccion.119` | `user` | 119 | 119 | OT/OPROD y consumo de insumos por sede |
 
 Cada uno queda también como `Employee` de su sede predeterminada (menos `adminsistema` y `admin.zoom`).

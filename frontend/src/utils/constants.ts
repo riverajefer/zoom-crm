@@ -221,6 +221,8 @@ export const PERMISSIONS = {
   READ_ALL_CASH_SESSIONS: 'read_all_cash_sessions',
   PERFORM_GENERAL_CLOSING: 'perform_general_closing',
   AUTHORIZE_LOCATION_SUPPORT: 'authorize_location_support',
+  // Verificación contable de pagos (solo Zoom)
+  VERIFY_PAYMENTS: 'verify_payments',
   MANAGE_LOCATIONS: 'manage_locations',
 };
 
@@ -355,6 +357,7 @@ export const ROUTES = {
   CASH_SESSION_CLOSE: '/cash-register/session/:id/close',
   CASH_SESSION_HISTORY: '/cash-register/history',
   CASH_SESSION_HISTORY_DETAIL: '/cash-register/history/:id',
+  PAYMENT_VERIFICATIONS: '/verificacion-pagos',
   // Cuentas por Pagar
   ACCOUNTS_PAYABLE: '/accounts-payable',
   ACCOUNTS_PAYABLE_NEW: '/accounts-payable/new',

@@ -20,6 +20,7 @@ import DashboardIcon from '@mui/icons-material/Dashboard';
 import InsightsIcon from '@mui/icons-material/Insights';
 import SecurityIcon from '@mui/icons-material/Security';
 import VerifiedUserIcon from '@mui/icons-material/VerifiedUser';
+import FactCheckIcon from '@mui/icons-material/FactCheck';
 import HistoryIcon from '@mui/icons-material/History';
 import LoginIcon from '@mui/icons-material/Login';
 import WorkIcon from '@mui/icons-material/Work';
@@ -490,11 +491,18 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose, collapsed = fal
           path: ROUTES.CASH_REGISTERS,
           permission: PERMISSIONS.READ_CASH_REGISTERS,
         },
+        {
+          label: 'Verificación de Pagos',
+          icon: <FactCheckIcon />,
+          path: ROUTES.PAYMENT_VERIFICATIONS,
+          permission: PERMISSIONS.VERIFY_PAYMENTS,
+        },
       ],
       permissions: [
         PERMISSIONS.OPEN_CASH_SESSION,
         PERMISSIONS.READ_CASH_SESSIONS,
         PERMISSIONS.READ_CASH_REGISTERS,
+        PERMISSIONS.VERIFY_PAYMENTS,
       ],
     },
     {

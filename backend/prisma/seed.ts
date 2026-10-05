@@ -575,6 +575,16 @@ async function main() {
   });
   console.log(`  ✓ Role: caja`);
 
+  const asesorCajaRole = await prisma.role.upsert({
+    where: { name: 'asesor_caja' },
+    update: {},
+    create: {
+      name: 'asesor_caja',
+      description: 'Asesor y caja de un local: vende, cobra y maneja la caja de su sede',
+    },
+  });
+  console.log(`  ✓ Role: asesor_caja`);
+
   // ============================================
   // 3. Asignar Permisos a Roles
   // ============================================
@@ -631,6 +641,10 @@ async function main() {
     'view_all_locations',
     'read_all_cash_sessions',
     'perform_general_closing',
+    // Segunda revisión de los pagos que cada sede registra y aprueba en su caja
+    'verify_payments',
+    'read_orders',
+    'read_files',
     'read_users',
     'read_suppliers',
     'read_cash_registers',
@@ -654,52 +668,97 @@ async function main() {
     'read_comments',
   ]);
 
-  // Asesor - vende en su local y consulta lo de otras sedes (docs/PLAN_SEDES.md §8)
-  await assignPermissionsToRole(asesorRole.id, 'asesor', [
-    'read_users',
-    'use_attendance',
-    'create_comments',
-    'read_comments',
-    'upload_files',
-    'read_files',
-    'browse_clients',
-    'search_clients',
-    'read_clients',
-    'create_clients',
-    'update_clients',
-    'request_client_advisor',
-    'create_prospects',
-    'read_prospects',
-    'update_prospects',
-    'convert_prospects',
-    'create_quotes',
-    'read_quotes',
-    'update_quotes',
-    'convert_quotes',
-    'request_quote_restore',
-    'create_orders',
-    'read_orders',
-    'update_orders',
-    'change_order_status',
-    'register_order_payments',
+  // Asesor - copia del rol "Comercial" de producción de High (2026-10-01), más
+  // `read_other_locations` para el modo consulta de otras sedes (docs/PLAN_SEDES.md §8).
+  // `read_areas` de High no se trae: no existe en el catálogo de Zoom.
+  const ASESOR_PERMISSIONS = [
     'apply_discounts',
-    'request_payment_void',
-    'create_refund_requests',
-    'request_advisor_change',
-    'read_pending_orders',
-    'read_orders_dashboard',
-    'create_work_orders',
-    'read_work_orders',
-    'update_work_orders',
-    'create_dtf',
-    'read_dtf',
-    'update_dtf',
+    'change_dtf_status',
+    'change_order_status',
     'convert_dtf_to_order',
-    'read_products',
+    'convert_prospects',
+    'convert_quotes',
+    'create_accounts_payable',
+    'create_clients',
+    'create_comments',
+    'create_dtf',
+    'create_expense_orders',
+    'create_expense_types',
+    'create_inventory_movements',
+    'create_orders',
+    'create_product_categories',
+    'create_product_templates',
+    'create_production_orders',
+    'create_products',
+    'create_prospects',
+    'create_quotes',
+    'create_refund_requests',
+    'create_step_definitions',
+    'create_suppliers',
+    'create_supplies',
+    'create_supply_categories',
+    'create_units_of_measure',
+    'create_work_orders',
+    'edit_order_payments',
+    'manage_quote_columns',
+    'read_accounts_payable',
+    'read_all_quotes',
+    'read_cargos',
+    'read_clients',
+    'read_comments',
     'read_commercial_channels',
+    'read_dtf',
+    'read_expense_orders',
+    'read_expense_types',
+    'read_files',
+    'read_inventory_movements',
+    'read_orders',
+    'read_orders_dashboard',
+    'read_pending_orders',
+    'read_product_categories',
+    'read_product_templates',
     'read_production_areas',
+    'read_production_orders',
+    'read_products',
+    'read_prospect_metrics',
+    'read_prospects',
+    'read_quotes',
+    'read_step_definitions',
+    'read_suppliers',
+    'read_supplies',
+    'read_supply_categories',
+    'read_units_of_measure',
+    'read_users',
+    'read_work_orders',
+    'register_ap_payment',
+    'register_order_payments',
+    'request_advisor_change',
+    'request_client_advisor',
+    'request_payment_void',
+    'request_quote_restore',
+    'search_clients',
+    'update_accounts_payable',
+    'update_clients',
+    'update_dtf',
+    'update_expense_orders',
+    'update_expense_types',
+    'update_orders',
+    'update_product_categories',
+    'update_product_templates',
+    'update_production_orders',
+    'update_products',
+    'update_prospects',
+    'update_quotes',
+    'update_step_definitions',
+    'update_supplies',
+    'update_supply_categories',
+    'update_units_of_measure',
+    'update_work_orders',
+    'upload_files',
+    'use_attendance',
     'read_other_locations',
-  ]);
+  ];
+  await assignPermissionsToRole(asesorRole.id, 'asesor', ASESOR_PERMISSIONS);
 
   // Producción - OT, órdenes de producción e insumos de su local
   await assignPermissionsToRole(produccionRole.id, 'produccion', [
@@ -822,47 +881,106 @@ async function main() {
     'read_comments',
   ]);
 
-  // Caja - gestión de pagos y anticipos
-  await assignPermissionsToRole(cajaRole.id, 'caja', [
+  // Caja - copia del rol "caja" de producción de High (2026-10-01), más
+  // `read_other_locations` para el modo consulta de otras sedes (docs/PLAN_SEDES.md §8).
+  // `read_areas` de High no se trae: no existe en el catálogo de Zoom.
+  const CAJA_PERMISSIONS = [
     'approve_advance_payments',
-    'approve_payment_edits',
-    'edit_order_payments',
-    'delete_payment_receipts',
-    'approve_refunds',
-    'execute_refunds',
-    'read_orders',
-    'read_other_locations',
-    'read_clients',
-    'read_users',
-    'read_roles',
-    'read_products',
-    'read_production_areas',
-    'read_commercial_channels',
-    'read_pending_orders',
-    // Attendance (Caja)
-    'use_attendance',
-    // Comments (Caja)
-    'create_comments',
-    'read_comments',
-    // Cash Register (Caja)
-    'read_cash_registers',
-    'open_cash_session',
-    'close_cash_session',
-    'read_cash_sessions',
-    'create_cash_movements',
-    'void_cash_movements',
-    'request_payment_void',
     'approve_cash_movements',
-    'read_cash_movements',
-    // Expense Orders (Caja — segunda firma financiera)
-    'read_expense_orders',
     'approve_expense_orders',
-    'caja_authorize_expense_orders',
-    // Cuentas por Pagar (Caja — segunda firma de pago y reversión)
-    'read_accounts_payable',
+    'approve_payment_edits',
     'caja_authorize_ap_payment',
-    'request_ap_payment_reversal',
+    'caja_authorize_expense_orders',
     'caja_confirm_ap_payment_reversal',
+    'close_cash_session',
+    'create_accounts_payable',
+    'create_cash_movements',
+    'create_clients',
+    'create_comments',
+    'create_commercial_channels',
+    'create_expense_orders',
+    'create_expense_types',
+    'create_inventory_movements',
+    'create_orders',
+    'create_product_categories',
+    'create_product_templates',
+    'create_production_areas',
+    'create_production_orders',
+    'create_products',
+    'create_quotes',
+    'create_refund_requests',
+    'create_step_definitions',
+    'create_suppliers',
+    'create_supplies',
+    'create_supply_categories',
+    'create_units_of_measure',
+    'create_work_orders',
+    'edit_order_payments',
+    'open_cash_session',
+    'read_accounts_payable',
+    'read_cargos',
+    'read_cash_movements',
+    'read_cash_registers',
+    'read_cash_sessions',
+    'read_clients',
+    'read_comments',
+    'read_commercial_channels',
+    'read_dtf',
+    'read_expense_orders',
+    'read_expense_types',
+    'read_files',
+    'read_inventory_movements',
+    'read_orders',
+    'read_orders_dashboard',
+    'read_pending_orders',
+    'read_product_categories',
+    'read_product_templates',
+    'read_production_areas',
+    'read_production_orders',
+    'read_products',
+    'read_quotes',
+    'read_roles',
+    'read_step_definitions',
+    'read_suppliers',
+    'read_supplies',
+    'read_supply_categories',
+    'read_units_of_measure',
+    'read_users',
+    'read_work_orders',
+    'register_ap_payment',
+    'register_order_payments',
+    'request_ap_payment_reversal',
+    'request_client_advisor',
+    'request_payment_void',
+    'request_quote_restore',
+    'search_clients',
+    'update_accounts_payable',
+    'update_clients',
+    'update_commercial_channels',
+    'update_expense_orders',
+    'update_expense_types',
+    'update_orders',
+    'update_product_categories',
+    'update_product_templates',
+    'update_production_areas',
+    'update_products',
+    'update_suppliers',
+    'update_supplies',
+    'update_supply_categories',
+    'update_units_of_measure',
+    'update_work_orders',
+    'upload_files',
+    'use_attendance',
+    'void_cash_movements',
+    'read_other_locations',
+  ];
+  await assignPermissionsToRole(cajaRole.id, 'caja', CAJA_PERMISSIONS);
+
+  // Asesor y caja a la vez: en los locales con poco personal la misma persona
+  // vende y maneja la caja. Es la unión de los dos roles; lo que registra lo
+  // revisa después contabilidad (`verify_payments`).
+  await assignPermissionsToRole(asesorCajaRole.id, 'asesor_caja', [
+    ...new Set([...ASESOR_PERMISSIONS, ...CAJA_PERMISSIONS]),
   ]);
 
   // ============================================
@@ -938,6 +1056,7 @@ async function main() {
       { username: 'caja.104', firstName: 'Caja', lastName: '104', roleId: cajaRole.id, sedes: ['104'], defaultSede: '104' },
       { username: 'caja.119', firstName: 'Caja', lastName: '119', roleId: cajaRole.id, sedes: ['119'], defaultSede: '119' },
       { username: 'caja.125', firstName: 'Caja', lastName: '125', roleId: cajaRole.id, sedes: ['125'], defaultSede: '125' },
+      { username: 'asesorcaja.125', firstName: 'Asesor Caja', lastName: '125', roleId: asesorCajaRole.id, sedes: ['125'], defaultSede: '125' },
       { username: 'produccion.119', firstName: 'Producción', lastName: '119', roleId: produccionRole.id, sedes: ['119'], defaultSede: '119' },
     ];
 
@@ -3379,7 +3498,7 @@ async function main() {
     console.log(`   Admin:   adminsistema / ${process.env.SEED_ADMIN_PASSWORD ?? 'admin123'}`);
     console.log('   Manager: managersistema / manager123');
     console.log('   User:    usuariosistema / user123');
-    console.log('   Sedes:   admin.zoom, contabilidad.lina, asesor.104/119/125/apoyo, caja.104/119/125, produccion.119 / zoom123');
+    console.log('   Sedes:   admin.zoom, contabilidad.lina, asesor.104/119/125/apoyo, caja.104/119/125, asesorcaja.125, produccion.119 / zoom123');
   } else {
     console.log('\n🔐 Usuario administrador: adminsistema');
     console.log('   Contraseña: la de SEED_ADMIN_PASSWORD. Cámbiala al primer ingreso.');

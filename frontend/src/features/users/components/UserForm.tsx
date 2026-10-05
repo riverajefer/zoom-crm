@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Box, Card, CardContent, TextField, Button, Grid, Alert, Autocomplete, FormControlLabel, Switch, Typography, InputAdornment, IconButton } from '@mui/material';
+import { Box, Card, CardContent, TextField, Button, Grid, Alert, Autocomplete, FormControlLabel, Switch, Typography, InputAdornment, IconButton, MenuItem } from '@mui/material';
 import Visibility from '@mui/icons-material/Visibility';
 import VisibilityOff from '@mui/icons-material/VisibilityOff';
 import { useForm, Controller } from 'react-hook-form';
@@ -9,6 +9,9 @@ import { useQuery } from '@tanstack/react-query';
 import { CreateUserDto, UpdateUserDto } from '../../../types';
 import { rolesApi, cargosApi } from '../../../api';
 import { Role, Cargo } from '../../../types';
+import { useAuthStore } from '../../../store/authStore';
+import { PERMISSIONS } from '../../../utils/constants';
+import { useActiveSedes } from '../../sedes/hooks/useSedes';
 
 // Schema base del formulario
 const userFormSchema = z.object({
@@ -21,6 +24,7 @@ const userFormSchema = z.object({
   confirmPassword: z.string().optional(),
   roleId: z.string().min(1, 'El rol es requerido'),
   cargoId: z.string().optional().nullable(),
+  locationId: z.string().optional(),
   isActive: z.boolean().optional(),
 });
 
@@ -88,6 +92,12 @@ export const UserForm: React.FC<UserFormProps> = ({
     queryFn: () => cargosApi.getAll(),
   });
 
+  // La sede solo se elige al crear y con el mismo permiso que pide la ficha;
+  // las demás sedes se agregan después desde allí.
+  const canAssignSede = useAuthStore((s) => s.hasPermission(PERMISSIONS.MANAGE_USER_LOCATIONS));
+  const showSede = !isEdit && canAssignSede;
+  const { data: sedes = [] } = useActiveSedes({ enabled: showSede });
+
   const handleFormSubmit = async (data: UserFormData) => {
     const hasPassword = Boolean(data.password && data.password.trim() !== '');
 
@@ -150,13 +160,14 @@ export const UserForm: React.FC<UserFormProps> = ({
     }
 
     // Eliminar confirmPassword y transformar cargoId/email/phone vacío a undefined
-    const { confirmPassword, cargoId, email, username, phone, isActive, ...rest } = data;
+    const { confirmPassword, cargoId, email, username, phone, isActive, locationId, ...rest } = data;
     const submitData = {
       ...rest,
       username: username || undefined,
       email: email || undefined,
       phone: phone,
       cargoId: cargoId || undefined,
+      ...(showSede && locationId ? { locationId } : {}),
       // En modo edit, solo enviar password si se ingresó uno nuevo
       ...(isEdit && !hasPassword ? { password: undefined } : {}),
       // isActive solo en modo edición
@@ -382,6 +393,31 @@ export const UserForm: React.FC<UserFormProps> = ({
               />
             )}
           />
+
+          {showSede && (
+            <Controller
+              name="locationId"
+              control={control}
+              render={({ field }) => (
+                <TextField
+                  {...field}
+                  value={field.value ?? ''}
+                  label="Sede (opcional)"
+                  select
+                  fullWidth
+                  disabled={isLoading}
+                  helperText="Queda como su sede predeterminada. Puedes agregar más desde la ficha del usuario."
+                >
+                  <MenuItem value="">Sin sede</MenuItem>
+                  {sedes.map((sede) => (
+                    <MenuItem key={sede.id} value={sede.id}>
+                      {sede.name}
+                    </MenuItem>
+                  ))}
+                </TextField>
+              )}
+            />
+          )}
 
           {isEdit && (
             <Controller

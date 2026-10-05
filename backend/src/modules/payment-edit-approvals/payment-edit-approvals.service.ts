@@ -35,6 +35,7 @@ import { CreditBalanceService } from '../credit-balance/credit-balance.service';
 import { lockOrderForUpdate } from '../../common/utils/order-lock.util';
 import { ConsecutivesService } from '../consecutives/consecutives.service';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
+import { reopenPaymentAccountingReview } from '../payment-verifications/payment-accounting.util';
 import {
   reportMovementEditedAfterClose,
   syncPaymentCashMovement,
@@ -439,6 +440,9 @@ export class PaymentEditApprovalsService
           cashMovementId: true,
         },
       });
+
+      // Lo que contabilidad revisó ya cambió: vuelve a su bandeja.
+      await reopenPaymentAccountingReview(tx, request.paymentId, reviewerId);
 
       // 3. Dejar el movimiento de caja coherente con el pago (anularlo si
       // dejó de ser dinero, ajustarlo, o crearlo si ahora sí lo es). Mismo

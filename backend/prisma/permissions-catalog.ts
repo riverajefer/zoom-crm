@@ -130,6 +130,11 @@ export const permissionGroups: PermissionGroup[] = [
         name: 'delete_payment_receipts',
         description: 'Eliminar el comprobante de un pago en una orden',
       },
+      {
+        name: 'verify_payments',
+        description:
+          'Verificar u observar los pagos de órdenes de todas las sedes (segunda revisión de contabilidad)',
+      },
     ],
   },
   {

@@ -60,6 +60,7 @@ git cherry-pick <sha>
 - **El rol admin debe llamarse exactamente `admin`**: se busca por nombre en 24 archivos.
 - **Rol `soporte` y permisos reservados** (solo Zoom, `backend/src/common/constants/roles.constants.ts`): `soporte` tiene todo lo del admin más los reservados (`manage_locations`), está por encima de él en `RolePrivilegeService` y no se muestra a nadie más: ni el rol, ni sus usuarios, ni los permisos reservados. Nadie otorga un reservado por la API; solo el seed y `prisma:sync:permissions` se los dan a `soporte`.
 - **El ambiente de Railway debe llamarse literalmente `staging`**: `backend/railway.toml` usa `[environments.staging.deploy]`. Con otro nombre el backend arranca como producción.
+- **Rol `asesor_caja`** (solo Zoom): la unión de `asesor` y `caja`, para los locales donde una misma persona vende y maneja la caja. Un usuario tiene un solo rol: si cambias los permisos de `asesor` o `caja`, revisa también este.
 - **Una sola réplica del backend**: 9 crons se duplicarían y socket.io no tiene adapter compartido.
 - **Las variables `AWS_*` (S3) son obligatorias para arrancar**: `StorageS3Service` lanza en el constructor si falta alguna. WhatsApp, en cambio, degrada con un warning.
 - **No correr `npm audit fix` en el backend**: deja dos copias de `cron` y Prisma inconsistente.
@@ -72,6 +73,10 @@ Es por **username, no por email**: el usuario inicial es `adminsistema`, con la 
 ### Sedes
 
 Locales 104, 119, 125 y la Matriz (`Location`, módulo `/sedes`; `/locations` ya es el de departamentos y ciudades). La sede activa viaja en el header `X-Location-Id` (o `all` para "Todas") y la resuelve `LocationContextInterceptor`, que la deja en el contexto del request (`getRequestLocation()`). Un header no permitido es 403 con código `LOCATION_NOT_ALLOWED`. Plan y decisiones: [docs/PLAN_SEDES.md](./docs/PLAN_SEDES.md).
+
+### Verificación contable de pagos
+
+Segunda revisión de contabilidad (`verify_payments`, módulo `payment-verifications`, página `/verificacion-pagos`) sobre los abonos a OP que Caja ya aprobó. Es un **control posterior**: `Payment.accountingStatus` (`PENDING` / `VERIFIED` / `OBSERVED`) no frena la OP ni entra en ningún cálculo de saldo. Un pago observado se corrige con los flujos de siempre (editar o anular). **Todo código que aplique una edición a un pago llama `reopenPaymentAccountingReview(tx, paymentId, userId)`** dentro de su transacción, para que el pago vuelva a la bandeja. La bandeja se filtra con `queueLocationFilter()`: quien tiene `view_all_locations` ve los pagos de todas las sedes.
 
 ### Pendientes conocidos
 
@@ -910,7 +915,7 @@ El seed crea **un** usuario en todos los ambientes:
 |----------|----------|-----|
 | `adminsistema` | la de `SEED_ADMIN_PASSWORD` | `soporte` (todos los permisos, reservados incluidos) |
 
-Con `SEED_DEMO=true` crea además los usuarios de prueba por sede de [docs/PLAN_SEDES.md §11](./docs/PLAN_SEDES.md#11-usuarios-de-prueba-staging) (`admin.zoom`, `asesor.104`, `asesor.apoyo`, `caja.119`…), con contraseña `zoom123`.
+Con `SEED_DEMO=true` crea además los usuarios de prueba por sede de [docs/PLAN_SEDES.md §11](./docs/PLAN_SEDES.md#11-usuarios-de-prueba-staging) (`admin.zoom`, `asesor.104`, `asesor.apoyo`, `caja.119`, `asesorcaja.125`…), con contraseña `zoom123`.
 
 - El login es por **username**; mandar el email da 401.
 - En producción `SEED_ADMIN_PASSWORD` es obligatoria: el seed se niega a correr sin ella. Fuera de producción, si falta, cae en `admin123`.
@@ -997,6 +1002,6 @@ Para preguntas o problemas:
 
 ---
 
-**Última actualización**: 2026-09-22 (adaptado a Zoom desde la guía de High Solutions)
+**Última actualización**: 2026-10-05 (adaptado a Zoom desde la guía de High Solutions)
 
 **Mantenedor**: Jefferson Rivera

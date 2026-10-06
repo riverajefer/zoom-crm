@@ -225,6 +225,15 @@ describe('WorkOrdersService', () => {
       await expect(service.create(createDto as any, 'user-1')).resolves.toBeDefined();
     });
 
+    it('should allow creation when order is in DELIVERED status', async () => {
+      (prisma.order.findUnique as jest.Mock).mockResolvedValue({
+        ...mockOrder,
+        status: 'DELIVERED',
+      });
+
+      await expect(service.create(createDto as any, 'user-1')).resolves.toBeDefined();
+    });
+
     it('should throw BadRequestException when order already has an active work order', async () => {
       (prisma.workOrder.findFirst as jest.Mock).mockResolvedValue({
         workOrderNumber: 'OT-2026-000',

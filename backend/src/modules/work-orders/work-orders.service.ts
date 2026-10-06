@@ -69,10 +69,12 @@ export class WorkOrdersService {
       throw new NotFoundException(`Orden con id ${dto.orderId} no encontrada`);
     }
 
-    const allowedOrderStatuses = ['CONFIRMED', 'IN_PRODUCTION', 'READY'];
+    // DELIVERED entra porque en la práctica la OP se marca entregada antes de
+    // que alguien registre la OT: sin esto el trabajo queda sin su orden.
+    const allowedOrderStatuses = ['CONFIRMED', 'IN_PRODUCTION', 'READY', 'DELIVERED'];
     if (!allowedOrderStatuses.includes(order.status)) {
       throw new BadRequestException(
-        `Solo se pueden crear OTs para órdenes en estado CONFIRMED, IN_PRODUCTION o READY. Estado actual: ${order.status}`,
+        `Solo se pueden crear OTs para órdenes en estado CONFIRMED, IN_PRODUCTION, READY o DELIVERED. Estado actual: ${order.status}`,
       );
     }
 

@@ -18,6 +18,15 @@ export type OrderStatus =
   | 'RETURNED'
   | 'ANULADO';
 
+// Estados de la OP desde los que se puede crear su OT. El backend valida la
+// misma lista en WorkOrdersService.create: si cambia una, cambia la otra.
+export const WORK_ORDER_CREATABLE_ORDER_STATUSES: OrderStatus[] = [
+  'CONFIRMED',
+  'IN_PRODUCTION',
+  'READY',
+  'DELIVERED',
+];
+
 /**
  * Métodos con los que se puede registrar un pago de una OP.
  *

@@ -44,6 +44,7 @@ import { ROUTES, PERMISSIONS } from '../../../utils/constants';
 import { storageApi } from '../../../api/storage.api';
 import { CreateSupplyModal } from '../components/CreateSupplyModal';
 import type { Order } from '../../../types/order.types';
+import { WORK_ORDER_CREATABLE_ORDER_STATUSES } from '../../../types/order.types';
 import { LoadingButton } from '../../../components/common/LoadingButton';
 import type {
   CreateWorkOrderDto,
@@ -276,7 +277,7 @@ export const WorkOrderFormPage = () => {
   const { suppliesQuery } = useSupplies();
 
   const availableOrders = (ordersQuery.data?.data ?? []).filter((o: Order) =>
-    ['CONFIRMED', 'IN_PRODUCTION', 'READY'].includes(o.status),
+    WORK_ORDER_CREATABLE_ORDER_STATUSES.includes(o.status),
   );
   const availableUsers = (usersQuery.data as { id: string; firstName?: string | null; lastName?: string | null; email: string }[]) ?? [];
   const productionAreas = (productionAreasQuery.data as { id: string; name: string }[]) ?? [];
@@ -595,7 +596,8 @@ export const WorkOrderFormPage = () => {
       </Typography>
       <Typography variant="body2" color="text.secondary">
         Busca y selecciona la orden de pedido base para la OT. Solo órdenes en estado{' '}
-        <strong>CONFIRMADA</strong>, <strong>EN PRODUCCIÓN</strong> o <strong>LISTA</strong>.
+        <strong>CONFIRMADA</strong>, <strong>EN PRODUCCIÓN</strong>, <strong>LISTA</strong> o{' '}
+        <strong>ENTREGADA</strong>.
       </Typography>
 
       {isEdit ? (

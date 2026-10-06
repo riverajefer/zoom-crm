@@ -138,6 +138,7 @@ import {
   ORDER_STATUS_CONFIG,
   PAYMENT_METHOD_LABELS,
   ALLOWED_TRANSITIONS,
+  WORK_ORDER_CREATABLE_ORDER_STATUSES,
 } from '../../../types/order.types';
 import { CommentSection } from '../../comments';
 import { BankSelector } from '../../../components/common/BankSelector';
@@ -1380,7 +1381,7 @@ export const OrderDetailPage: React.FC = () => {
               color={theme.palette.info.main}
               tooltip={`Ver Orden de Trabajo ${order.workOrders[0].workOrderNumber}`}
             />
-          ) : ['CONFIRMED', 'IN_PRODUCTION', 'READY'].includes(order.status) &&
+          ) : WORK_ORDER_CREATABLE_ORDER_STATUSES.includes(order.status) &&
             permissions.includes('create_work_orders') ? (
             <ToolbarButton
               icon={<BuildIcon />}
@@ -1963,7 +1964,7 @@ export const OrderDetailPage: React.FC = () => {
                                       <Typography variant='caption' color='text.disabled' sx={{ fontSize: '0.7rem' }}>
                                         Sin OT
                                       </Typography>
-                                      {['CONFIRMED', 'IN_PRODUCTION', 'READY'].includes(
+                                      {WORK_ORDER_CREATABLE_ORDER_STATUSES.includes(
                                         order.status,
                                       ) &&
                                         permissions.includes('create_work_orders') && (

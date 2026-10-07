@@ -29,7 +29,14 @@ import {
 const ALLOWED_TRANSITIONS: Record<WorkOrderStatus, WorkOrderStatus[]> = {
   [WorkOrderStatus.DRAFT]: [WorkOrderStatus.CONFIRMED, WorkOrderStatus.CANCELLED],
   [WorkOrderStatus.CONFIRMED]: [WorkOrderStatus.IN_PRODUCTION, WorkOrderStatus.CANCELLED],
-  [WorkOrderStatus.IN_PRODUCTION]: [WorkOrderStatus.COMPLETED, WorkOrderStatus.CANCELLED],
+  // «Lista para entrega» es un paso opcional: una OT puede completarse directo
+  // desde producción, como se hacía antes de que existiera el estado.
+  [WorkOrderStatus.IN_PRODUCTION]: [
+    WorkOrderStatus.READY,
+    WorkOrderStatus.COMPLETED,
+    WorkOrderStatus.CANCELLED,
+  ],
+  [WorkOrderStatus.READY]: [WorkOrderStatus.COMPLETED, WorkOrderStatus.CANCELLED],
   [WorkOrderStatus.COMPLETED]: [],
   [WorkOrderStatus.CANCELLED]: [],
 };

@@ -66,6 +66,7 @@ const STATUS_OPTIONS: { value: WorkOrderStatus | ''; label: string }[] = [
   { value: WorkOrderStatus.DRAFT, label: 'Borrador' },
   { value: WorkOrderStatus.CONFIRMED, label: 'Confirmada' },
   { value: WorkOrderStatus.IN_PRODUCTION, label: 'En Producción' },
+  { value: WorkOrderStatus.READY, label: 'Lista para entrega' },
   { value: WorkOrderStatus.COMPLETED, label: 'Completada' },
   { value: WorkOrderStatus.CANCELLED, label: 'Cancelada' },
 ];

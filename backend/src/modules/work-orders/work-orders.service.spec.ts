@@ -463,6 +463,46 @@ describe('WorkOrdersService', () => {
       );
     });
 
+    it('pasa de En producción a Lista para entrega', async () => {
+      (mockWorkOrdersRepository.findById as jest.Mock).mockResolvedValue({
+        ...mockWorkOrder,
+        status: WorkOrderStatus.IN_PRODUCTION,
+      });
+      (mockWorkOrdersRepository.updateStatus as jest.Mock).mockResolvedValue({
+        ...mockWorkOrder,
+        status: WorkOrderStatus.READY,
+      });
+
+      await service.updateStatus('wo-1', { status: WorkOrderStatus.READY });
+
+      expect(mockWorkOrdersRepository.updateStatus).toHaveBeenCalledWith(
+        'wo-1',
+        WorkOrderStatus.READY,
+      );
+    });
+
+    it('no deja volver de Lista para entrega a En producción', async () => {
+      (mockWorkOrdersRepository.findById as jest.Mock).mockResolvedValue({
+        ...mockWorkOrder,
+        status: WorkOrderStatus.READY,
+      });
+
+      await expect(
+        service.updateStatus('wo-1', { status: WorkOrderStatus.IN_PRODUCTION }),
+      ).rejects.toThrow('No se puede cambiar el estado');
+    });
+
+    it('no deja editar una OT Lista para entrega', async () => {
+      (mockWorkOrdersRepository.findById as jest.Mock).mockResolvedValue({
+        ...mockWorkOrder,
+        status: WorkOrderStatus.READY,
+      });
+
+      await expect(
+        service.update('wo-1', { observations: 'x' } as any),
+      ).rejects.toThrow();
+    });
+
     it('should transition IN_PRODUCTION → COMPLETED successfully', async () => {
       (mockWorkOrdersRepository.findById as jest.Mock).mockResolvedValue({
         ...mockWorkOrder,

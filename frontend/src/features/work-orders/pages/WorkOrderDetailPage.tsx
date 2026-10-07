@@ -102,7 +102,12 @@ const toIsoOrUndefined = (value: string): string | undefined => {
 const STATUS_TRANSITIONS: Record<WorkOrderStatus, WorkOrderStatus[]> = {
   [WorkOrderStatus.DRAFT]: [WorkOrderStatus.CONFIRMED, WorkOrderStatus.CANCELLED],
   [WorkOrderStatus.CONFIRMED]: [WorkOrderStatus.IN_PRODUCTION, WorkOrderStatus.CANCELLED],
-  [WorkOrderStatus.IN_PRODUCTION]: [WorkOrderStatus.COMPLETED, WorkOrderStatus.CANCELLED],
+  [WorkOrderStatus.IN_PRODUCTION]: [
+    WorkOrderStatus.READY,
+    WorkOrderStatus.COMPLETED,
+    WorkOrderStatus.CANCELLED,
+  ],
+  [WorkOrderStatus.READY]: [WorkOrderStatus.COMPLETED, WorkOrderStatus.CANCELLED],
   [WorkOrderStatus.COMPLETED]: [],
   [WorkOrderStatus.CANCELLED]: [],
 };
@@ -848,11 +853,27 @@ export const WorkOrderDetailPage = () => {
             fullWidth
             sx={{ mt: 2 }}
           >
-            {allowedTransitions.map((s) => (
-              <MenuItem key={s} value={s}>
-                {WORK_ORDER_STATUS_CONFIG[s]?.label ?? s}
-              </MenuItem>
-            ))}
+            {/* Se listan todos los estados para que se vea el flujo completo;
+                solo se habilitan los que admite el estado actual. */}
+            {(Object.keys(WORK_ORDER_STATUS_CONFIG) as WorkOrderStatus[]).map((s) => {
+              const config = WORK_ORDER_STATUS_CONFIG[s];
+              const isCurrent = s === currentStatus;
+              const isAllowed = allowedTransitions.includes(s);
+              return (
+                <MenuItem key={s} value={s} disabled={!isAllowed}>
+                  <Chip
+                    label={config.label}
+                    color={isCurrent || isAllowed ? config.color : 'default'}
+                    size="small"
+                    variant={isAllowed ? 'outlined' : 'filled'}
+                    sx={{
+                      ...(!isAllowed && !isCurrent && { opacity: 0.4 }),
+                      ...(isCurrent && { fontWeight: 'bold', border: '2px solid' }),
+                    }}
+                  />
+                </MenuItem>
+              );
+            })}
           </TextField>
         </DialogContent>
         <DialogActions>

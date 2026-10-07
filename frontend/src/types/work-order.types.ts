@@ -4,6 +4,7 @@ export enum WorkOrderStatus {
   DRAFT = 'DRAFT',
   CONFIRMED = 'CONFIRMED',
   IN_PRODUCTION = 'IN_PRODUCTION',
+  READY = 'READY',
   COMPLETED = 'COMPLETED',
   CANCELLED = 'CANCELLED',
 }
@@ -17,6 +18,7 @@ export const WORK_ORDER_STATUS_CONFIG: Record<WorkOrderStatus, WorkOrderStatusCo
   [WorkOrderStatus.DRAFT]: { label: 'Borrador', color: 'default' },
   [WorkOrderStatus.CONFIRMED]: { label: 'Confirmada', color: 'info' },
   [WorkOrderStatus.IN_PRODUCTION]: { label: 'En Producción', color: 'warning' },
+  [WorkOrderStatus.READY]: { label: 'Lista para entrega', color: 'primary' },
   [WorkOrderStatus.COMPLETED]: { label: 'Completada', color: 'success' },
   [WorkOrderStatus.CANCELLED]: { label: 'Cancelada', color: 'error' },
 };

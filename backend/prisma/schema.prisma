@@ -1445,6 +1445,7 @@ enum WorkOrderStatus {
   DRAFT
   CONFIRMED
   IN_PRODUCTION
+  READY // Lista para entrega: producción terminó, falta entregar
   COMPLETED
   CANCELLED
 }

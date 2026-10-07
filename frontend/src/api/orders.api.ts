@@ -112,7 +112,8 @@ export const ordersApi = {
   updateStatus: async (
     id: string,
     status: OrderStatus,
-    // `reason`: obligatorio cuando el admin anula o entrega a crédito directamente.
+    // `reason`: obligatorio cuando el admin anula, entrega a crédito o devuelve
+    // la orden a un estado previo directamente.
     options: { retainedAmount?: number; reason?: string } = {},
   ): Promise<Order> => {
     const { data } = await axiosInstance.put<Order>(`${BASE_URL}/${id}/status`, {

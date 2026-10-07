@@ -15,6 +15,10 @@ import { useSnackbar } from 'notistack';
 import { orderStatusChangeRequestsApi } from '../../../api/order-status-change-requests.api';
 import type { Order, OrderStatus } from '../../../types/order.types';
 import { ORDER_STATUS_CONFIG } from '../../../types/order.types';
+import {
+  COMPLETED_WORK_ORDER_NOTICE,
+  revertLeavesCompletedWorkOrder,
+} from '../utils/statusRevert';
 import { LoadingButton } from '../../../components/common/LoadingButton';
 import { getAnnulmentAmounts } from '../utils/annulment';
 import {
@@ -113,6 +117,12 @@ export const StatusChangeAuthRequestDialog: React.FC<StatusChangeAuthRequestDial
         <Alert severity="info" sx={{ mb: 2 }}>
           Este cambio de estado requiere autorización de un administrador.
         </Alert>
+
+        {revertLeavesCompletedWorkOrder(order, requestedStatus) && (
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            {COMPLETED_WORK_ORDER_NOTICE}
+          </Alert>
+        )}
 
         <Box sx={{ mb: 2 }}>
           <Typography variant="body2" color="text.secondary" gutterBottom>

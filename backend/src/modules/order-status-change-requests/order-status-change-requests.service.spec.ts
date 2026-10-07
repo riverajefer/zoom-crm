@@ -433,6 +433,37 @@ describe('OrderStatusChangeRequestsService', () => {
       expect(result.reason).toBeDefined();
     });
 
+    it('exige autorización cuando un no-admin devuelve la orden a un estado previo', async () => {
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue(mockNonAdminUser);
+      (prisma.order.findUnique as jest.Mock).mockResolvedValue({
+        status: OrderStatus.READY,
+      });
+
+      const result = await service.requiresAuthorization(
+        'order-1',
+        OrderStatus.IN_PRODUCTION,
+        'user-1',
+      );
+
+      expect(result.required).toBe(true);
+      expect(result.reason).toContain('estado previo');
+    });
+
+    it('no exige autorización cuando el mismo estado se alcanza avanzando', async () => {
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue(mockNonAdminUser);
+      (prisma.order.findUnique as jest.Mock).mockResolvedValue({
+        status: OrderStatus.CONFIRMED,
+      });
+
+      const result = await service.requiresAuthorization(
+        'order-1',
+        OrderStatus.IN_PRODUCTION,
+        'user-1',
+      );
+
+      expect(result).toEqual({ required: false });
+    });
+
     it('should return { required: false } when non-admin requests other statuses', async () => {
       (prisma.user.findUnique as jest.Mock).mockResolvedValue(mockNonAdminUser);
 
@@ -489,6 +520,7 @@ describe('OrderStatusChangeRequestsService', () => {
             requestedById: 'user-1',
             requestedStatus: OrderStatus.DELIVERED_ON_CREDIT,
             status: EditRequestStatus.APPROVED,
+            consumedAt: null,
           }),
         }),
       );
@@ -499,25 +531,59 @@ describe('OrderStatusChangeRequestsService', () => {
   // consumeApprovedRequest
   // ─────────────────────────────────────────────
   describe('consumeApprovedRequest', () => {
-    it('should find the approved request without modifying its status (audit trail preserved)', async () => {
-      (prisma.orderStatusChangeRequest.findFirst as jest.Mock).mockResolvedValue({
-        ...mockPendingRequest,
-        status: EditRequestStatus.APPROVED,
+    it('marca como usadas las aprobaciones sin tocar su estado', async () => {
+      (prisma.orderStatusChangeRequest.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+
+      await service.consumeApprovedRequest('order-1', 'user-1', OrderStatus.IN_PRODUCTION);
+
+      expect(prisma.orderStatusChangeRequest.updateMany).toHaveBeenCalledWith({
+        where: {
+          orderId: 'order-1',
+          requestedById: 'user-1',
+          requestedStatus: OrderStatus.IN_PRODUCTION,
+          status: EditRequestStatus.APPROVED,
+          consumedAt: null,
+        },
+        data: { consumedAt: expect.any(Date) },
       });
-
-      await service.consumeApprovedRequest('order-1', 'user-1', OrderStatus.DELIVERED_ON_CREDIT);
-
-      // The current implementation does NOT update/delete — just reads for audit
-      expect(prisma.orderStatusChangeRequest.update).not.toHaveBeenCalled();
-      expect(prisma.orderStatusChangeRequest.delete).not.toHaveBeenCalled();
     });
 
     it('should not throw when no approved request is found', async () => {
-      (prisma.orderStatusChangeRequest.findFirst as jest.Mock).mockResolvedValue(null);
+      (prisma.orderStatusChangeRequest.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
 
       await expect(
         service.consumeApprovedRequest('order-1', 'user-1', OrderStatus.DELIVERED_ON_CREDIT),
       ).resolves.toBeUndefined();
+    });
+  });
+
+  // ─────────────────────────────────────────────
+  // recordDirectBackwardChange
+  // ─────────────────────────────────────────────
+  describe('recordDirectBackwardChange', () => {
+    it('deja el retroceso del admin como solicitud aprobada y ya consumida', async () => {
+      (prisma.orderStatusChangeRequest.create as jest.Mock).mockResolvedValue({});
+
+      await service.recordDirectBackwardChange(
+        'order-1',
+        'admin-1',
+        OrderStatus.READY,
+        OrderStatus.IN_PRODUCTION,
+        'Falta un acabado',
+      );
+
+      expect(prisma.orderStatusChangeRequest.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          orderId: 'order-1',
+          requestedById: 'admin-1',
+          reviewedById: 'admin-1',
+          currentStatus: OrderStatus.READY,
+          requestedStatus: OrderStatus.IN_PRODUCTION,
+          reason: 'Falta un acabado',
+          status: EditRequestStatus.APPROVED,
+          consumedAt: expect.any(Date),
+        }),
+      });
     });
   });
 

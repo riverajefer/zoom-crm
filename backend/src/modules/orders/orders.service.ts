@@ -53,7 +53,11 @@ import {
 } from './dto';
 import { InitialPaymentDto } from './dto/create-order.dto';
 import { CashSessionStatus, EditRequestStatus, OrderStatus, PaymentMethod, Prisma, WorkOrderStatus } from '../../generated/prisma';
-import { isValidTransition, getValidNextStatuses } from './order-status-transitions';
+import {
+  isValidTransition,
+  isBackwardTransition,
+  getValidNextStatuses,
+} from './order-status-transitions';
 import { PrismaService } from '../../database/prisma.service';
 import {
   findForView,
@@ -1924,8 +1928,11 @@ export class OrdersService {
       );
     }
 
+    // Devolver la orden a un estado previo: un solo paso atrás, con motivo.
+    const isBackward = isBackwardTransition(order.status as OrderStatus, status);
+
     // Validar que la transición sea permitida por el flujo secuencial
-    if (!isValidTransition(order.status as OrderStatus, status)) {
+    if (!isBackward && !isValidTransition(order.status as OrderStatus, status)) {
       const validNext = getValidNextStatuses(order.status as OrderStatus);
       const validLabels = validNext.length > 0
         ? validNext.join(', ')
@@ -1986,6 +1993,40 @@ export class OrdersService {
       }
     }
 
+    // Retroceso: quien no es admin necesita una aprobación sin usar; el admin
+    // lo hace directo, pero dejando el motivo.
+    let backwardNeedsApproval = false;
+    const backwardReason = options.reason?.trim() ?? '';
+
+    if (isBackward) {
+      const authCheck = await this.statusChangeRequestsService.requiresAuthorization(
+        id,
+        status,
+        userId,
+      );
+      backwardNeedsApproval = authCheck.required;
+
+      if (backwardNeedsApproval) {
+        const hasApproval = await this.statusChangeRequestsService.hasApprovedRequest(
+          id,
+          userId,
+          status,
+        );
+
+        if (!hasApproval) {
+          throw new ForbiddenException(
+            `Este cambio de estado requiere autorización de un administrador. ` +
+            `Razón: ${authCheck.reason}. ` +
+            `Por favor, cree una solicitud de cambio de estado.`,
+          );
+        }
+      } else if (!backwardReason) {
+        throw new BadRequestException(
+          'Para devolver la orden a un estado previo debes indicar el motivo.',
+        );
+      }
+    }
+
     await this.ordersRepository.updateStatus(id, status);
 
     if (creditDirectReason) {
@@ -1996,6 +2037,26 @@ export class OrdersService {
         requestedStatus: status,
         reason: creditDirectReason,
       });
+    }
+
+    if (isBackward) {
+      if (backwardNeedsApproval) {
+        // La aprobación es de un solo uso: sin esto serviría para devolver la
+        // orden cada vez que vuelva a avanzar.
+        await this.statusChangeRequestsService.consumeApprovedRequest(
+          id,
+          userId,
+          status,
+        );
+      } else {
+        await this.statusChangeRequestsService.recordDirectBackwardChange(
+          id,
+          userId,
+          order.status as OrderStatus,
+          status,
+          backwardReason,
+        );
+      }
     }
 
     // Ver la nota en la rama de ANULADO: la solicitud que pedía este estado ya no

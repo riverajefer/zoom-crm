@@ -659,6 +659,22 @@ export const ALLOWED_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
 };
 
 /**
+ * Retrocesos permitidos: un solo paso atrás, y solo antes de la entrega. Siempre
+ * llevan motivo, y autorización del administrador para quien no lo es. Copia de
+ * `BACKWARD_TRANSITIONS` del backend, que es quien decide.
+ */
+export const BACKWARD_TRANSITIONS: Partial<Record<OrderStatus, OrderStatus>> = {
+  IN_PRODUCTION: 'CONFIRMED',
+  READY: 'IN_PRODUCTION',
+  PAID: 'READY',
+};
+
+export const isBackwardTransition = (
+  currentStatus: OrderStatus,
+  newStatus: OrderStatus,
+): boolean => BACKWARD_TRANSITIONS[currentStatus] === newStatus;
+
+/**
  * Nombres de los métodos dentro del módulo de órdenes.
  *
  * Se conserva aparte de `utils/paymentMethods` porque acá el saldo a favor se

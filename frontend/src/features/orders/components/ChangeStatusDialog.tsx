@@ -13,14 +13,25 @@ import {
   Alert,
 } from '@mui/material';
 import type { Order, OrderStatus } from '../../../types/order.types';
-import { ORDER_STATUS_CONFIG, ALLOWED_TRANSITIONS } from '../../../types/order.types';
+import {
+  ORDER_STATUS_CONFIG,
+  ALLOWED_TRANSITIONS,
+  BACKWARD_TRANSITIONS,
+  isBackwardTransition,
+} from '../../../types/order.types';
+import { useAuthStore } from '../../../store/authStore';
+import {
+  COMPLETED_WORK_ORDER_NOTICE,
+  revertLeavesCompletedWorkOrder,
+} from '../utils/statusRevert';
 import { StatusChangeAuthRequestDialog } from './StatusChangeAuthRequestDialog';
 
 interface ChangeStatusDialogProps {
   open: boolean;
   order: Order | null;
   onClose: () => void;
-  onConfirm: (newStatus: OrderStatus) => Promise<void>;
+  /** `reason` solo llega cuando un admin devuelve la orden a un estado previo. */
+  onConfirm: (newStatus: OrderStatus, reason?: string) => Promise<void>;
   isLoading?: boolean;
 }
 
@@ -34,16 +45,33 @@ export const ChangeStatusDialog: React.FC<ChangeStatusDialogProps> = ({
   const [selectedStatus, setSelectedStatus] = useState<OrderStatus | ''>('');
   const [showAuthRequestDialog, setShowAuthRequestDialog] = useState(false);
   const [authorizationError, setAuthorizationError] = useState<string | null>(null);
+  const [revertReason, setRevertReason] = useState('');
+  const isAdmin = useAuthStore((state) => state.user?.role?.name === 'admin');
 
-  // Calcular opciones de estado válidas según el estado actual
+  // Calcular opciones de estado válidas según el estado actual. El estado
+  // previo va al final: es un retroceso, no el paso siguiente.
   const availableStatuses = useMemo(() => {
     if (!order) return [];
     const nextStatuses = ALLOWED_TRANSITIONS[order.status] || [];
-    return nextStatuses.map((status) => ({
+    const options = nextStatuses.map((status) => ({
       value: status,
       label: ORDER_STATUS_CONFIG[status]?.label || status,
     }));
+    const previous = BACKWARD_TRANSITIONS[order.status];
+    if (previous) {
+      options.push({
+        value: previous,
+        label: `Devolver a ${ORDER_STATUS_CONFIG[previous]?.label || previous}`,
+      });
+    }
+    return options;
   }, [order]);
+
+  const isRevert =
+    !!order && !!selectedStatus && isBackwardTransition(order.status, selectedStatus);
+  // El admin retrocede directo, pero dejando el motivo. Quien necesita
+  // autorización lo escribe en la solicitud.
+  const asksRevertReason = isRevert && isAdmin;
 
   React.useEffect(() => {
     if (order && open) {
@@ -51,6 +79,7 @@ export const ChangeStatusDialog: React.FC<ChangeStatusDialogProps> = ({
       const nextStatuses = ALLOWED_TRANSITIONS[order.status] || [];
       setSelectedStatus(nextStatuses.length === 1 ? nextStatuses[0] : '');
       setAuthorizationError(null);
+      setRevertReason('');
     }
   }, [order, open]);
 
@@ -82,7 +111,10 @@ export const ChangeStatusDialog: React.FC<ChangeStatusDialogProps> = ({
     }
 
     try {
-      await onConfirm(selectedStatus);
+      await onConfirm(
+        selectedStatus,
+        asksRevertReason ? revertReason.trim() : undefined,
+      );
       setAuthorizationError(null);
       onClose();
     } catch (error: any) {
@@ -106,6 +138,7 @@ export const ChangeStatusDialog: React.FC<ChangeStatusDialogProps> = ({
     if (!isLoading) {
       setSelectedStatus('');
       setAuthorizationError(null);
+      setRevertReason('');
       onClose();
     }
   };
@@ -183,6 +216,34 @@ export const ChangeStatusDialog: React.FC<ChangeStatusDialogProps> = ({
             </TextField>
           )}
 
+          {isRevert && !isAdmin && (
+            <Alert severity="info" sx={{ mt: 2 }}>
+              Devolver la orden a un estado previo requiere autorización de un
+              administrador. Si aún no la tienes, se abrirá la solicitud.
+            </Alert>
+          )}
+
+          {isRevert && order && revertLeavesCompletedWorkOrder(order, selectedStatus as OrderStatus) && (
+            <Alert severity="warning" sx={{ mt: 2 }}>
+              {COMPLETED_WORK_ORDER_NOTICE}
+            </Alert>
+          )}
+
+          {asksRevertReason && (
+            <TextField
+              fullWidth
+              multiline
+              rows={3}
+              label="Motivo *"
+              value={revertReason}
+              onChange={(e) => setRevertReason(e.target.value)}
+              placeholder="Explica por qué la orden vuelve a un estado previo..."
+              disabled={isLoading}
+              inputProps={{ maxLength: 500 }}
+              sx={{ mt: 2 }}
+            />
+          )}
+
           {!statusValidation.allowed && (
             <Alert severity="error" sx={{ mt: 2 }}>
               {statusValidation.reason}
@@ -201,6 +262,7 @@ export const ChangeStatusDialog: React.FC<ChangeStatusDialogProps> = ({
               !selectedStatus ||
               availableStatuses.length === 0 ||
               !statusValidation.allowed ||
+              (asksRevertReason && !revertReason.trim()) ||
               order.advancePaymentStatus === 'PENDING' ||
               order.advancePaymentStatus === 'REJECTED'
             }

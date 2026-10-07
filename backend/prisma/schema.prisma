@@ -1263,6 +1263,11 @@ model OrderStatusChangeRequest {
   // Queda como solicitud aprobada para que se vea igual que las demás.
   isDirect     Boolean   @default(false) @map("is_direct")
 
+  // Cuándo se usó la aprobación. Un retroceso se puede repetir (Lista →
+  // Producción → Lista → Producción), así que sin esto una sola aprobación
+  // serviría para devolver la orden todas las veces que se quisiera.
+  consumedAt DateTime? @map("consumed_at")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 

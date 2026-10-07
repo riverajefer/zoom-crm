@@ -104,7 +104,8 @@ export const useOrders = (filters?: FilterOrdersDto) => {
 
   // Mutation: Cambiar estado
   const updateStatusMutation = useMutation({
-    // `reason`: obligatorio cuando el admin anula o entrega a crédito directamente.
+    // `reason`: obligatorio cuando el admin anula, entrega a crédito o devuelve la
+    // orden a un estado previo directamente.
     mutationFn: ({ id, status, reason }: { id: string; status: OrderStatus; reason?: string }) =>
       reason ? ordersApi.updateStatus(id, status, { reason }) : ordersApi.updateStatus(id, status),
     onSuccess: (_, variables) => {
@@ -194,7 +195,8 @@ export const useOrder = (id: string) => {
   // Mutation: Cambiar estado
   const updateStatusMutation = useMutation({
     // Al anular, `retainedAmount` es lo que se queda la empresa de lo pagado.
-    // `reason`: obligatorio cuando el admin anula o entrega a crédito directamente.
+    // `reason`: obligatorio cuando el admin anula, entrega a crédito o devuelve la
+    // orden a un estado previo directamente.
     mutationFn: (
       change:
         | OrderStatus

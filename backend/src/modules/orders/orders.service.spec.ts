@@ -90,6 +90,7 @@ const mockStatusChangeRequestsService = {
   hasApprovedRequest: jest.fn(),
   findApprovedRequest: jest.fn(),
   consumeApprovedRequest: jest.fn(),
+  recordDirectBackwardChange: jest.fn(),
   closePendingRequestsForReachedStatus: jest.fn().mockResolvedValue(0),
   // Acciones directas del admin (docs/PLAN_SEDES.md §6.3). La exigencia del
   // motivo se prueba en su servicio; aquí solo devuelve el motivo recibido.
@@ -1967,6 +1968,115 @@ describe('OrdersService', () => {
         'order-1',
         OrderStatus.DELIVERED_ON_CREDIT,
       );
+    });
+
+    describe('retroceso a un estado previo', () => {
+      it('rechaza un retroceso que no es un solo paso atrás', async () => {
+        mockOrdersRepository.findById.mockResolvedValue(
+          buildOrder({ status: OrderStatus.READY }),
+        );
+
+        await expect(
+          service.updateStatus('order-1', OrderStatus.CONFIRMED, 'user-1'),
+        ).rejects.toThrow('Transición de estado no permitida');
+      });
+
+      it('rechaza salir de Entregada', async () => {
+        mockOrdersRepository.findById.mockResolvedValue(
+          buildOrder({ status: OrderStatus.DELIVERED }),
+        );
+
+        await expect(
+          service.updateStatus('order-1', OrderStatus.PAID, 'user-1', {
+            reason: 'motivo',
+          }),
+        ).rejects.toThrow('Transición de estado no permitida');
+      });
+
+      it('exige una aprobación sin usar a quien no es admin', async () => {
+        mockOrdersRepository.findById.mockResolvedValue(
+          buildOrder({ status: OrderStatus.READY }),
+        );
+        mockStatusChangeRequestsService.requiresAuthorization.mockResolvedValue({
+          required: true,
+          reason: 'Devolver una orden a un estado previo requiere aprobación administrativa',
+        });
+        mockStatusChangeRequestsService.hasApprovedRequest.mockResolvedValue(false);
+
+        await expect(
+          service.updateStatus('order-1', OrderStatus.IN_PRODUCTION, 'user-1'),
+        ).rejects.toThrow('requiere autorización');
+        expect(mockOrdersRepository.updateStatus).not.toHaveBeenCalled();
+      });
+
+      it('aplica el retroceso aprobado y consume la aprobación', async () => {
+        mockOrdersRepository.findById
+          .mockResolvedValueOnce(buildOrder({ status: OrderStatus.READY }))
+          .mockResolvedValueOnce(buildOrder({ status: OrderStatus.IN_PRODUCTION }));
+        mockStatusChangeRequestsService.requiresAuthorization.mockResolvedValue({
+          required: true,
+          reason: 'reason',
+        });
+        mockStatusChangeRequestsService.hasApprovedRequest.mockResolvedValue(true);
+
+        await service.updateStatus('order-1', OrderStatus.IN_PRODUCTION, 'user-1');
+
+        expect(mockOrdersRepository.updateStatus).toHaveBeenCalledWith(
+          'order-1',
+          OrderStatus.IN_PRODUCTION,
+        );
+        expect(mockStatusChangeRequestsService.consumeApprovedRequest).toHaveBeenCalledWith(
+          'order-1',
+          'user-1',
+          OrderStatus.IN_PRODUCTION,
+        );
+        expect(
+          mockStatusChangeRequestsService.recordDirectBackwardChange,
+        ).not.toHaveBeenCalled();
+      });
+
+      it('exige el motivo al admin', async () => {
+        mockOrdersRepository.findById.mockResolvedValue(
+          buildOrder({ status: OrderStatus.PAID }),
+        );
+        mockStatusChangeRequestsService.requiresAuthorization.mockResolvedValue({
+          required: false,
+        });
+
+        await expect(
+          service.updateStatus('order-1', OrderStatus.READY, 'admin-1', {
+            reason: '   ',
+          }),
+        ).rejects.toThrow('debes indicar el motivo');
+        expect(mockOrdersRepository.updateStatus).not.toHaveBeenCalled();
+      });
+
+      it('deja constancia del retroceso directo del admin', async () => {
+        mockOrdersRepository.findById
+          .mockResolvedValueOnce(buildOrder({ status: OrderStatus.PAID }))
+          .mockResolvedValueOnce(buildOrder({ status: OrderStatus.READY }));
+        mockStatusChangeRequestsService.requiresAuthorization.mockResolvedValue({
+          required: false,
+        });
+
+        await service.updateStatus('order-1', OrderStatus.READY, 'admin-1', {
+          reason: ' Se marcó pagada por error ',
+        });
+
+        expect(mockOrdersRepository.updateStatus).toHaveBeenCalledWith(
+          'order-1',
+          OrderStatus.READY,
+        );
+        expect(
+          mockStatusChangeRequestsService.recordDirectBackwardChange,
+        ).toHaveBeenCalledWith(
+          'order-1',
+          'admin-1',
+          OrderStatus.PAID,
+          OrderStatus.READY,
+          'Se marcó pagada por error',
+        );
+      });
     });
 
     it('should update status successfully and return the updated order', async () => {

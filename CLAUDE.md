@@ -61,6 +61,7 @@ git cherry-pick <sha>
 - **Rol `soporte` y permisos reservados** (solo Zoom, `backend/src/common/constants/roles.constants.ts`): `soporte` tiene todo lo del admin más los reservados (`manage_locations`), está por encima de él en `RolePrivilegeService` y no se muestra a nadie más: ni el rol, ni sus usuarios, ni los permisos reservados. Nadie otorga un reservado por la API; solo el seed y `prisma:sync:permissions` se los dan a `soporte`.
 - **El ambiente de Railway debe llamarse literalmente `staging`**: `backend/railway.toml` usa `[environments.staging.deploy]`. Con otro nombre el backend arranca como producción.
 - **Rol `asesor_caja`** (solo Zoom): la unión de `asesor` y `caja`, para los locales donde una misma persona vende y maneja la caja. Un usuario tiene un solo rol: si cambias los permisos de `asesor` o `caja`, revisa también este.
+- **Encargado de la caja** (solo Zoom): los roles de `CASHIER_ROLE_NAMES` (`caja`, `asesor_caja`) no pueden cerrar sesión con una caja abierta por ellos. `GET /auth/logout-check` lo consulta el Topbar y `POST /auth/logout` responde 409 `CASH_SESSION_OPEN`. Un rol nuevo que maneje caja se agrega a esa constante.
 - **Una sola réplica del backend**: 9 crons se duplicarían y socket.io no tiene adapter compartido.
 - **Las variables `AWS_*` (S3) son obligatorias para arrancar**: `StorageS3Service` lanza en el constructor si falta alguna. WhatsApp, en cambio, degrada con un warning.
 - **No correr `npm audit fix` en el backend**: deja dos copias de `cron` y Prisma inconsistente.

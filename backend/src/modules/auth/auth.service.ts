@@ -2,6 +2,7 @@ import {
   Injectable,
   UnauthorizedException,
   BadRequestException,
+  ConflictException,
   Inject,
   forwardRef,
 } from '@nestjs/common';
@@ -12,8 +13,15 @@ import { PrismaService } from '../../database/prisma.service';
 import { JwtPayload, TokenPair, AuthenticatedUser } from '../../common/interfaces';
 import { SessionLogsService } from '../session-logs/session-logs.service';
 import { AttendanceService } from '../attendance/attendance.service';
-import { VIEW_ALL_LOCATIONS_PERMISSION } from '../../common/utils/location-context';
-import { findActiveLocationSupport } from '../../common/utils/location-support.util';
+import {
+  VIEW_ALL_LOCATIONS_PERMISSION,
+  withoutLocationScope,
+} from '../../common/utils/location-context';
+import {
+  CASH_SESSION_OPEN,
+  findActiveLocationSupport,
+} from '../../common/utils/location-support.util';
+import { CASHIER_ROLE_NAMES } from '../../common/constants/roles.constants';
 
 /** Sedes del usuario que viajan con el login y con `/auth/me`. */
 export interface UserLocations {
@@ -331,9 +339,45 @@ export class AuthService {
   }
 
   /**
+   * ¿Puede cerrar sesión? Solo Zoom: el encargado de la caja (`caja`,
+   * `asesor_caja`) no sale mientras tenga abierta una caja que abrió él. La de
+   * otro cajero no lo frena: en un cambio de turno el que llega sí puede salir.
+   */
+  async getLogoutCheck(userId: string) {
+    // Las sesiones se filtran por la sede activa; su caja puede ser de otra.
+    const openCashSession = await withoutLocationScope(() =>
+      this.prisma.cashSession.findFirst({
+        where: {
+          openedById: userId,
+          status: 'OPEN',
+          openedBy: { role: { name: { in: [...CASHIER_ROLE_NAMES] } } },
+        },
+        select: {
+          id: true,
+          cashRegister: {
+            select: { name: true, location: { select: { id: true, name: true } } },
+          },
+        },
+      }),
+    );
+
+    return { canLogout: !openCashSession, openCashSession: openCashSession ?? null };
+  }
+
+  /**
    * Cierra la sesión del usuario eliminando su refresh token
    */
   async logout(userId: string): Promise<void> {
+    const { openCashSession } = await this.getLogoutCheck(userId);
+    if (openCashSession) {
+      throw new ConflictException({
+        statusCode: 409,
+        error: 'Conflict',
+        code: CASH_SESSION_OPEN,
+        message: `Primero debes cerrar la ${openCashSession.cashRegister.name}`,
+      });
+    }
+
     // Cerrar registro de asistencia activo si existe
     await this.attendanceService.closeOpenRecordOnLogout(userId);
 

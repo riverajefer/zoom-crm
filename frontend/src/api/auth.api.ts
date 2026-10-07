@@ -1,6 +1,14 @@
 import axiosInstance from './axios';
 import { AuthResponse, LoginDto, ProfileResponse, UpdateProfilePhotoDto, UserSedes } from '../types';
 
+export interface LogoutCheck {
+  canLogout: boolean;
+  openCashSession: {
+    id: string;
+    cashRegister: { name: string; location: { id: string; name: string } };
+  } | null;
+}
+
 export const authApi = {
   /**
    * Login con email y password
@@ -30,6 +38,15 @@ export const authApi = {
       ? { headers: { Authorization: `Bearer ${token}` } }
       : {};
     await axiosInstance.post('/auth/logout', {}, config);
+  },
+
+  /**
+   * ¿Puede cerrar sesión? El encargado de la caja no sale con su caja abierta
+   * (solo Zoom); la respuesta trae la sesión de caja que lo impide.
+   */
+  logoutCheck: async (): Promise<LogoutCheck> => {
+    const response = await axiosInstance.get<LogoutCheck>('/auth/logout-check');
+    return response.data;
   },
 
   /**

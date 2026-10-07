@@ -35,3 +35,10 @@ export function isReservedRoleName(name: string): boolean {
   const normalized = name.trim().toLowerCase();
   return normalized === ADMIN_ROLE_NAME || normalized === SUPPORT_ROLE_NAME;
 }
+
+/**
+ * Roles encargados de la caja (solo Zoom). Con una caja abierta por ellos no
+ * pueden cerrar sesión: primero la cierran. `admin` y `soporte` quedan fuera a
+ * propósito, para que puedan salir aunque hayan abierto una caja al corregir algo.
+ */
+export const CASHIER_ROLE_NAMES: readonly string[] = ['caja', 'asesor_caja'];

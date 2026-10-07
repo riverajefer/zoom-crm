@@ -64,6 +64,23 @@ export class AuthController {
   }
 
   /**
+   * GET /api/v1/auth/logout-check
+   * Lo consulta el botón «Cerrar sesión» antes de salir (solo Zoom).
+   */
+  @ApiBearerAuth('JWT-auth')
+  @UseGuards(JwtAuthGuard)
+  @Get('logout-check')
+  @ApiOperation({
+    summary: '¿El usuario puede cerrar sesión?',
+    description:
+      'El encargado de la caja no puede salir con una caja abierta por él. ' +
+      'Devuelve la sesión de caja que lo impide, si la hay.',
+  })
+  async logoutCheck(@CurrentUser('id') userId: string) {
+    return this.authService.getLogoutCheck(userId);
+  }
+
+  /**
    * POST /api/v1/auth/logout
    * Cierra la sesión del usuario (invalida el refresh token)
    */
@@ -71,6 +88,7 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @Post('logout')
   @HttpCode(HttpStatus.OK)
+  @ApiResponse({ status: 409, description: 'CASH_SESSION_OPEN: el encargado de la caja debe cerrarla antes de salir' })
   async logout(
     @CurrentUser('id') userId: string,
   ): Promise<{ message: string }> {

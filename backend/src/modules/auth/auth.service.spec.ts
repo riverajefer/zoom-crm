@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
-import { UnauthorizedException, BadRequestException } from '@nestjs/common';
+import { UnauthorizedException, BadRequestException, ConflictException } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { PrismaService } from '../../database/prisma.service';
 import { SessionLogsService } from '../session-logs/session-logs.service';
@@ -382,6 +382,55 @@ describe('AuthService', () => {
       await service.logout(mockUser.id);
 
       expect(mockSessionLogsService.createLogoutLog).toHaveBeenCalledWith(mockUser.id);
+    });
+
+    it('rechaza con 409 CASH_SESSION_OPEN si el cajero tiene su caja abierta', async () => {
+      (prisma.cashSession.findFirst as jest.Mock).mockResolvedValue({
+        id: 'session-1',
+        cashRegister: { name: 'Caja 104', location: { id: 'loc-104', name: 'Local 104' } },
+      });
+
+      const error = await service.logout(mockUser.id).catch((e) => e);
+
+      expect(error).toBeInstanceOf(ConflictException);
+      expect(error.getResponse()).toMatchObject({ code: 'CASH_SESSION_OPEN' });
+      expect(prisma.user.update).not.toHaveBeenCalled();
+      expect(mockSessionLogsService.createLogoutLog).not.toHaveBeenCalled();
+      expect(mockAttendanceService.closeOpenRecordOnLogout).not.toHaveBeenCalled();
+    });
+  });
+
+  // ─────────────────────────────────────────────
+  // getLogoutCheck
+  // ─────────────────────────────────────────────
+  describe('getLogoutCheck', () => {
+    it('busca solo la caja abierta por el usuario, y solo si su rol es de caja', async () => {
+      (prisma.cashSession.findFirst as jest.Mock).mockResolvedValue(null);
+
+      const result = await service.getLogoutCheck(mockUser.id);
+
+      expect(result).toEqual({ canLogout: true, openCashSession: null });
+      expect(prisma.cashSession.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            openedById: mockUser.id,
+            status: 'OPEN',
+            openedBy: { role: { name: { in: ['caja', 'asesor_caja'] } } },
+          },
+        }),
+      );
+    });
+
+    it('devuelve la sesión de caja que impide salir', async () => {
+      const session = {
+        id: 'session-1',
+        cashRegister: { name: 'Caja 104', location: { id: 'loc-104', name: 'Local 104' } },
+      };
+      (prisma.cashSession.findFirst as jest.Mock).mockResolvedValue(session);
+
+      const result = await service.getLogoutCheck(mockUser.id);
+
+      expect(result).toEqual({ canLogout: false, openCashSession: session });
     });
   });
 

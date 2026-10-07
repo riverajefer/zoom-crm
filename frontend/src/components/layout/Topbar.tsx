@@ -22,6 +22,9 @@ import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import SearchIcon from '@mui/icons-material/Search';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
+import { useLocationStore } from '../../store/locationStore';
+import { authApi, LogoutCheck } from '../../api/auth.api';
+import { ConfirmDialog } from '../common/ConfirmDialog';
 import { useUIStore } from '../../store/uiStore';
 import { ROUTES } from '../../utils/constants';
 import { formatFullName } from '../../utils/helpers';
@@ -56,10 +59,36 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuClick }) => {
     setAnchorEl(null);
   };
 
-  const handleLogout = () => {
+  // Solo Zoom: el encargado de la caja no cierra sesión con su caja abierta.
+  const [blockingCashSession, setBlockingCashSession] =
+    React.useState<LogoutCheck['openCashSession']>(null);
+  const checkingLogout = React.useRef(false);
+
+  const handleLogout = async () => {
     handleMenuClose();
+    if (checkingLogout.current) return;
+    checkingLogout.current = true;
+    try {
+      const { openCashSession } = await authApi.logoutCheck();
+      if (openCashSession) {
+        setBlockingCashSession(openCashSession);
+        return;
+      }
+    } catch {
+      // Sin respuesta del servidor no se retiene a nadie en la sesión.
+    } finally {
+      checkingLogout.current = false;
+    }
     logout();
     navigate(ROUTES.LOGIN);
+  };
+
+  const handleGoToCashSession = () => {
+    if (!blockingCashSession) return;
+    // La sesión solo se ve con la sede de su caja activa.
+    useLocationStore.getState().setActive(blockingCashSession.cashRegister.location.id);
+    navigate(ROUTES.CASH_SESSION_ACTIVE.replace(':id', blockingCashSession.id));
+    setBlockingCashSession(null);
   };
 
   const handleProfile = () => {
@@ -494,6 +523,20 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuClick }) => {
             </Typography>
           </MenuItem>
         </Menu>
+
+        <ConfirmDialog
+          open={!!blockingCashSession}
+          title="Tienes la caja abierta"
+          message={
+            blockingCashSession
+              ? `Debes cerrar la ${blockingCashSession.cashRegister.name} (${blockingCashSession.cashRegister.location.name}) antes de cerrar sesión.`
+              : ''
+          }
+          confirmText="Ir a la caja"
+          cancelText="Seguir trabajando"
+          onConfirm={handleGoToCashSession}
+          onCancel={() => setBlockingCashSession(null)}
+        />
       </Toolbar>
     </AppBar>
   );

@@ -252,18 +252,26 @@ export class RefundRequestsService
       );
     }
 
-    // Validar que no exista otra solicitud pendiente para la misma orden
-    const existingPending = await this.prisma.refundRequest.findFirst({
+    // Validar que no exista otra solicitud en curso para la misma orden: ni
+    // pendiente de autorización, ni autorizada que Caja todavía no ha pagado.
+    // En esa segunda ventana el dinero aún no se ha movido, así que una
+    // solicitud nueva se calcularía sobre un saldo que está por cambiar.
+    const existingInProgress = await this.prisma.refundRequest.findFirst({
       where: {
         orderId: dto.orderId,
-        status: EditRequestStatus.PENDING,
+        OR: [
+          { status: EditRequestStatus.PENDING },
+          { status: EditRequestStatus.APPROVED, executedAt: null },
+        ],
       },
-      select: { id: true },
+      select: { id: true, status: true },
     });
 
-    if (existingPending) {
+    if (existingInProgress) {
       throw new ConflictException(
-        'Ya existe una solicitud de devolución pendiente para esta orden',
+        existingInProgress.status === EditRequestStatus.APPROVED
+          ? 'Esta orden tiene una devolución autorizada pendiente de pago: Caja debe registrar el pago antes de solicitar otra'
+          : 'Ya existe una solicitud de devolución pendiente para esta orden',
       );
     }
 

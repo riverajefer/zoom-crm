@@ -180,6 +180,34 @@ describe('RefundRequestsService', () => {
       );
     });
 
+    it('rechaza una solicitud nueva si hay una autorizada pendiente de pago', async () => {
+      prisma.order.findUnique.mockResolvedValue({
+        id: orderId,
+        orderNumber: 'OP-1',
+        total: '500',
+        paidAmount: '700',
+        balance: '-200',
+      });
+      prisma.refundRequest.findFirst.mockResolvedValue({
+        id: 'existing',
+        status: 'APPROVED',
+      });
+
+      await expect(service.create(userId, baseDto)).rejects.toThrow(
+        /autorizada pendiente de pago/,
+      );
+      expect(prisma.refundRequest.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            OR: expect.arrayContaining([
+              { status: 'APPROVED', executedAt: null },
+            ]),
+          }),
+        }),
+      );
+      expect(prisma.refundRequest.create).not.toHaveBeenCalled();
+    });
+
     it('throws BadRequestException if no overpayment exists', async () => {
       prisma.order.findUnique.mockResolvedValue({
         id: orderId,

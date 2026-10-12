@@ -348,9 +348,13 @@ export class WhatsappService {
   /**
    * Envía notificación de solicitud de edición de OP usando el template
    * "solicitud_edicion_op_v2" que incluye 3 botones integrados:
-   *   - URL "🔗 Ver Orden" (botón 0, sufijo dinámico con orderId)
-   *   - Quick Reply "✅ Autorizar" (botón 1, payload APPROVE)
-   *   - Quick Reply "❌ Rechazar" (botón 2, payload REJECT)
+   *   - URL "Ver detalle" (botón 0, sufijo dinámico con orderId)
+   *   - Quick Reply "Autorizar" (botón 1)
+   *   - Quick Reply "Rechazar" (botón 2)
+   *
+   * En Zoom el orden es el mismo de la plantilla de aprobación genérica; en
+   * High la URL va de última (índice 2). Los quick-reply van sin emojis: el
+   * webhook compara el texto exacto del botón.
    *
    * Después de enviar, guarda el messageId en DB para que el webhook pueda
    * resolver qué solicitud aprobar/rechazar cuando el admin toque un botón.
@@ -375,7 +379,7 @@ export class WhatsappService {
       this.getEdicionOpTemplateName(),
       [nombreSolicitante, rolSolicitante, numeroOrden, motivo],
       'es_CO',
-      [{ index: 2, text: orderId }], // sufijo dinámico del botón URL "Ver Orden" (índice 2: después de 2 quick-reply)
+      [{ index: 0, text: orderId }], // sufijo dinámico del botón URL "Ver detalle" (índice 0: va antes de los quick-reply)
     );
 
     if (!messageId) {

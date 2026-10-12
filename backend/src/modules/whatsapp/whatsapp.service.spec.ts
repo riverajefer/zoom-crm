@@ -360,7 +360,7 @@ describe('WhatsappService', () => {
       expect(service.sendTemplateMessage).toHaveBeenCalledWith(
         '3118322699', 'solicitud_edicion_op_v2',
         ['Juan', 'Vendedor', 'OP-100', 'Motivo'], 'es_CO',
-        [{ index: 2, text: 'ord1' }],
+        [{ index: 0, text: 'ord1' }],
       );
       expect(prismaService.whatsappActionContext.create).toHaveBeenCalledWith({
         data: expect.objectContaining({

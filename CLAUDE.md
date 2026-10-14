@@ -79,6 +79,10 @@ Locales 104, 119, 125 y la Matriz (`Location`, módulo `/sedes`; `/locations` ya
 
 Segunda revisión de contabilidad (`verify_payments`, módulo `payment-verifications`, página `/verificacion-pagos`) sobre los abonos a OP que Caja ya aprobó. Es un **control posterior**: `Payment.accountingStatus` (`PENDING` / `VERIFIED` / `OBSERVED`) no frena la OP ni entra en ningún cálculo de saldo. Un pago observado se corrige con los flujos de siempre (editar o anular). **Todo código que aplique una edición a un pago llama `reopenPaymentAccountingReview(tx, paymentId, userId)`** dentro de su transacción, para que el pago vuelva a la bandeja. La bandeja se filtra con `queueLocationFilter()`: quien tiene `view_all_locations` ve los pagos de todas las sedes.
 
+### Cierre general diario
+
+Revisión de contabilidad sobre las cajas de **todas** las sedes en un día (módulo `general-closings`, página `/cierre-general`). Es otro **control posterior**: firmar un día no cierra sesiones, no bloquea movimientos y no entra en ningún saldo. Tres permisos: `read_all_cash_sessions` (ver), `perform_general_closing` (revisar cada caja y firmar) y `reopen_general_closing` (quitar la firma, con motivo; `contabilidad` no lo tiene). El consolidado no depende de la sede activa: el repositorio lee cajas y sesiones dentro de `withoutLocationScope()`. Al firmar se guarda la foto de los números (`GeneralClosing.snapshot`); si después cambian, `drift` dice en qué. Decisiones y preguntas abiertas al cliente: [docs/PLAN_SEDES.md §14](./docs/PLAN_SEDES.md).
+
 ### Pendientes conocidos
 
 - **Datos de contacto en los PDF**: desde la fase 5 de sedes, la dirección y el teléfono son los de **la sede del documento** (`Location`), y `COMPANY_INFO` (`frontend/src/utils/pdfConstants.ts`) guarda solo lo común: nombre, ciudad y correo. Todo PDF arma esas líneas con `pdfContactLines(sede)`; no escribas direcciones a mano. El sitio web (`zoompublicidad.com.co`) también va en `COMPANY_INFO`.

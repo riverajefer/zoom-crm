@@ -259,6 +259,10 @@ export const permissionGroups: PermissionGroup[] = [
         description: 'Hacer el cierre general diario de las cajas',
       },
       {
+        name: 'reopen_general_closing',
+        description: 'Reabrir un cierre general ya firmado, con motivo',
+      },
+      {
         name: 'authorize_location_support',
         description: 'Programar, aprobar y terminar apoyos de empleados en otra sede',
       },

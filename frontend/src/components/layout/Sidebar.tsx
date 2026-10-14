@@ -20,6 +20,7 @@ import DashboardIcon from '@mui/icons-material/Dashboard';
 import InsightsIcon from '@mui/icons-material/Insights';
 import SecurityIcon from '@mui/icons-material/Security';
 import VerifiedUserIcon from '@mui/icons-material/VerifiedUser';
+import EventAvailableIcon from '@mui/icons-material/EventAvailable';
 import FactCheckIcon from '@mui/icons-material/FactCheck';
 import HistoryIcon from '@mui/icons-material/History';
 import LoginIcon from '@mui/icons-material/Login';
@@ -497,12 +498,19 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose, collapsed = fal
           path: ROUTES.PAYMENT_VERIFICATIONS,
           permission: PERMISSIONS.VERIFY_PAYMENTS,
         },
+        {
+          label: 'Cierre General',
+          icon: <EventAvailableIcon />,
+          path: ROUTES.GENERAL_CLOSING,
+          permission: PERMISSIONS.READ_ALL_CASH_SESSIONS,
+        },
       ],
       permissions: [
         PERMISSIONS.OPEN_CASH_SESSION,
         PERMISSIONS.READ_CASH_SESSIONS,
         PERMISSIONS.READ_CASH_REGISTERS,
         PERMISSIONS.VERIFY_PAYMENTS,
+        PERMISSIONS.READ_ALL_CASH_SESSIONS,
       ],
     },
     {

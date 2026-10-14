@@ -280,6 +280,7 @@ export const PERMISSION_LABELS: Record<string, string> = {
   manage_user_locations: 'Asignar Sedes a Usuarios',
   read_all_cash_sessions: 'Ver las Cajas de Todas las Sedes',
   perform_general_closing: 'Hacer el Cierre General de Cajas',
+  reopen_general_closing: 'Reabrir un Cierre General Firmado',
   authorize_location_support: 'Autorizar Apoyos en Otra Sede',
   manage_locations: 'Crear y Editar Sedes (Soporte)',
 };

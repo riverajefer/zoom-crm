@@ -95,6 +95,9 @@ model User {
   // Caja Registradora
   openedCashSessions                        CashSession[]                          @relation("OpenedCashSessions")
   closedCashSessions                        CashSession[]                          @relation("ClosedCashSessions")
+  closedGeneralClosings                     GeneralClosing[]                       @relation("ClosedGeneralClosings")
+  generalClosingRegisterReviews             GeneralClosingRegisterReview[]         @relation("GeneralClosingRegisterReviews")
+  generalClosingEvents                      GeneralClosingEvent[]                  @relation("GeneralClosingEvents")
   performedCashMovements                    CashMovement[]                         @relation("PerformedCashMovements")
   voidedCashMovements                       CashMovement[]                         @relation("VoidedCashMovements")
   requestedVoidRequests                     CashMovementVoidRequest[]              @relation("RequestedVoidRequests")
@@ -851,10 +854,10 @@ model OrderItem {
   productId String? @map("product_id") // Opcional: producto del catálogo
 
   // Datos del item
-  description String // Descripción del servicio/producto
-  quantity    Decimal // Cantidad
-  unitPrice   Decimal @map("unit_price") // Precio unitario
-  total       Decimal // quantity * unitPrice
+  description      String // Descripción del servicio/producto
+  quantity         Decimal // Cantidad
+  unitPrice        Decimal @map("unit_price") // Precio unitario
+  total            Decimal // quantity * unitPrice
   // Cantidad anulada por anulaciones parciales ya aplicadas. El ítem no se borra
   // ni cambia de valor: la venta que deja de existir vive en
   // `Order.reversedAmount`, y esto solo dice de qué ítem salió.
@@ -869,10 +872,10 @@ model OrderItem {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relaciones
-  order           Order                     @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  product         Product?                  @relation(fields: [productId], references: [id])
-  productionAreas OrderItemProductionArea[]
-  workOrderItems  WorkOrderItem[]
+  order              Order                     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product            Product?                  @relation(fields: [productId], references: [id])
+  productionAreas    OrderItemProductionArea[]
+  workOrderItems     WorkOrderItem[]
   refundRequestItems RefundRequestItem[]
 
   @@index([orderId])
@@ -2494,7 +2497,8 @@ model CashRegister {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  sessions CashSession[]
+  sessions              CashSession[]
+  generalClosingReviews GeneralClosingRegisterReview[]
 
   // Sede (solo Zoom, docs/PLAN_SEDES.md). La filtra la extensión location-scope.
   locationId String   @map("location_id")
@@ -2582,6 +2586,86 @@ model CashMovement {
   @@index([referenceType, referenceId])
   @@index([createdAt])
   @@map("cash_movements")
+}
+
+// -----------------------------------------------------------------------------
+// Cierre general diario (solo Zoom, docs/PLAN_SEDES.md §14)
+// -----------------------------------------------------------------------------
+
+enum GeneralClosingStatus {
+  OPEN // En revisión: contabilidad todavía puede marcar las cajas
+  CLOSED // Firmado: solo lectura hasta que alguien lo reabra
+}
+
+enum GeneralClosingReviewStatus {
+  VERIFIED // Contabilidad dio la caja por buena
+  OBSERVED // Encontró algo: lleva nota
+  NO_OPERATION // La caja no abrió ese día
+}
+
+enum GeneralClosingEventType {
+  CLOSED
+  REOPENED
+}
+
+/// Cierre general de un día: la revisión de contabilidad sobre las cajas de
+/// todas las sedes. Es un control posterior: no bloquea sesiones ni movimientos.
+/// No tiene sede: es uno solo para todas.
+model GeneralClosing {
+  id         String               @id @default(uuid())
+  // Día del negocio (hora de Bogotá). Una sesión es del día en que se abrió.
+  date       DateTime             @unique @db.Date
+  status     GeneralClosingStatus @default(OPEN)
+  notes      String?
+  // Foto de los totales al firmar: los números en vivo pueden cambiar después
+  // (una anulación marca el movimiento original), y esto es lo que se firmó.
+  snapshot   Json?
+  closedById String?              @map("closed_by_id")
+  closedAt   DateTime?            @map("closed_at")
+  createdAt  DateTime             @default(now()) @map("created_at")
+  updatedAt  DateTime             @updatedAt @map("updated_at")
+
+  closedBy User?                          @relation("ClosedGeneralClosings", fields: [closedById], references: [id])
+  reviews  GeneralClosingRegisterReview[]
+  events   GeneralClosingEvent[]
+
+  @@index([status])
+  @@map("general_closings")
+}
+
+/// Revisión de una caja dentro de un cierre general.
+model GeneralClosingRegisterReview {
+  id               String                     @id @default(uuid())
+  generalClosingId String                     @map("general_closing_id")
+  cashRegisterId   String                     @map("cash_register_id")
+  status           GeneralClosingReviewStatus
+  notes            String?
+  reviewedById     String                     @map("reviewed_by_id")
+  reviewedAt       DateTime                   @default(now()) @map("reviewed_at")
+
+  generalClosing GeneralClosing @relation(fields: [generalClosingId], references: [id], onDelete: Cascade)
+  cashRegister   CashRegister   @relation(fields: [cashRegisterId], references: [id])
+  reviewedBy     User           @relation("GeneralClosingRegisterReviews", fields: [reviewedById], references: [id])
+
+  @@unique([generalClosingId, cashRegisterId])
+  @@index([cashRegisterId])
+  @@map("general_closing_register_reviews")
+}
+
+/// Historial de un cierre general: cada firma y cada reapertura (con motivo).
+model GeneralClosingEvent {
+  id               String                  @id @default(uuid())
+  generalClosingId String                  @map("general_closing_id")
+  type             GeneralClosingEventType
+  notes            String?
+  userId           String                  @map("user_id")
+  createdAt        DateTime                @default(now()) @map("created_at")
+
+  generalClosing GeneralClosing @relation(fields: [generalClosingId], references: [id], onDelete: Cascade)
+  user           User           @relation("GeneralClosingEvents", fields: [userId], references: [id])
+
+  @@index([generalClosingId])
+  @@map("general_closing_events")
 }
 
 model CashMovementVoidRequest {
@@ -2673,11 +2757,11 @@ model RefundRequest {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relaciones
-  order        Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  requestedBy  User          @relation("RequestedRefundRequests", fields: [requestedById], references: [id])
-  reviewedBy   User?         @relation("ReviewedRefundRequests", fields: [reviewedById], references: [id])
-  executedBy   User?         @relation("ExecutedRefundRequests", fields: [executedById], references: [id])
-  cashMovement CashMovement? @relation(fields: [cashMovementId], references: [id])
+  order        Order               @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  requestedBy  User                @relation("RequestedRefundRequests", fields: [requestedById], references: [id])
+  reviewedBy   User?               @relation("ReviewedRefundRequests", fields: [reviewedById], references: [id])
+  executedBy   User?               @relation("ExecutedRefundRequests", fields: [executedById], references: [id])
+  cashMovement CashMovement?       @relation(fields: [cashMovementId], references: [id])
   // Ítems que esta solicitud anula. Vacío en las devoluciones por monto.
   items        RefundRequestItem[]
 

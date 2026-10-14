@@ -431,13 +431,13 @@ Todavía **no toca documentos**: al terminar, la app funciona como hoy, pero ya 
 
 > **7a hecha** (2026-09-28): **menú según el tipo de sede**. Con la Matriz activa, "Comercial" pasa a llamarse "Gastos" y deja solo OG, tipos y subcategorías de gasto y CP; se ocultan pipeline, COT, OP, OT, órdenes pendientes, solicitudes, trazabilidad, rentabilidad, ventas por asesor, clientes, canales de venta, DTF y todo el menú de Producción. Nómina, caja, logística, organización, seguridad y los dashboards siguen según los permisos. En "Todas" se ve todo. **En el backend**, crear una COT, una OP o una DTF con la Matriz activa es un 400 `LOCATION_NOT_A_STORE` (`requireStoreLocationId`; el contexto del request trae ahora el tipo de la sede activa). En el frontend, crear COT, OP o DTF desde la Matriz o desde "Todas" pregunta "¿En qué local se crea?" y ofrece solo los locales; la vista "Todas" de OP, COT y OT y el tablero de cotizaciones ya no muestran la Matriz. Las OG y CP con código `MAT` ya salían de la fase 2.
 >
-> Pendiente (7b): el cierre general diario, bloqueado por las preguntas de §14.
+> **7b hecha, primera versión** (2026-10-13, probada por API y en el navegador contra `zoom_seedtest`): el cierre general diario como **control posterior** (§14). Módulo `general-closings`, página `/cierre-general` en el menú de Caja, migración `general_closing`. `contabilidad.lina` revisa las cajas del día, firma, y no puede reabrir; `admin.zoom` reabre con motivo. Quedan por fuera, a la espera del cliente: el bloqueo del día, el resumen a Oscar y el PDF (hoy exporta a Excel).
 
 - **Menú según el tipo de sede**: la Matriz muestra OG, CP, nómina, su caja, el cierre general y el dashboard.
 - OG y CP con código `MAT` (sale sola de la fase 2, porque la Matriz ya es una sede).
 - **Cierre general diario** (§14): tabla de las 4 cajas, verificación, notas, bloqueo del día, resumen para Oscar, reapertura por el admin.
 
-**Bloqueada por** las preguntas del cierre general (§14, preguntas 1 a 4 y 6 a 8) y la de la nómina (pregunta 5). Se puede construir todo lo demás de la Matriz mientras tanto.
+**Lo que falta depende de** las preguntas de §14: las 1 a 9 para el cierre general y la 10 para la nómina.
 
 **Se acepta cuando**: `contabilidad.lina` cierra un día con las 4 cajas, el día queda bloqueado, y `admin.zoom` recibe el resumen y puede reabrirlo con motivo.
 
@@ -502,6 +502,7 @@ Con los usuarios del §11 (contraseña `zoom123`), los criterios de cada fase:
 - [ ] **Fase 5**: una OP del 104 y una del 119 imprimen cada una su dirección y su teléfono (PDF y tirilla).
 - [ ] **Fase 6**: el Dashboard por sede cuadra, sede por sede, con el listado de OP y su mini dashboard en el mismo periodo.
 - [ ] **Fase 7a**: con la Matriz activa el menú solo muestra gastos, nómina, caja y dashboards; crear una OP desde la Matriz pide un local.
+- [ ] **Fase 7b**: `contabilidad.lina` revisa las cajas de un día en `/cierre-general`, una caja con diferencia solo se deja observada con nota, el día no se firma con una caja abierta o sin revisar, y solo `admin.zoom` lo reabre.
 - [ ] **Fase 9**: apoyo programado, cambio aprobado que mueve la pantalla sola, regla de caja, vencimiento y sedes fijas intactas (criterios de la fase 9).
 - [ ] Además, el recorrido de la fase 9 del plan del fork (login, PDF, adjuntos, Excel, logs en Grafana con `env="staging"`).
 
@@ -554,6 +555,23 @@ Lo de la Matriz está en §14. Las decisiones técnicas, en §15.
 
 ### Cierre general diario
 
+> **Primera versión construida (2026-10-13)**. Lo de abajo es la propuesta completa; se construyó una versión más corta, con estas decisiones:
+>
+> | Tema | Decisión |
+> |---|---|
+> | Qué hace contabilidad | **Consolida lo ya cerrado.** Cada sede sigue cerrando su caja; contabilidad no cierra sesiones ajenas |
+> | Formalidad | **Control posterior**, como la verificación de pagos: firmar el día no bloquea sesiones ni movimientos |
+> | Cajas | Todas las activas: los locales y la caja menor de la Matriz |
+> | Permisos | `read_all_cash_sessions` (ver el consolidado y el historial), `perform_general_closing` (revisar cada caja y firmar) y `reopen_general_closing` (quitar la firma, con motivo). `contabilidad` recibe los dos primeros |
+>
+> **Cómo quedó**:
+> - **Revisión por caja**: *Verificada*, *Observada* (con nota) o *Sin operación* (la caja no abrió). Una caja abierta no se revisa. Una caja con **cualquier** diferencia no se puede verificar: se observa (pregunta 6).
+> - **Firmar el día** exige todas las cajas revisadas y ninguna abierta, y guarda **la foto** de los números (`GeneralClosing.snapshot`). Una anulación posterior marca el movimiento original de la sesión vieja, así que los números en vivo de un día ya firmado sí pueden cambiar: la página muestra la foto y avisa «cambió después del cierre» con la diferencia.
+> - **Varias sesiones en un día**: la base es la de la primera, el esperado y el contado son los de la última, y la diferencia suma la de cada cierre.
+> - **Reabrir** quita la firma y la foto; las revisiones de cada caja se conservan y el motivo queda en el historial del día.
+> - **Días sin cerrar**: la página lista los días de los últimos 60 con alguna sesión y sin cierre firmado.
+> - **No se construyó**: bloqueo del día, solicitud al admin para corregir un día cerrado, umbral de diferencia, días de operación por local, resumen a Oscar, marca de «conciliado con el banco» y PDF (exporta a Excel).
+
 **Hoy**, Constanza hace a mano un cierre general de las 3 cajas. **Con todo en el sistema**, la propuesta es convertirlo en un proceso dentro del software: el sistema junta y calcula, y Constanza revisa, justifica y cierra.
 
 **1. Cada caja cierra como hoy.** Cada local, y la Matriz si abrió caja, hace su cierre con el conteo por denominaciones. La diferencia queda registrada, con la nota de quien cerró.
@@ -590,19 +608,29 @@ Lo de la Matriz está en §14. Las decisiones técnicas, en §15.
 
 ### Preguntas para el cliente
 
-Revisadas el 2026-09-28. Bloquean el cierre general (fase 7); el resto de la Matriz no depende de ellas.
+Revisadas el 2026-10-13, con la primera versión del cierre general ya construida. Reemplazan las del 2026-09-28.
 
-1. **¿Qué hace hoy Constanza, paso a paso?** ¿Los locales le entregan el efectivo a la Matriz, o cada local lo consigna en el banco? ¿Concilia las transferencias con el extracto? ¿A quién le entrega el cierre y en qué formato?
-   - *Por qué importa*: si el efectivo de los locales pasa a la Matriz, hace falta un **traslado entre cajas** (sale de la caja del local y entra a la de la Matriz), que hoy no existe. Si se consigna en el banco, alcanza con los retiros (`WITHDRAWAL`) que ya hay.
-2. **¿Desde qué diferencia de caja se exige una nota?** (Por ejemplo, más de $ 5.000.) Recomendado: un valor fijo que el admin pueda cambiar.
-3. **¿El cierre general bloquea el día?** Recomendado: sí. Después, anular o corregir un movimiento de ese día pasa por una solicitud al admin con motivo, y solo el admin reabre el día.
-4. **¿Hasta cuándo hay plazo para el cierre general?** ¿Al día siguiente a primera hora? ¿Se avisa si un día queda sin cerrar, y a quién (Constanza, Oscar)?
-5. **Nómina: ¿cómo debe quedar registrada como gasto?** Revisado en el código (2026-09-28): marcar un periodo de nómina como pagado **no registra ningún gasto** (ni OG, ni CP, ni movimiento de caja). Solo los anticipos a empleados quedan como CP (*Personal / Anticipos*), y no existe un tipo de gasto *Nómina*. Así el dashboard no ve la nómina. Opciones:
-   - **a)** Al marcar el periodo como pagado, el sistema crea sola una CP de la Matriz con tipo *Nómina*. **Recomendado**: no depende de que alguien se acuerde.
-   - **b)** Contabilidad la registra a mano como OG o CP de la Matriz.
-6. **¿Quién hace el cierre general?** ¿Solo Constanza, o también Lina? ¿Qué pasa si Constanza falta?
-7. **¿Qué días opera cada local?** Si, por ejemplo, los domingos no abren, esos días pueden quedar marcados solos como *sin operación* en vez de pedirlo cada vez.
-8. **¿Cómo le llega el resumen del cierre a Oscar?** Hoy el sistema solo tiene avisos dentro de la aplicación; WhatsApp está aplazado y no hay correo. Si lo quiere por fuera, es trabajo adicional.
+**Pueden cambiar el diseño**
+
+1. **¿Qué hace hoy Constanza, paso a paso, y con qué formato?** Pedir el archivo o la planilla que usa: de ahí salen las columnas definitivas del consolidado.
+2. **¿A dónde va el efectivo de cada local al final del día?** ¿Se consigna en el banco, se queda como base o se le entrega a la Matriz?
+   - *Por qué importa*: si pasa a la Matriz hace falta un **traslado entre cajas** (sale de la caja del local y entra a la de la Matriz), que hoy no existe. Si se consigna, alcanzan los retiros (`WITHDRAWAL`) que ya hay.
+3. **¿Concilia también transferencias y datáfono contra el banco, o solo el efectivo?** Hoy el sistema solo cuadra efectivo; lo demás se muestra, pero no entra en la diferencia. Si lo concilia, la revisión de cada caja lleva una marca aparte por medio de pago.
+
+**Ajustan detalles** (entre paréntesis, cómo quedó mientras responden)
+
+4. **¿Quién más hace el cierre si Constanza falta?** (Cualquiera con el permiso; hoy, el rol `contabilidad`.)
+5. **¿Cuándo se hace: el mismo día o al día siguiente?** ¿Se avisa si un día queda sin cerrar, y a quién? (Sin avisos; la página abre en el día de ayer y lista los días pendientes.)
+6. **¿Desde qué diferencia de caja se exige una nota?** (Desde cualquier diferencia distinta de $ 0: la caja solo se puede dejar observada, con nota.)
+7. **¿Qué días abre cada local?** (No se configura: una caja sin sesión se marca a mano como *sin operación*.)
+8. **¿Oscar necesita el resumen del cierre, y por dónde?** (Lo consulta en la página; no se le envía nada. WhatsApp está aplazado y no hay correo.)
+9. **¿Un día cerrado debe impedir correcciones?** (No. Anular un movimiento de una sesión ya cerrada sigue como hoy: la reversa cae en la sesión abierta del día en que se corrige, y el cierre general avisa que el día cambió.)
+
+**Aparte del cierre general**
+
+10. **Nómina: ¿cómo debe quedar registrada como gasto?** Revisado en el código (2026-09-28): marcar un periodo de nómina como pagado **no registra ningún gasto** (ni OG, ni CP, ni movimiento de caja). Solo los anticipos a empleados quedan como CP (*Personal / Anticipos*), y no existe un tipo de gasto *Nómina*. Así el dashboard no ve la nómina. Opciones:
+    - **a)** Al marcar el periodo como pagado, el sistema crea sola una CP de la Matriz con tipo *Nómina*. **Recomendado**: no depende de que alguien se acuerde.
+    - **b)** Contabilidad la registra a mano como OG o CP de la Matriz.
 
 ---
 

@@ -18,6 +18,7 @@ export { quotesApi } from './quotes.api';
 export { commercialChannelsApi } from './commercialChannels.api';
 export { storageApi } from './storage.api';
 export { paymentVerificationsApi } from './payment-verifications.api';
+export { generalClosingsApi } from './general-closings.api';
 export { workOrdersApi } from './work-orders.api';
 export { expenseOrdersApi } from './expense-orders.api';
 export { orderStatusChangeRequestsApi } from './order-status-change-requests.api';

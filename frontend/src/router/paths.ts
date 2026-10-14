@@ -138,6 +138,7 @@ export const PATHS = {
   CASH_SESSION_HISTORY: '/cash-register/history',
   CASH_SESSION_HISTORY_DETAIL: '/cash-register/history/:id',
   PAYMENT_VERIFICATIONS: '/verificacion-pagos',
+  GENERAL_CLOSING: '/cierre-general',
   // Cuentas por Pagar
   ACCOUNTS_PAYABLE: '/accounts-payable',
   ACCOUNTS_PAYABLE_NEW: '/accounts-payable/new',

@@ -128,6 +128,7 @@ const CloseSessionPage = lazyWithRetry(() => import('../features/cash-register/p
 const SessionHistoryPage = lazyWithRetry(() => import('../features/cash-register/pages/SessionHistoryPage'));
 const SessionDetailPage = lazyWithRetry(() => import('../features/cash-register/pages/SessionDetailPage'));
 const PaymentVerificationsPage = lazyWithRetry(() => import('../features/payment-verifications/pages/PaymentVerificationsPage'));
+const GeneralClosingPage = lazyWithRetry(() => import('../features/general-closing/pages/GeneralClosingPage'));
 
 const AccountsPayableListPage = lazyWithRetry(() => import('../features/accounts-payable/pages/AccountsPayableListPage'));
 const AccountsPayableDetailPage = lazyWithRetry(() => import('../features/accounts-payable/pages/AccountsPayableDetailPage'));
@@ -1598,6 +1599,18 @@ const RoutesConfig: FC = () => {
               <MainLayout>
                 <PermissionGuard permission={PERMISSIONS.VERIFY_PAYMENTS}>
                   <PaymentVerificationsPage />
+                </PermissionGuard>
+              </MainLayout>
+            </AuthGuard>
+          }
+        />
+        <Route
+          path={PATHS.GENERAL_CLOSING}
+          element={
+            <AuthGuard>
+              <MainLayout>
+                <PermissionGuard permission={PERMISSIONS.READ_ALL_CASH_SESSIONS}>
+                  <GeneralClosingPage />
                 </PermissionGuard>
               </MainLayout>
             </AuthGuard>

@@ -437,7 +437,7 @@ Todavía **no toca documentos**: al terminar, la app funciona como hoy, pero ya 
 - OG y CP con código `MAT` (sale sola de la fase 2, porque la Matriz ya es una sede).
 - **Cierre general diario** (§14): tabla de las 4 cajas, verificación, notas, bloqueo del día, resumen para Oscar, reapertura por el admin.
 
-**Lo que falta depende de** las preguntas de §14: las 1 a 9 para el cierre general y la 10 para la nómina.
+**Lo que falta depende de** las preguntas de §14: las 1 a 7 para el cierre general y la 8 para la nómina.
 
 **Se acepta cuando**: `contabilidad.lina` cierra un día con las 4 cajas, el día queda bloqueado, y `admin.zoom` recibe el resumen y puede reabrirlo con motivo.
 
@@ -570,7 +570,13 @@ Lo de la Matriz está en §14. Las decisiones técnicas, en §15.
 > - **Varias sesiones en un día**: la base es la de la primera, el esperado y el contado son los de la última, y la diferencia suma la de cada cierre.
 > - **Reabrir** quita la firma y la foto; las revisiones de cada caja se conservan y el motivo queda en el historial del día.
 > - **Días sin cerrar**: la página lista los días de los últimos 60 con alguna sesión y sin cierre firmado.
-> - **No se construyó**: bloqueo del día, solicitud al admin para corregir un día cerrado, umbral de diferencia, días de operación por local, resumen a Oscar, marca de «conciliado con el banco» y PDF (exporta a Excel).
+> - **No se construyó**: bloqueo del día, solicitud al admin para corregir un día cerrado, umbral de diferencia, días de operación por local, resumen a Oscar y PDF (exporta a Excel).
+>
+> **Segunda entrega (2026-10-13), con la planilla y las respuestas del cliente**. Constanza hace el cierre al día siguiente: los locales cuadran su caja en la tarde, ella revisa, **recoge el efectivo, les deja una base** y arma el «consolidado de caja», una sola planilla con las cajas sumadas. Las transferencias, que son casi todos los pagos, se revisan una por una contra el banco: eso es la verificación de pagos, no el cierre general.
+> - **Entrega de efectivo**: en la fila de un local ya cerrado, «Recibir efectivo» pide la base que se le deja. El resto entra como depósito a la caja abierta de la Matriz (`CASH_HANDOVER`, ligado a la sesión del local). En el local no se registra nada: su sesión ya cerró con lo que contó, y la base es con lo que abre al otro día. La sesión de la Matriz que recibe tiene que haber abierto **después** del cierre del local; si no, ese efectivo se contaría dos veces. Para corregir una entrega se anula ese movimiento en la caja de la Matriz.
+> - **Consolidado de caja**, con el formato de la planilla y solo efectivo: (+) base, (+) retiros del banco, (+) ventas, (−) gastos por tipo de gasto, total en caja contra efectivo contado, y el detalle de lo recibido (sede, OP, cliente) y de los gastos (sede, documento, proveedor). **La base incluye las bases de los locales y lo que la Matriz recogió de ellos**. Los «retiros del banco» son los depósitos (`DEPOSIT`) a cualquier caja; los gastos se agrupan por el tipo de gasto de su OG o CP, y los movimientos manuales van a «Otros egresos».
+> - **Contabilidad es la cajera de la Matriz**: el seed le da `open_cash_session`, `close_cash_session` y `create_cash_movements`. Como además ve todas las sedes, con esos permisos también podría abrir la caja de un local.
+> - **Caja ya no aprueba pagos** (pedido del cliente: no hay cajero permanente, y la aprobación trababa la OP). Ver la bitácora de `DIVERGENCIA.md`, 2026-10-13.
 
 **Hoy**, Constanza hace a mano un cierre general de las 3 cajas. **Con todo en el sistema**, la propuesta es convertirlo en un proceso dentro del software: el sistema junta y calcula, y Constanza revisa, justifica y cierra.
 
@@ -608,27 +614,32 @@ Lo de la Matriz está en §14. Las decisiones técnicas, en §15.
 
 ### Preguntas para el cliente
 
-Revisadas el 2026-10-13, con la primera versión del cierre general ya construida. Reemplazan las del 2026-09-28.
+**Respondidas el 2026-10-13** (Oscar):
 
-**Pueden cambiar el diseño**
+| Pregunta | Respuesta |
+|---|---|
+| ¿Qué hace hoy contabilidad y con qué formato? | La planilla «consolidado general» (base, retiro, ventas, gastos de producción, nómina, gasto personal, conteo por denominación). Se construyó con ese formato |
+| ¿A dónde va el efectivo de cada local? | Constanza lo recoge **todos los días** y deja una base, que **puede variar** |
+| ¿La base de la planilla es solo la de ella? | No: **incluye las bases que deja en los locales** |
+| ¿El «retiro» que suma? | Efectivo retirado del banco |
+| ¿Quién paga los gastos de producción en efectivo? | Cualquiera de los dos: el local o la Matriz |
+| ¿Concilia transferencias? | Sí, una por una contra el banco, al día siguiente: es la verificación de pagos |
+| ¿Cuándo se hace el cierre? | Al día siguiente, en la mañana |
+| ¿Qué pasa si una transferencia no llegó y la OP ya avanzó? | **La OP debe poder continuar**: el pago no puede frenarla |
 
-1. **¿Qué hace hoy Constanza, paso a paso, y con qué formato?** Pedir el archivo o la planilla que usa: de ahí salen las columnas definitivas del consolidado.
-2. **¿A dónde va el efectivo de cada local al final del día?** ¿Se consigna en el banco, se queda como base o se le entrega a la Matriz?
-   - *Por qué importa*: si pasa a la Matriz hace falta un **traslado entre cajas** (sale de la caja del local y entra a la de la Matriz), que hoy no existe. Si se consigna, alcanzan los retiros (`WITHDRAWAL`) que ya hay.
-3. **¿Concilia también transferencias y datáfono contra el banco, o solo el efectivo?** Hoy el sistema solo cuadra efectivo; lo demás se muestra, pero no entra en la diferencia. Si lo concilia, la revisión de cada caja lleva una marca aparte por medio de pago.
+**Siguen abiertas** (entre paréntesis, cómo quedó mientras responden)
 
-**Ajustan detalles** (entre paréntesis, cómo quedó mientras responden)
-
-4. **¿Quién más hace el cierre si Constanza falta?** (Cualquiera con el permiso; hoy, el rol `contabilidad`.)
-5. **¿Cuándo se hace: el mismo día o al día siguiente?** ¿Se avisa si un día queda sin cerrar, y a quién? (Sin avisos; la página abre en el día de ayer y lista los días pendientes.)
-6. **¿Desde qué diferencia de caja se exige una nota?** (Desde cualquier diferencia distinta de $ 0: la caja solo se puede dejar observada, con nota.)
-7. **¿Qué días abre cada local?** (No se configura: una caja sin sesión se marca a mano como *sin operación*.)
-8. **¿Oscar necesita el resumen del cierre, y por dónde?** (Lo consulta en la página; no se le envía nada. WhatsApp está aplazado y no hay correo.)
-9. **¿Un día cerrado debe impedir correcciones?** (No. Anular un movimiento de una sesión ya cerrada sigue como hoy: la reversa cae en la sesión abierta del día en que se corrige, y el cierre general avisa que el día cambió.)
+1. **¿Quién más hace el cierre si Constanza falta?** (Cualquiera con el permiso; hoy, el rol `contabilidad`.)
+2. **¿Se avisa si un día queda sin cerrar, y a quién?** (Sin avisos; la página abre en el día de ayer y lista los días pendientes.)
+3. **¿Desde qué diferencia de caja se exige una nota?** (Desde cualquier diferencia distinta de $ 0: la caja solo se puede dejar observada, con nota.)
+4. **¿Qué días abre cada local?** (No se configura: una caja sin sesión se marca a mano como *sin operación*.)
+5. **¿Oscar necesita el resumen del cierre, y por dónde?** (Lo consulta en la página; no se le envía nada.)
+6. **¿Un día cerrado debe impedir correcciones?** (No.)
+7. **¿El conteo por denominación del consolidado lo hace Constanza una sola vez, con todo el efectivo junto?** (Hoy el «efectivo en caja» del consolidado es la suma de lo que contó cada caja al cerrar; no hay un conteo único.)
 
 **Aparte del cierre general**
 
-10. **Nómina: ¿cómo debe quedar registrada como gasto?** Revisado en el código (2026-09-28): marcar un periodo de nómina como pagado **no registra ningún gasto** (ni OG, ni CP, ni movimiento de caja). Solo los anticipos a empleados quedan como CP (*Personal / Anticipos*), y no existe un tipo de gasto *Nómina*. Así el dashboard no ve la nómina. Opciones:
+8. **Nómina: ¿cómo debe quedar registrada como gasto?** *Aplazada por el cliente (2026-10-13).* En su planilla la nómina y el «gasto personal» salen en efectivo de la caja; mientras tanto se registran como egreso manual o como OG de la Matriz, y aparecen en el consolidado con ese tipo de gasto. Revisado en el código (2026-09-28): marcar un periodo de nómina como pagado **no registra ningún gasto** (ni OG, ni CP, ni movimiento de caja). Solo los anticipos a empleados quedan como CP (*Personal / Anticipos*), y no existe un tipo de gasto *Nómina*. Así el dashboard no ve la nómina. Opciones:
     - **a)** Al marcar el periodo como pagado, el sistema crea sola una CP de la Matriz con tipo *Nómina*. **Recomendado**: no depende de que alguien se acuerde.
     - **b)** Contabilidad la registra a mano como OG o CP de la Matriz.
 

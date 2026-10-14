@@ -7,6 +7,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import {
   CloseGeneralClosingDto,
   FilterGeneralClosingsDto,
+  ReceiveHandoverDto,
   ReopenGeneralClosingDto,
   ReviewRegisterDto,
 } from './dto';
@@ -53,6 +54,21 @@ export class GeneralClosingsController {
     @CurrentUser('id') userId: string,
   ) {
     return this.service.reviewRegister(date, cashRegisterId, dto, userId);
+  }
+
+  @Post('day/:date/handovers/:cashRegisterId')
+  @RequirePermissions('perform_general_closing')
+  @ApiOperation({ summary: 'Recibir en la Matriz el efectivo de una caja que ya cerró' })
+  @ApiParam({ name: 'date', description: 'Día del cierre de la caja, YYYY-MM-DD' })
+  @ApiResponse({ status: 400, description: 'La caja no ha cerrado, no queda efectivo o la caja de la Matriz está cerrada' })
+  @ApiResponse({ status: 409, description: 'El efectivo de esa caja ya se recibió' })
+  receiveHandover(
+    @Param('date') date: string,
+    @Param('cashRegisterId', ParseUUIDPipe) cashRegisterId: string,
+    @Body() dto: ReceiveHandoverDto,
+    @CurrentUser('id') userId: string,
+  ) {
+    return this.service.receiveHandover(date, cashRegisterId, dto, userId);
   }
 
   @Post('day/:date/close')

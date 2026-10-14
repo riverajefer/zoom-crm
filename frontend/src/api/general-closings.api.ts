@@ -40,6 +40,14 @@ export const generalClosingsApi = {
     return data;
   },
 
+  receiveHandover: async (date: string, cashRegisterId: string, baseLeft: number) => {
+    const { data } = await axiosInstance.post<GeneralClosingDay>(
+      `${BASE_URL}/day/${date}/handovers/${cashRegisterId}`,
+      { baseLeft },
+    );
+    return data;
+  },
+
   closeDay: async (date: string, notes?: string) => {
     const { data } = await axiosInstance.post<GeneralClosingDay>(`${BASE_URL}/day/${date}/close`, {
       notes: notes || undefined,

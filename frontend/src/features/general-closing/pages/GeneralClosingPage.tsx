@@ -37,6 +37,8 @@ import {
 } from '../../../types/general-closing.types';
 import { PERMISSIONS } from '../../../utils/constants';
 import { ClosingDayTable } from '../components/ClosingDayTable';
+import { ConsolidatedSheet } from '../components/ConsolidatedSheet';
+import { HandoverDialog } from '../components/HandoverDialog';
 import { NoteDialog } from '../components/NoteDialog';
 import {
   useGeneralClosingActions,
@@ -84,6 +86,7 @@ const GeneralClosingPage: React.FC = () => {
 
   const [view, setView] = useState<View>('day');
   const [observing, setObserving] = useState<RegisterDayRow | null>(null);
+  const [handingOver, setHandingOver] = useState<RegisterDayRow | null>(null);
   const [closingOpen, setClosingOpen] = useState(false);
   const [reopenOpen, setReopenOpen] = useState(false);
   const [historyPage, setHistoryPage] = useState(0);
@@ -92,7 +95,8 @@ const GeneralClosingPage: React.FC = () => {
   const dayQuery = useGeneralClosingDay(date);
   const pendingQuery = useGeneralClosingPendingDays();
   const historyQuery = useGeneralClosingHistory(historyPage + 1, historyLimit, view === 'history');
-  const { reviewMutation, closeMutation, reopenMutation } = useGeneralClosingActions(date);
+  const { reviewMutation, handoverMutation, closeMutation, reopenMutation } =
+    useGeneralClosingActions(date);
 
   const day = dayQuery.data;
   const signed = day?.closing?.status === 'CLOSED';
@@ -101,7 +105,11 @@ const GeneralClosingPage: React.FC = () => {
   // El detalle de una sesión de otra sede solo abre para quien opera en todas.
   const canOpenSessions =
     hasPermission(PERMISSIONS.READ_CASH_SESSIONS) && hasPermission(PERMISSIONS.VIEW_ALL_LOCATIONS);
-  const busy = reviewMutation.isPending || closeMutation.isPending || reopenMutation.isPending;
+  const busy =
+    reviewMutation.isPending ||
+    handoverMutation.isPending ||
+    closeMutation.isPending ||
+    reopenMutation.isPending;
   const pendingDays = (pendingQuery.data ?? []).filter((d) => d.date !== date);
 
   const goTo = (next: string) => {
@@ -121,6 +129,19 @@ const GeneralClosingPage: React.FC = () => {
   const handleReview = (row: RegisterDayRow, status: GeneralClosingReviewStatus) => {
     if (status === 'OBSERVED') setObserving(row);
     else void review(row, status);
+  };
+
+  const handleHandover = async (baseLeft: number) => {
+    if (!handingOver) return;
+    try {
+      await handoverMutation.mutateAsync({ cashRegisterId: handingOver.cashRegister.id, baseLeft });
+      enqueueSnackbar(`Efectivo de ${handingOver.cashRegister.name} recibido en la caja de la Matriz`, {
+        variant: 'success',
+      });
+      setHandingOver(null);
+    } catch (error) {
+      enqueueSnackbar(errorMessage(error, 'No se pudo recibir el efectivo'), { variant: 'error' });
+    }
   };
 
   const handleClose = async (notes: string) => {
@@ -263,6 +284,7 @@ const GeneralClosingPage: React.FC = () => {
                 canOpenSessions={canOpenSessions}
                 busy={busy}
                 onReview={handleReview}
+                onHandover={setHandingOver}
               />
 
               <Stack direction="row" spacing={2} alignItems="flex-start" sx={{ mt: 2 }}>
@@ -299,6 +321,8 @@ const GeneralClosingPage: React.FC = () => {
                   </Button>
                 )}
               </Stack>
+
+              <ConsolidatedSheet consolidated={day.consolidated} />
 
               {!!day.closing?.events.length && (
                 <Box sx={{ mt: 3 }}>
@@ -398,6 +422,12 @@ const GeneralClosingPage: React.FC = () => {
         loading={reviewMutation.isPending}
         onClose={() => setObserving(null)}
         onConfirm={(notes) => observing && review(observing, 'OBSERVED', notes)}
+      />
+      <HandoverDialog
+        row={handingOver}
+        loading={handoverMutation.isPending}
+        onClose={() => setHandingOver(null)}
+        onConfirm={handleHandover}
       />
       <NoteDialog
         open={closingOpen}

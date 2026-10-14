@@ -39,6 +39,8 @@ export interface RegisterDayTotals {
   incomeCard: number;
   incomeOther: number;
   deposits: number;
+  /** Efectivo recibido de los locales (solo la Matriz). */
+  handoversIn: number;
   cashExpenses: number;
   otherExpenses: number;
   withdrawals: number;
@@ -55,6 +57,7 @@ export const TOTAL_COLUMNS: { field: keyof RegisterDayTotals; label: string }[] 
   { field: 'incomeCard', label: 'Tarjeta' },
   { field: 'incomeOther', label: 'Otros' },
   { field: 'deposits', label: 'Depósitos' },
+  { field: 'handoversIn', label: 'Recibido de locales' },
   { field: 'cashExpenses', label: 'Egresos' },
   { field: 'otherExpenses', label: 'Egresos no efectivo' },
   { field: 'withdrawals', label: 'Retiros' },
@@ -90,6 +93,35 @@ export interface RegisterDayRow {
   sessions: RegisterDaySession[];
   totals: RegisterDayTotals;
   review: RegisterDayReview | null;
+  /** El efectivo que la Matriz recogió de esta caja después de su cierre. */
+  handover: {
+    amount: number;
+    baseLeft: number | null;
+    receiptNumber: string;
+    receivedAt: string;
+    receivedBy: ClosingUser | null;
+  } | null;
+}
+
+export interface ConsolidatedLine {
+  location: Pick<Sede, 'code' | 'name' | 'color'>;
+  reference: string;
+  detail: string;
+  amount: number;
+}
+
+/** El consolidado de caja: todas las cajas como una sola, solo en efectivo. */
+export interface ClosingConsolidated {
+  base: number;
+  cashDeposits: number;
+  cashSales: number;
+  expenseGroups: { label: string; amount: number }[];
+  cashWithdrawals: number;
+  total: number;
+  counted: number | null;
+  difference: number | null;
+  cashReceived: ConsolidatedLine[];
+  cashExpenses: (ConsolidatedLine & { group: string })[];
 }
 
 export interface GeneralClosingEvent {
@@ -121,6 +153,7 @@ export interface GeneralClosingDay {
   /** Firmado: la foto de lo que se firmó. En revisión: los números en vivo. */
   registers: RegisterDayRow[];
   totals: RegisterDayTotals;
+  consolidated: ClosingConsolidated;
   /** Lo que falta para poder firmar. */
   blockers: string[];
   /** Lo que cambió después de firmar. */

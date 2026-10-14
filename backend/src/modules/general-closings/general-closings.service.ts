@@ -13,15 +13,21 @@ import {
   Prisma,
 } from '../../generated/prisma';
 import { businessDate, businessToday, endOfDay, startOfDay } from '../../common/utils/date-range.util';
+import { withoutLocationScope } from '../../common/utils/location-context';
 import { dateOnly } from '../../common/utils/location-support.util';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
+import { CASH_HANDOVER_REFERENCE } from '../cash-movement/cash-movement.helpers';
+import { CashMovementService } from '../cash-movement/cash-movement.service';
 import {
   CloseGeneralClosingDto,
   FilterGeneralClosingsDto,
+  ReceiveHandoverDto,
   ReopenGeneralClosingDto,
   ReviewRegisterDto,
 } from './dto';
 import {
+  ClosingCashMovement,
+  ClosingHandover,
   ClosingRegister,
   ClosingSession,
   ClosingWithDetail,
@@ -41,6 +47,8 @@ export interface RegisterDayTotals {
   incomeCard: number;
   incomeOther: number;
   deposits: number;
+  /** Efectivo recibido de los locales (solo la Matriz). No es dinero nuevo. */
+  handoversIn: number;
   cashExpenses: number;
   otherExpenses: number;
   withdrawals: number;
@@ -56,6 +64,7 @@ const TOTAL_FIELDS: readonly (keyof RegisterDayTotals)[] = [
   'incomeCard',
   'incomeOther',
   'deposits',
+  'handoversIn',
   'cashExpenses',
   'otherExpenses',
   'withdrawals',
@@ -73,11 +82,49 @@ export interface RegisterDayRow {
   sessions: ClosingSession[];
   totals: RegisterDayTotals;
   review: Pick<Review, 'status' | 'notes' | 'reviewedAt' | 'reviewedBy'> | null;
+  /** El efectivo que la Matriz recogió de esta caja después de su cierre. */
+  handover: {
+    amount: number;
+    baseLeft: number | null;
+    receiptNumber: string;
+    receivedAt: Date;
+    receivedBy: ClosingHandover['performedBy'];
+  } | null;
+}
+
+export interface ConsolidatedLine {
+  location: Pick<ClosingRegister['location'], 'code' | 'name' | 'color'>;
+  /** Número de la OP, la OG o la CP; si no hay documento, el del recibo de caja. */
+  reference: string;
+  detail: string;
+  amount: number;
+}
+
+/**
+ * El "consolidado de caja" de contabilidad: todas las cajas como una sola, solo
+ * en efectivo, con el formato de su planilla. La base incluye lo que la Matriz
+ * recogió de los locales: es efectivo que ya existía, no un ingreso del día.
+ */
+export interface ClosingConsolidated {
+  base: number;
+  /** Efectivo que entró sin ser venta: retiros del banco llevados a la caja. */
+  cashDeposits: number;
+  cashSales: number;
+  expenseGroups: { label: string; amount: number }[];
+  /** Efectivo que salió sin ser gasto: consignaciones. */
+  cashWithdrawals: number;
+  total: number;
+  /** `null` mientras alguna caja del día siga abierta. */
+  counted: number | null;
+  difference: number | null;
+  cashReceived: ConsolidatedLine[];
+  cashExpenses: (ConsolidatedLine & { group: string })[];
 }
 
 export interface ClosingSnapshot {
   registers: RegisterDayRow[];
   totals: RegisterDayTotals;
+  consolidated?: ClosingConsolidated;
 }
 
 export interface ClosingDrift {
@@ -95,6 +142,7 @@ const emptyTotals = (): RegisterDayTotals => ({
   incomeCard: 0,
   incomeOther: 0,
   deposits: 0,
+  handoversIn: 0,
   cashExpenses: 0,
   otherExpenses: 0,
   withdrawals: 0,
@@ -119,6 +167,7 @@ export class GeneralClosingsService {
   constructor(
     private readonly repository: GeneralClosingsRepository,
     private readonly auditLogsService: AuditLogsService,
+    private readonly cashMovementService: CashMovementService,
   ) {}
 
   /** El consolidado de un día. Firmado, devuelve la foto y lo que cambió después. */
@@ -149,6 +198,7 @@ export class GeneralClosingsService {
         : null,
       registers: snapshot?.registers ?? registers,
       totals: snapshot?.totals ?? this.sumTotals(registers),
+      consolidated: snapshot?.consolidated ?? (await this.buildConsolidated(registers)),
       blockers: snapshot ? [] : blockers,
       drift: snapshot ? this.computeDrift(snapshot.registers, registers) : [],
     };
@@ -182,6 +232,75 @@ export class GeneralClosingsService {
     return this.getDay(day);
   }
 
+  /**
+   * La Matriz recoge el efectivo de un local que ya cerró y le deja una base.
+   * Entra como depósito a la caja abierta de la Matriz; en el local no se
+   * registra nada, porque su sesión ya cerró con lo que contó: la base es con
+   * lo que abre al día siguiente.
+   */
+  async receiveHandover(day: string, cashRegisterId: string, dto: ReceiveHandoverDto, userId: string) {
+    this.assertDay(day);
+    this.assertNotClosed(await this.repository.findByDate(dateOnly(day)));
+
+    const row = (await this.buildLive(day)).find((r) => r.cashRegister.id === cashRegisterId);
+    if (!row) {
+      throw new NotFoundException(`Caja ${cashRegisterId} no encontrada en el cierre de ${day}`);
+    }
+    const name = row.cashRegister.name;
+    if (row.cashRegister.location.type === 'HEADQUARTERS') {
+      throw new BadRequestException('La caja de la Matriz es la que recibe el efectivo');
+    }
+    if (row.status !== 'CLOSED') {
+      throw new BadRequestException(`${name} no tiene un cierre ese día del que recoger el efectivo`);
+    }
+    if (row.handover) {
+      throw new ConflictException(
+        `El efectivo de ${name} ya se recibió (recibo ${row.handover.receiptNumber}). ` +
+          'Para corregirlo, anula ese movimiento en la caja de la Matriz.',
+      );
+    }
+    const counted = row.totals.counted ?? 0;
+    const amount = counted - dto.baseLeft;
+    if (amount <= 0) {
+      throw new BadRequestException(
+        `${name} cerró con $${counted.toLocaleString('es-CO')}: con esa base no queda efectivo por recibir`,
+      );
+    }
+    const target = await this.repository.findHeadquartersOpenSession();
+    if (!target) {
+      throw new BadRequestException('Abre la caja de la Matriz para recibir el efectivo');
+    }
+    // La sesión de la Matriz que recibe tiene que ser posterior al cierre del
+    // local. Si fuera la del mismo día, ese efectivo se contaría dos veces en
+    // el consolidado: en el cierre del local y en la base de la Matriz.
+    const source = row.sessions[row.sessions.length - 1];
+    if (source.closedAt && target.openedAt <= source.closedAt) {
+      throw new BadRequestException(
+        `La caja de la Matriz está abierta desde antes de que cerrara ${name}. ` +
+          'Ciérrala y abre la de hoy para recibir el efectivo.',
+      );
+    }
+
+    // Sin filtro de sede: quien recibe puede tener activa otra sede o "Todas".
+    await withoutLocationScope(() =>
+      this.cashMovementService.createMovement(
+        {
+          cashSessionId: target.id,
+          movementType: CashMovementType.DEPOSIT,
+          paymentMethod: PaymentMethod.CASH,
+          amount,
+          description:
+            `Entrega de efectivo de ${name}, cierre del ${day}. ` +
+            `Base que queda en el local: $${dto.baseLeft.toLocaleString('es-CO')}`,
+          referenceType: CASH_HANDOVER_REFERENCE,
+          referenceId: source.id,
+        },
+        userId,
+      ),
+    );
+    return this.getDay(day);
+  }
+
   async closeDay(day: string, dto: CloseGeneralClosingDto, userId: string) {
     this.assertDay(day);
     const closing = await this.repository.findByDate(dateOnly(day));
@@ -196,7 +315,11 @@ export class GeneralClosingsService {
       });
     }
 
-    const snapshot: ClosingSnapshot = { registers, totals: this.sumTotals(registers) };
+    const snapshot: ClosingSnapshot = {
+      registers,
+      totals: this.sumTotals(registers),
+      consolidated: await this.buildConsolidated(registers),
+    };
     const closed = await this.repository.close(closing.id, {
       notes: dto.notes || null,
       // Pasa por JSON para dejar fechas y decimales como texto plano.
@@ -286,20 +409,33 @@ export class GeneralClosingsService {
   private async buildLive(day: string): Promise<RegisterDayRow[]> {
     // Una sesión es del día en que se abrió, en hora de Bogotá (PLAN_SEDES §4).
     const sessions = await this.repository.findSessionsOpenedBetween(startOfDay(day)!, endOfDay(day)!);
-    const [registers, movements] = await Promise.all([
+    const sessionIds = sessions.map((s) => s.id);
+    const [registers, movements, handovers] = await Promise.all([
       this.repository.findRegisters([...new Set(sessions.map((s) => s.cashRegisterId))]),
-      this.repository.sumMovements(sessions.map((s) => s.id)),
+      this.repository.sumMovements(sessionIds),
+      this.repository.findHandovers(sessionIds),
     ]);
 
     return registers.map((cashRegister) => {
       const own = sessions.filter((s) => s.cashRegisterId === cashRegister.id);
       const ownIds = new Set(own.map((s) => s.id));
+      const totals = this.registerTotals(own, movements.filter((m) => ownIds.has(m.cashSessionId)));
+      const handover = handovers.find((h) => h.referenceId && ownIds.has(h.referenceId));
       return {
         cashRegister,
         status: this.registerStatus(own),
         sessions: own,
-        totals: this.registerTotals(own, movements.filter((m) => ownIds.has(m.cashSessionId))),
+        totals,
         review: null,
+        handover: handover
+          ? {
+              amount: Number(handover.amount),
+              baseLeft: totals.counted === null ? null : totals.counted - Number(handover.amount),
+              receiptNumber: handover.receiptNumber,
+              receivedAt: handover.createdAt,
+              receivedBy: handover.performedBy,
+            }
+          : null,
       };
     });
   }
@@ -325,7 +461,10 @@ export class GeneralClosingsService {
       if (m.paymentMethod === PaymentMethod.CASH) {
         cashNet.set(m.cashSessionId, (cashNet.get(m.cashSessionId) ?? 0) + (inflow ? amount : -amount));
         if (m.movementType === CashMovementType.INCOME) totals.incomeCash += amount;
-        else if (m.movementType === CashMovementType.DEPOSIT) totals.deposits += amount;
+        else if (m.movementType === CashMovementType.DEPOSIT) {
+          if (m.referenceType === CASH_HANDOVER_REFERENCE) totals.handoversIn += amount;
+          else totals.deposits += amount;
+        }
         else if (m.movementType === CashMovementType.EXPENSE) totals.cashExpenses += amount;
         else totals.withdrawals += amount;
       } else if (!inflow) {
@@ -408,6 +547,97 @@ export class GeneralClosingsService {
       }
     }
     return blockers;
+  }
+
+  private async buildConsolidated(rows: RegisterDayRow[]): Promise<ClosingConsolidated> {
+    const totals = this.sumTotals(rows);
+    const locationOf = new Map<string, ConsolidatedLine['location']>();
+    for (const row of rows) {
+      const { code, name, color } = row.cashRegister.location;
+      for (const session of row.sessions) locationOf.set(session.id, { code, name, color });
+    }
+
+    const movements = await this.repository.findCashMovements([...locationOf.keys()]);
+    const idsOf = (type: string) => [
+      ...new Set(
+        movements.filter((m) => m.referenceType === type && m.referenceId).map((m) => m.referenceId!),
+      ),
+    ];
+    const [expenseOrders, accountsPayable] = await Promise.all([
+      this.repository.findExpenseOrders(idsOf('EXPENSE_ORDER')),
+      this.repository.findAccountsPayable(idsOf('ACCOUNT_PAYABLE')),
+    ]);
+
+    /** De qué es el egreso: el tipo de gasto de su OG o CP, si tiene. */
+    const describeExpense = (m: ClosingCashMovement) => {
+      const og = m.referenceType === 'EXPENSE_ORDER' && expenseOrders.find((o) => o.id === m.referenceId);
+      if (og) {
+        const suppliers = [...new Set(og.items.map((i) => i.supplier?.name).filter(Boolean))];
+        return {
+          group: og.expenseType.name,
+          reference: og.ogNumber,
+          detail: suppliers.join(', ') || m.description,
+        };
+      }
+      const ap =
+        m.referenceType === 'ACCOUNT_PAYABLE' && accountsPayable.find((a) => a.id === m.referenceId);
+      if (ap) {
+        return {
+          group: ap.expenseType.name,
+          reference: ap.apNumber,
+          detail: ap.supplier?.name ?? m.description,
+        };
+      }
+      return {
+        group: m.referenceType === 'REFUND' ? 'Devoluciones' : 'Otros egresos',
+        reference: m.receiptNumber,
+        detail: m.description,
+      };
+    };
+
+    const cashReceived: ClosingConsolidated['cashReceived'] = [];
+    const cashExpenses: ClosingConsolidated['cashExpenses'] = [];
+    const groups = new Map<string, number>();
+    for (const m of movements) {
+      const location = locationOf.get(m.cashSessionId)!;
+      const amount = Number(m.amount);
+      if (m.movementType === CashMovementType.INCOME) {
+        const order = m.linkedPayment?.order;
+        cashReceived.push({
+          location,
+          reference: order?.orderNumber ?? m.receiptNumber,
+          detail: order?.client?.name ?? m.description,
+          amount,
+        });
+      } else {
+        const expense = describeExpense(m);
+        cashExpenses.push({ location, amount, ...expense });
+        groups.set(expense.group, (groups.get(expense.group) ?? 0) + amount);
+      }
+    }
+
+    const base = totals.openingAmount + totals.handoversIn;
+    const total =
+      base + totals.deposits + totals.incomeCash - totals.cashExpenses - totals.withdrawals;
+    const withSession = rows.filter((row) => row.status !== 'NO_SESSION');
+    const counted = withSession.some((row) => row.status === 'OPEN')
+      ? null
+      : withSession.reduce((sum, row) => sum + (row.totals.counted ?? 0), 0);
+
+    return {
+      base,
+      cashDeposits: totals.deposits,
+      cashSales: totals.incomeCash,
+      expenseGroups: [...groups.entries()]
+        .map(([label, amount]) => ({ label, amount }))
+        .sort((a, b) => b.amount - a.amount),
+      cashWithdrawals: totals.withdrawals,
+      total,
+      counted,
+      difference: counted === null ? null : counted - total,
+      cashReceived,
+      cashExpenses,
+    };
   }
 
   private sumTotals(rows: RegisterDayRow[]): RegisterDayTotals {

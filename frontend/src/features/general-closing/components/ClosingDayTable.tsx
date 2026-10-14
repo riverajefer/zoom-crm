@@ -42,7 +42,12 @@ const STATUS_COLORS: Record<RegisterDayStatus, 'default' | 'success' | 'warning'
 };
 
 /** Columnas que solo aparecen si alguna caja tiene algo en ellas. */
-const OPTIONAL_FIELDS: (keyof RegisterDayTotals)[] = ['incomeOther', 'deposits', 'otherExpenses'];
+const OPTIONAL_FIELDS: (keyof RegisterDayTotals)[] = [
+  'incomeOther',
+  'deposits',
+  'handoversIn',
+  'otherExpenses',
+];
 
 /** La revisión lleva las acciones: se queda a la vista aunque la tabla se desplace. */
 const STICKY_REVIEW = {
@@ -85,12 +90,28 @@ interface RowProps {
   canOpenSessions: boolean;
   busy: boolean;
   onReview: (row: RegisterDayRow, status: GeneralClosingReviewStatus) => void;
+  onHandover: (row: RegisterDayRow) => void;
 }
 
-const RegisterRow: React.FC<RowProps> = ({ row, columns, canReview, canOpenSessions, busy, onReview }) => {
+const RegisterRow: React.FC<RowProps> = ({
+  row,
+  columns,
+  canReview,
+  canOpenSessions,
+  busy,
+  onReview,
+  onHandover,
+}) => {
   const [open, setOpen] = useState(false);
-  const { cashRegister, review, sessions, totals } = row;
+  const { cashRegister, review, sessions, totals, handover } = row;
   const hasDiscrepancy = (totals.discrepancy ?? 0) !== 0;
+  // El efectivo de un local que ya cerró lo recoge la Matriz.
+  const canHandover =
+    canReview &&
+    row.status === 'CLOSED' &&
+    cashRegister.location.type === 'STORE' &&
+    !handover &&
+    (totals.counted ?? 0) > 0;
 
   return (
     <>
@@ -183,6 +204,17 @@ const RegisterRow: React.FC<RowProps> = ({ row, columns, canReview, canOpenSessi
               {review.notes}
             </Typography>
           )}
+          {handover && (
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+              Entregó {formatCurrency(handover.amount)}
+              {handover.baseLeft !== null && ` · base ${formatCurrency(handover.baseLeft)}`}
+            </Typography>
+          )}
+          {canHandover && (
+            <Button size="small" sx={{ mt: 0.5 }} disabled={busy} onClick={() => onHandover(row)}>
+              Recibir efectivo
+            </Button>
+          )}
         </TableCell>
       </TableRow>
       {sessions.length > 0 && (
@@ -226,10 +258,18 @@ interface Props {
   canOpenSessions: boolean;
   busy: boolean;
   onReview: (row: RegisterDayRow, status: GeneralClosingReviewStatus) => void;
+  onHandover: (row: RegisterDayRow) => void;
 }
 
 /** Las cajas de todas las sedes en un día, lado a lado, con su revisión. */
-export const ClosingDayTable: React.FC<Props> = ({ day, canReview, canOpenSessions, busy, onReview }) => {
+export const ClosingDayTable: React.FC<Props> = ({
+  day,
+  canReview,
+  canOpenSessions,
+  busy,
+  onReview,
+  onHandover,
+}) => {
   const columns = TOTAL_COLUMNS.filter(
     (column) =>
       !OPTIONAL_FIELDS.includes(column.field) || day.registers.some((row) => row.totals[column.field]),
@@ -261,6 +301,7 @@ export const ClosingDayTable: React.FC<Props> = ({ day, canReview, canOpenSessio
               canOpenSessions={canOpenSessions}
               busy={busy}
               onReview={onReview}
+              onHandover={onHandover}
             />
           ))}
           <TableRow sx={{ bgcolor: 'action.hover' }}>

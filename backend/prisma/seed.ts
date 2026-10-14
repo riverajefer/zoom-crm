@@ -650,6 +650,11 @@ async function main() {
     'read_cash_registers',
     'read_cash_sessions',
     'read_cash_movements',
+    // Contabilidad es la cajera de la Matriz: abre y cierra esa caja, recibe en
+    // ella el efectivo de los locales y registra los retiros del banco.
+    'open_cash_session',
+    'close_cash_session',
+    'create_cash_movements',
     'read_expense_types',
     'create_expense_orders',
     'read_expense_orders',

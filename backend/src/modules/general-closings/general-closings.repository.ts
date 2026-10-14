@@ -8,7 +8,8 @@ import {
 } from '../../generated/prisma';
 import { LOCATION_SUMMARY_SELECT } from '../../common/constants/location-select';
 import { withoutLocationScope } from '../../common/utils/location-context';
-import { EXCLUDE_REVERSALS } from '../cash-movement/cash-movement.helpers';
+import { CASH_HANDOVER_REFERENCE, EXCLUDE_REVERSALS } from '../cash-movement/cash-movement.helpers';
+import { findActiveCashSessionForLocation } from '../cash-session/active-cash-session.util';
 
 const USER_SELECT = { id: true, firstName: true, lastName: true } as const;
 
@@ -34,6 +35,29 @@ const SESSION_SELECT = {
   closedBy: { select: USER_SELECT },
 } as const;
 
+const CASH_MOVEMENT_SELECT = {
+  id: true,
+  cashSessionId: true,
+  movementType: true,
+  amount: true,
+  description: true,
+  receiptNumber: true,
+  referenceType: true,
+  referenceId: true,
+  linkedPayment: {
+    select: { order: { select: { orderNumber: true, client: { select: { name: true } } } } },
+  },
+} as const;
+
+const HANDOVER_SELECT = {
+  id: true,
+  amount: true,
+  receiptNumber: true,
+  referenceId: true,
+  createdAt: true,
+  performedBy: { select: USER_SELECT },
+} as const;
+
 const CLOSING_INCLUDE = {
   closedBy: { select: USER_SELECT },
   reviews: { include: { reviewedBy: { select: USER_SELECT } } },
@@ -45,6 +69,8 @@ const CLOSING_INCLUDE = {
 
 export type ClosingRegister = Prisma.CashRegisterGetPayload<{ select: typeof REGISTER_SELECT }>;
 export type ClosingSession = Prisma.CashSessionGetPayload<{ select: typeof SESSION_SELECT }>;
+export type ClosingCashMovement = Prisma.CashMovementGetPayload<{ select: typeof CASH_MOVEMENT_SELECT }>;
+export type ClosingHandover = Prisma.CashMovementGetPayload<{ select: typeof HANDOVER_SELECT }>;
 export type ClosingWithDetail = Prisma.GeneralClosingGetPayload<{ include: typeof CLOSING_INCLUDE }>;
 
 /**
@@ -95,9 +121,89 @@ export class GeneralClosingsRepository {
     if (sessionIds.length === 0) return Promise.resolve([]);
     return withoutLocationScope(() =>
       this.prisma.cashMovement.groupBy({
-        by: ['cashSessionId', 'movementType', 'paymentMethod'],
+        by: ['cashSessionId', 'movementType', 'paymentMethod', 'referenceType'],
         where: { cashSessionId: { in: sessionIds }, isVoided: false, ...EXCLUDE_REVERSALS },
         _sum: { amount: true },
+      }),
+    );
+  }
+
+  /** El efectivo del día, movimiento por movimiento, para el detalle del consolidado. */
+  findCashMovements(sessionIds: string[]) {
+    if (sessionIds.length === 0) return Promise.resolve([]);
+    return withoutLocationScope(() =>
+      this.prisma.cashMovement.findMany({
+        where: {
+          cashSessionId: { in: sessionIds },
+          paymentMethod: 'CASH',
+          movementType: { in: ['INCOME', 'EXPENSE'] },
+          isVoided: false,
+          ...EXCLUDE_REVERSALS,
+        },
+        select: CASH_MOVEMENT_SELECT,
+        orderBy: { createdAt: 'asc' },
+      }),
+    );
+  }
+
+  /** Las entregas de efectivo a la Matriz que salieron de estas sesiones. */
+  findHandovers(sourceSessionIds: string[]) {
+    if (sourceSessionIds.length === 0) return Promise.resolve([]);
+    return withoutLocationScope(() =>
+      this.prisma.cashMovement.findMany({
+        where: {
+          referenceType: CASH_HANDOVER_REFERENCE,
+          referenceId: { in: sourceSessionIds },
+          isVoided: false,
+        },
+        select: HANDOVER_SELECT,
+      }),
+    );
+  }
+
+  findExpenseOrders(ids: string[]) {
+    if (ids.length === 0) return Promise.resolve([]);
+    return withoutLocationScope(() =>
+      this.prisma.expenseOrder.findMany({
+        where: { id: { in: ids } },
+        select: {
+          id: true,
+          ogNumber: true,
+          expenseType: { select: { name: true } },
+          items: { select: { supplier: { select: { name: true } } } },
+        },
+      }),
+    );
+  }
+
+  findAccountsPayable(ids: string[]) {
+    if (ids.length === 0) return Promise.resolve([]);
+    return withoutLocationScope(() =>
+      this.prisma.accountPayable.findMany({
+        where: { id: { in: ids } },
+        select: {
+          id: true,
+          apNumber: true,
+          expenseType: { select: { name: true } },
+          supplier: { select: { name: true } },
+        },
+      }),
+    );
+  }
+
+  /** La sesión abierta de la caja de la Matriz, que es la que recibe el efectivo. */
+  async findHeadquartersOpenSession() {
+    const headquarters = await this.prisma.location.findFirst({
+      where: { type: 'HEADQUARTERS', isActive: true },
+      select: { id: true },
+    });
+    if (!headquarters) return null;
+    const active = await findActiveCashSessionForLocation(this.prisma, headquarters.id);
+    if (!active) return null;
+    return withoutLocationScope(() =>
+      this.prisma.cashSession.findUnique({
+        where: { id: active.id },
+        select: { id: true, openedAt: true },
       }),
     );
   }

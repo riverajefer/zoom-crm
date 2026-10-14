@@ -1,5 +1,6 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { generalClosingsApi } from '../../../api/general-closings.api';
+import { cashKeys } from '../../cash-register/hooks/useCashRegister';
 import type { GeneralClosingReviewStatus } from '../../../types/general-closing.types';
 
 export const GENERAL_CLOSING_KEY = ['general-closings'] as const;
@@ -29,6 +30,17 @@ export const useGeneralClosingActions = (date: string) => {
   const queryClient = useQueryClient();
   const invalidate = () => queryClient.invalidateQueries({ queryKey: GENERAL_CLOSING_KEY });
 
+  const handoverMutation = useMutation({
+    mutationFn: (vars: { cashRegisterId: string; baseLeft: number }) =>
+      generalClosingsApi.receiveHandover(date, vars.cashRegisterId, vars.baseLeft),
+    onSuccess: () => {
+      invalidate();
+      // Entró un depósito a la caja de la Matriz.
+      queryClient.invalidateQueries({ queryKey: cashKeys.sessions.all });
+      queryClient.invalidateQueries({ queryKey: cashKeys.movements.all });
+    },
+  });
+
   const reviewMutation = useMutation({
     mutationFn: (vars: { cashRegisterId: string; status: GeneralClosingReviewStatus; notes?: string }) =>
       generalClosingsApi.reviewRegister(date, vars.cashRegisterId, vars.status, vars.notes),
@@ -45,5 +57,5 @@ export const useGeneralClosingActions = (date: string) => {
     onSuccess: invalidate,
   });
 
-  return { reviewMutation, closeMutation, reopenMutation };
+  return { reviewMutation, handoverMutation, closeMutation, reopenMutation };
 };

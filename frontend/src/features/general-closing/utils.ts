@@ -52,6 +52,8 @@ export function exportGeneralClosingExcel(day: GeneralClosingDay): void {
     'Revisión',
     'Nota de la revisión',
     'Revisó',
+    'Entregó a la Matriz',
+    'Base que quedó',
   ];
   const rows: (string | number | null)[][] = [
     ['Cierre general de cajas'],
@@ -71,14 +73,51 @@ export function exportGeneralClosingExcel(day: GeneralClosingDay): void {
       row.review ? REVIEW_STATUS_LABELS[row.review.status] : 'Sin revisar',
       row.review?.notes ?? '',
       row.review ? fullName(row.review.reviewedBy) : '',
+      row.handover?.amount ?? null,
+      row.handover?.baseLeft ?? null,
     ]),
     ['Total', '', '', ...TOTAL_COLUMNS.map((c) => day.totals[c.field])],
   ];
 
   const sheet = XLSX.utils.aoa_to_sheet(rows);
-  sheet['!cols'] = header.map((_, i) => ({ wch: i < 2 ? 18 : i >= header.length - 3 ? 26 : 15 }));
+  sheet['!cols'] = header.map((_, i) => ({ wch: i < 2 ? 18 : i >= header.length - 5 ? 24 : 15 }));
   const book = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(book, sheet, 'Cierre general');
+
+  // La primera hoja es la planilla de contabilidad: el consolidado de caja.
+  const c = day.consolidated;
+  const consolidated: (string | number | null)[][] = [
+    ['Consolidado de caja', day.date],
+    [],
+    ['(+) Valor inicial (base)', c.base],
+    ['(+) Retiros del banco', c.cashDeposits],
+    ['(+) Ventas (abonos y saldos)', c.cashSales],
+    ...c.expenseGroups.map((group) => [`(−) ${group.label}`, group.amount]),
+    ...(c.cashWithdrawals > 0 ? [['(−) Consignaciones', c.cashWithdrawals]] : []),
+    [],
+    ['Total en caja', c.total],
+    ['Efectivo en caja', c.counted],
+    ['Diferencia', c.difference],
+    [],
+    ['Recibido en efectivo'],
+    ['Sede', 'OP', 'Cliente', 'Valor'],
+    ...c.cashReceived.map((line) => [line.location.code, line.reference, line.detail, line.amount]),
+    ['Total', '', '', c.cashReceived.reduce((sum, line) => sum + line.amount, 0)],
+    [],
+    ['Gastos en efectivo'],
+    ['Sede', 'Documento', 'Proveedor', 'Valor', 'Tipo de gasto'],
+    ...c.cashExpenses.map((line) => [
+      line.location.code,
+      line.reference,
+      line.detail,
+      line.amount,
+      line.group,
+    ]),
+    ['Total', '', '', c.cashExpenses.reduce((sum, line) => sum + line.amount, 0)],
+  ];
+  const consolidatedSheet = XLSX.utils.aoa_to_sheet(consolidated);
+  consolidatedSheet['!cols'] = [{ wch: 30 }, { wch: 20 }, { wch: 34 }, { wch: 16 }, { wch: 22 }];
+  XLSX.utils.book_append_sheet(book, consolidatedSheet, 'Consolidado');
+  XLSX.utils.book_append_sheet(book, sheet, 'Cajas');
 
   const sessions: (string | number | null)[][] = [
     ['Caja', 'Apertura', 'Abrió', 'Cierre', 'Cerró', 'Base', 'Esperado', 'Contado', 'Diferencia', 'Nota'],

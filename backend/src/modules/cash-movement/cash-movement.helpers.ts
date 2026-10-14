@@ -26,3 +26,10 @@ export const INVERSE_MOVEMENT_TYPE: Record<CashMovementType, CashMovementType> =
 export const EXCLUDE_REVERSALS: Prisma.CashMovementWhereInput = {
   originalMovement: null,
 };
+
+/**
+ * `referenceType` del depósito con el que la Matriz recibe el efectivo de un
+ * local (solo Zoom, cierre general). `referenceId` es la sesión del local que
+ * lo entrega. No es dinero nuevo: el consolidado lo cuenta en la base.
+ */
+export const CASH_HANDOVER_REFERENCE = 'CASH_HANDOVER';

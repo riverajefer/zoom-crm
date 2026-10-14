@@ -172,7 +172,7 @@ const PaymentVerificationsPage: React.FC = () => {
     <Box sx={{ p: { xs: 1, sm: 2, md: 3 } }}>
       <PageHeader
         title="Verificación de Pagos"
-        subtitle="Revisión de contabilidad sobre los pagos que cada sede ya aprobó en su caja"
+        subtitle="Revisión de contabilidad sobre los pagos que registra cada sede"
       />
 
       <Tabs
@@ -326,7 +326,7 @@ const PaymentVerificationsPage: React.FC = () => {
                 <TableCell>Orden</TableCell>
                 <TableCell>Método</TableCell>
                 <TableCell align="right">Monto</TableCell>
-                <TableCell sx={{ whiteSpace: 'nowrap' }}>Recibió / aprobó en caja</TableCell>
+                <TableCell sx={{ whiteSpace: 'nowrap' }}>Recibió</TableCell>
                 {filters.status !== 'PENDING' && <TableCell>Contabilidad</TableCell>}
                 <TableCell align="right">Acciones</TableCell>
               </TableRow>
@@ -387,11 +387,11 @@ const PaymentVerificationsPage: React.FC = () => {
                   </TableCell>
                   <TableCell sx={{ whiteSpace: 'nowrap' }}>
                     {fullName(payment.receivedBy)}
-                    <Typography variant="caption" color="text.secondary" display="block">
-                      {payment.advancePaymentApproval?.reviewedBy
-                        ? `Caja: ${fullName(payment.advancePaymentApproval.reviewedBy)}`
-                        : 'Sin aprobación de caja'}
-                    </Typography>
+                    {payment.advancePaymentApproval?.reviewedBy && (
+                      <Typography variant="caption" color="text.secondary" display="block">
+                        Caja: {fullName(payment.advancePaymentApproval.reviewedBy)}
+                      </Typography>
+                    )}
                   </TableCell>
                   {filters.status !== 'PENDING' && (
                     <TableCell sx={{ maxWidth: 260 }}>

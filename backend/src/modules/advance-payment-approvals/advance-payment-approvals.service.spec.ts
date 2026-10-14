@@ -89,16 +89,9 @@ describe('AdvancePaymentApprovalsService', () => {
   });
 
   describe('requiresApproval', () => {
-    it('should always require approval, even for users with approve_advance_payments', async () => {
-      const result = await service.requiresApproval('u1');
-      expect(result.required).toBe(true);
-      expect(result.reason).toBeDefined();
-    });
-
-    it('should require approval for users without the permission', async () => {
-      const result = await service.requiresApproval('u2');
-      expect(result.required).toBe(true);
-      expect(result.reason).toBeDefined();
+    // Solo Zoom: el pago no espera a Caja; lo revisa después contabilidad.
+    it('no pide autorización de Caja a nadie', async () => {
+      expect(await service.requiresApproval('u1')).toEqual({ required: false });
     });
   });
 

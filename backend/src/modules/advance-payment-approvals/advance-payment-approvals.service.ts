@@ -331,20 +331,22 @@ export class AdvancePaymentApprovalsService implements OnModuleInit, ApprovalReq
   /**
    * Verificar si el pago requiere autorización de Caja.
    *
-   * Política: TODO pago entrante debe ser autorizado por Caja, sin importar el
-   * rol que lo registró (incluidos admin y el propio rol Caja). No hay bypass
-   * por permiso: `approve_advance_payments` solo determina QUIÉN puede aprobar
-   * desde la cola de Caja, no exime de la solicitud.
+   * **Distinto de High**: en Zoom ningún pago la requiere. En los locales no
+   * hay un cajero permanente (quien vende es quien cobra), así que una
+   * solicitud a Caja dejaba la OP trabada hasta que alguien la aprobara. El
+   * pago cuenta desde que se registra, la OP sigue su curso, y el control es
+   * posterior: contabilidad lo revisa en la verificación de pagos
+   * (`payment-verifications`) y, si algo no cuadra, lo observa.
+   *
+   * En High la respuesta es siempre `required: true`. Las solicitudes que ya
+   * existían se siguen aprobando o rechazando desde la cola de Caja.
    *
    * Se conserva la firma `(userId)` por compatibilidad con los llamadores.
    */
   async requiresApproval(
     _userId: string,
   ): Promise<{ required: boolean; reason?: string }> {
-    return {
-      required: true,
-      reason: 'El pago requiere autorización de Caja',
-    };
+    return { required: false };
   }
 
   /**

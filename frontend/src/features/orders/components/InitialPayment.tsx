@@ -201,16 +201,8 @@ export const InitialPayment: React.FC<InitialPaymentProps> = ({
         </Typography>
         <Divider sx={{ mb: 2 }} />
 
-        {/* Alerta: todo anticipo requiere autorización de Caja, sin importar el
-            rol. El descuento por nómina es la excepción: no entra dinero a caja
-            en ningún momento, así que quien lo autoriza es nómina. Decirle al
-            asesor que espere a Caja lo dejaría esperando una aprobación que
-            nunca va a llegar. */}
-        {enabled && !values.every((p) => p.paymentMethod === 'PAYROLL_DEDUCTION') && (
-          <Alert severity="info" sx={{ mb: 2 }}>
-            El anticipo debe ser aprobado por Caja antes de que la orden pueda avanzar de estado.
-          </Alert>
-        )}
+        {/* Distinto de High: en Zoom el anticipo no espera a Caja. Cuenta
+            desde que se registra y contabilidad lo revisa después. */}
 
         {enabled && values.some((p) => p.paymentMethod === 'PAYROLL_DEDUCTION') && (
           <Alert severity="info" sx={{ mb: 2 }}>

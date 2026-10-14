@@ -15,8 +15,24 @@ const sourceOrder = (overrides: Record<string, any> = {}) => ({
   total: new Prisma.Decimal(80000),
   paidAmount: new Prisma.Decimal(100000),
   appliedCreditAmount: new Prisma.Decimal(0),
+  // Pagos vivos con aprobación de Caja pendiente (el select ya los filtra).
+  payments: [],
   ...overrides,
 });
+
+/**
+ * OP-2026-3724: total 360.000, abonos aprobados por 425.000 y un abono
+ * duplicado de 225.000 que Caja aún no revisa → paidAmount 650.000.
+ */
+const op3724 = (overrides: Record<string, any> = {}) =>
+  sourceOrder({
+    id: 'order-3724',
+    orderNumber: 'OP-2026-3724',
+    total: new Prisma.Decimal(360000),
+    paidAmount: new Prisma.Decimal(650000),
+    payments: [{ amount: new Prisma.Decimal(225000) }],
+    ...overrides,
+  });
 
 describe('CreditBalanceService', () => {
   let service: CreditBalanceService;
@@ -64,6 +80,40 @@ describe('CreditBalanceService', () => {
       const sources = await service.listCreditSources('client-1');
 
       expect(Number(sources[0].available)).toBe(5000);
+    });
+
+    // Un abono pendiente se borra si Caja lo rechaza: lo que se hubiera gastado
+    // de él quedaría como deuda en la OP de origen (OP-2026-3724).
+    it('no cuenta como saldo a favor los pagos pendientes de aprobación', async () => {
+      prisma.order.findMany.mockResolvedValue([op3724()]);
+
+      const sources = await service.listCreditSources('client-1');
+
+      // 425.000 aprobados - 360.000 = 65.000; los 225.000 pendientes no suman.
+      expect(sources).toHaveLength(1);
+      expect(Number(sources[0].available)).toBe(65000);
+    });
+
+    it('descarta la OP cuyo excedente sale solo de pagos pendientes', async () => {
+      prisma.order.findMany.mockResolvedValue([
+        sourceOrder({ payments: [{ amount: new Prisma.Decimal(20000) }] }),
+      ]);
+
+      const sources = await service.listCreditSources('client-1');
+
+      expect(sources).toHaveLength(0);
+    });
+
+    it('trae solo los pagos vivos con aprobación pendiente', async () => {
+      prisma.order.findMany.mockResolvedValue([]);
+
+      await service.listCreditSources('client-1');
+
+      const { select } = prisma.order.findMany.mock.calls[0][0];
+      expect(select.payments.where).toEqual({
+        isVoided: false,
+        advancePaymentApproval: { is: { status: 'PENDING' } },
+      });
     });
 
     it('excluye la orden destino', async () => {
@@ -125,6 +175,15 @@ describe('CreditBalanceService', () => {
 
       await expect(
         service.assertEnoughCredit('client-1', 25000),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('falla cuando el saldo solo alcanza contando pagos pendientes', async () => {
+      prisma.order.findMany.mockResolvedValue([op3724()]);
+
+      // Con el pendiente habría 290.000; sin él, 65.000.
+      await expect(
+        service.assertEnoughCredit('client-1', 201000),
       ).rejects.toThrow(BadRequestException);
     });
 
@@ -199,6 +258,22 @@ describe('CreditBalanceService', () => {
         ['order-src', 5000],
         ['order-src-2', 7000],
       ]);
+    });
+
+    it('no consume el excedente de pagos pendientes de aprobación', async () => {
+      prisma.order.findMany.mockResolvedValue([op3724()]);
+
+      await expect(
+        service.applyCredit(prisma as any, {
+          clientId: 'client-1',
+          paymentId: 'pay-1',
+          amount: 201000,
+          targetOrderId: 'order-dst',
+        }),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(prisma.creditBalanceApplication.create).not.toHaveBeenCalled();
+      expect(prisma.order.update).not.toHaveBeenCalled();
     });
 
     it('rechaza aplicar más saldo del disponible', async () => {

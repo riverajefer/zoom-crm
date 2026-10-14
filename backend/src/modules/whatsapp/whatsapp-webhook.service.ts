@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Injectable,
   Logger,
   UnauthorizedException,
@@ -327,7 +328,19 @@ export class WhatsappWebhookService {
         `✅ ${requestInfo.displayLabel} fue autorizada correctamente.`,
       );
     } else {
-      await handler.rejectViaWhatsApp(ctx.requestId, reviewer.id);
+      try {
+        await handler.rejectViaWhatsApp(ctx.requestId, reviewer.id);
+      } catch (error) {
+        // Una regla de negocio impidió el rechazo (p. ej. el saldo a favor del
+        // pago ya se gastó). La solicitud sigue pendiente: hay que decirle a
+        // quien revisa por qué, o creerá que el rechazo se aplicó.
+        if (!(error instanceof BadRequestException)) throw error;
+        await this.whatsappService.sendTextMessage(
+          fromPhone,
+          `⚠️ No se pudo rechazar ${requestInfo.displayLabel}. ${error.message}`,
+        );
+        return;
+      }
       await this.whatsappService.sendTextMessage(
         fromPhone,
         `❌ ${requestInfo.displayLabel} fue rechazada.`,

@@ -5,6 +5,7 @@ import {
   createMockPrismaService,
   MockPrismaService,
 } from '../../database/prisma.service.mock';
+import { Prisma } from '../../generated/prisma';
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -18,6 +19,18 @@ const mockClient = {
   department: { id: 'dept-1', name: 'Cundinamarca', code: '25' },
   city: { id: 'city-1', name: 'Bogotá' },
   saldoAFavor: 0,
+};
+
+/**
+ * OP-2026-3724: total 360.000, abonos aprobados por 425.000 y un abono de
+ * 225.000 pendiente de Caja (ya sumado a paidAmount).
+ */
+const op3724 = {
+  total: new Prisma.Decimal(360000),
+  paidAmount: new Prisma.Decimal(650000),
+  appliedCreditAmount: new Prisma.Decimal(0),
+  reversedAmount: new Prisma.Decimal(0),
+  payments: [{ amount: new Prisma.Decimal(225000) }],
 };
 
 // ---------------------------------------------------------------------------
@@ -114,6 +127,19 @@ describe('ClientsRepository', () => {
         expect.objectContaining({ where: { id: 'client-1' } }),
       );
       expect(result).toEqual(mockClient);
+    });
+
+    // La ficha debe mostrar lo mismo que el pago con saldo a favor acepta.
+    it('saldoAFavor no cuenta los pagos pendientes de aprobación de Caja', async () => {
+      prisma.client.findUnique.mockResolvedValue({
+        ...mockClient,
+        orders: [op3724],
+      });
+
+      const result = await repository.findById('client-1');
+
+      expect(result?.saldoAFavor).toBe(65000);
+      expect(result).not.toHaveProperty('orders');
     });
 
     it('should return null when client does not exist', async () => {
@@ -257,6 +283,29 @@ describe('ClientsRepository', () => {
 
       expect(prisma.$transaction).toHaveBeenCalled();
       expect(prisma.client.create).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // findClientStats
+  // ---------------------------------------------------------------------------
+  describe('findClientStats', () => {
+    it('saldoAFavor no cuenta los pagos pendientes de aprobación de Caja', async () => {
+      prisma.order.findMany.mockResolvedValue([
+        {
+          ...op3724,
+          id: 'order-3724',
+          orderNumber: 'OP-2026-3724',
+          orderDate: new Date('2026-10-01'),
+          balance: new Prisma.Decimal(-290000),
+          status: 'CONFIRMED',
+          createdBy: null,
+        },
+      ]);
+
+      const stats = await repository.findClientStats('client-1');
+
+      expect(stats.saldoAFavor).toBe(65000);
     });
   });
 });

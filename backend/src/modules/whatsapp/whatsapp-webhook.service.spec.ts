@@ -5,7 +5,7 @@ import { PrismaService } from '../../database/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { WhatsappService } from './whatsapp.service';
 import { ApprovalRequestRegistry, ApprovalRequestHandler } from './approval-request-registry';
-import { Logger, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, Logger, UnauthorizedException } from '@nestjs/common';
 import * as crypto from 'crypto';
 
 describe('WhatsappWebhookService', () => {
@@ -519,6 +519,27 @@ describe('WhatsappWebhookService', () => {
       expect(whatsappService.sendTextMessage).toHaveBeenCalledWith(
         '57300000000', expect.stringContaining('rechazada'),
       );
+    });
+
+    // El rechazo puede bloquearse por una regla de negocio (p. ej. el saldo a
+    // favor del pago ya se gastó en otras OPs): la solicitud sigue pendiente y
+    // quien revisa tiene que saber por qué.
+    it('should tell the reviewer why a reject was blocked and keep the context', async () => {
+      prisma.user.findFirst.mockResolvedValue({ id: 'admin2', role: { name: 'admin' } });
+      (mockHandler.rejectViaWhatsApp as jest.Mock).mockRejectedValue(
+        new BadRequestException('No se puede rechazar este pago: ya se usó como saldo a favor.'),
+      );
+
+      await service.processWebhook(buildGenericButton('REJECT'));
+
+      expect(whatsappService.sendTextMessage).toHaveBeenCalledWith(
+        '57300000000',
+        expect.stringContaining('No se puede rechazar este pago: ya se usó como saldo a favor.'),
+      );
+      expect(whatsappService.sendTextMessage).not.toHaveBeenCalledWith(
+        '57300000000', expect.stringContaining('fue rechazada'),
+      );
+      expect(prisma.whatsappActionContext.delete).not.toHaveBeenCalled();
     });
 
     it('should delete action context after generic approval', async () => {

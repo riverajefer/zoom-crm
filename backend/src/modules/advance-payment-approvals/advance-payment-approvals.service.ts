@@ -22,12 +22,16 @@ import {
 import { ApprovalRequestType, EditRequestStatus, NotificationType, Prisma } from '../../generated/prisma';
 import {
   ACTIVE_PAYMENT_WHERE,
+  computeAvailableOverpayment,
   computeNetPaidAmount,
   computeOrderBalance,
 } from '../../common/utils/order-balance.util';
 import { CreditBalanceService } from '../credit-balance/credit-balance.service';
 import { lockOrderForUpdate } from '../../common/utils/order-lock.util';
 import { queueLocationFilter } from '../../common/utils/location-context';
+
+const formatCop = (value: Prisma.Decimal | number): string =>
+  `$${Number(value).toLocaleString('es-CO')}`;
 
 const USER_SELECT = {
   id: true,
@@ -120,6 +124,92 @@ export class AdvancePaymentApprovalsService implements OnModuleInit, ApprovalReq
           status === EditRequestStatus.REJECTED ? rejectedReason : null,
       },
     });
+  }
+
+  /**
+   * Impide rechazar un pago cuyo valor ya se gastó como saldo a favor en otras
+   * órdenes.
+   *
+   * Rechazar borra el pago y baja el abono de la OP, pero no deshace lo que
+   * otras OPs ya pagaron con ese excedente: el faltante quedaría como deuda en
+   * esta OP, que no es donde el cliente la contrajo. Caso real OP-2026-3724: un
+   * abono duplicado de 225.000 se gastó en 4 OPs mientras esperaba a Caja y, al
+   * rechazarlo, la OP quedó debiendo 138.600 con 425.000 abonados sobre 360.000.
+   *
+   * Desde que el saldo gastable excluye los pagos pendientes esto no debería
+   * repetirse; protege lo que se aplicó antes de ese arreglo. Se valida antes de
+   * marcar la solicitud como rechazada para que siga PENDING: Caja la puede
+   * rechazar cuando se deshagan los pagos con saldo a favor que la consumieron.
+   */
+  private async assertRejectionKeepsAppliedCreditCovered(
+    orderId: string,
+    paymentId: string | null,
+  ): Promise<void> {
+    if (!paymentId) return;
+
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      select: {
+        total: true,
+        appliedCreditAmount: true,
+        refundedAmount: true,
+        reversedAmount: true,
+      },
+    });
+    if (!order) return;
+
+    const appliedCredit = new Prisma.Decimal(order.appliedCreditAmount ?? 0);
+    if (appliedCredit.lessThanOrEqualTo(0)) return;
+
+    // El mismo cálculo que hará `deleteRejectedPaymentAndRecalculate`, sin el
+    // pago que se rechaza.
+    const remainingPayments = await this.prisma.payment.findMany({
+      where: { orderId, id: { not: paymentId }, ...ACTIVE_PAYMENT_WHERE },
+      select: { amount: true },
+    });
+    const paidAmountAfter = computeNetPaidAmount(
+      remainingPayments.reduce(
+        (sum, payment) => sum.add(payment.amount),
+        new Prisma.Decimal(0),
+      ),
+      order.refundedAmount,
+    );
+    const overpaymentAfter = computeAvailableOverpayment({
+      total: order.total,
+      paidAmount: paidAmountAfter,
+      reversedAmount: order.reversedAmount,
+    });
+
+    if (appliedCredit.lessThanOrEqualTo(overpaymentAfter)) return;
+
+    const applications = await this.prisma.creditBalanceApplication.findMany({
+      where: { sourceOrderId: orderId },
+      select: {
+        amount: true,
+        payment: { select: { order: { select: { orderNumber: true } } } },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const usedByOrder = new Map<string, Prisma.Decimal>();
+    for (const application of applications) {
+      const orderNumber = application.payment.order.orderNumber;
+      usedByOrder.set(
+        orderNumber,
+        (usedByOrder.get(orderNumber) ?? new Prisma.Decimal(0)).add(
+          application.amount,
+        ),
+      );
+    }
+    const usedIn = [...usedByOrder]
+      .map(([orderNumber, amount]) => `${orderNumber} (${formatCop(amount)})`)
+      .join(', ');
+
+    throw new BadRequestException(
+      `No se puede rechazar este pago: ${formatCop(appliedCredit.sub(overpaymentAfter))} de su valor ya se usó como saldo a favor` +
+        (usedIn ? ` para pagar ${usedIn}` : ' en otras órdenes') +
+        '. Primero elimina o edita esos pagos con saldo a favor y luego rechaza este.',
+    );
   }
 
   /**
@@ -270,6 +360,11 @@ export class AdvancePaymentApprovalsService implements OnModuleInit, ApprovalReq
     });
 
     if (!request) return;
+
+    await this.assertRejectionKeepsAppliedCreditCovered(
+      request.orderId,
+      request.paymentId,
+    );
 
     await this.prisma.advancePaymentApproval.update({
       where: { id: requestId },
@@ -564,7 +659,13 @@ export class AdvancePaymentApprovalsService implements OnModuleInit, ApprovalReq
     // 2. Validar que revisor tiene permiso
     await this.validateReviewerPermission(reviewerId);
 
-    // 3. Actualizar solicitud a REJECTED
+    // 3. Que el rechazo no deje como deuda el saldo a favor ya gastado
+    await this.assertRejectionKeepsAppliedCreditCovered(
+      request.orderId,
+      request.paymentId,
+    );
+
+    // 4. Actualizar solicitud a REJECTED
     await this.prisma.advancePaymentApproval.update({
       where: { id: requestId },
       data: {
@@ -575,7 +676,7 @@ export class AdvancePaymentApprovalsService implements OnModuleInit, ApprovalReq
       },
     });
 
-    // 4. Eliminar el pago y recalcular montos en la orden
+    // 5. Eliminar el pago y recalcular montos en la orden
     await this.deleteRejectedPaymentAndRecalculate(
       request.orderId,
       request.paymentId,
@@ -583,7 +684,7 @@ export class AdvancePaymentApprovalsService implements OnModuleInit, ApprovalReq
       reviewerId,
     );
 
-    // 5. Notificar al solicitante
+    // 6. Notificar al solicitante
     const rejectReason = dto.reviewNotes ? ` Motivo: ${dto.reviewNotes}` : '';
     await this.notificationsService.create({
       userId: request.requestedById,
@@ -594,7 +695,7 @@ export class AdvancePaymentApprovalsService implements OnModuleInit, ApprovalReq
       relatedType: 'Order',
     });
 
-    // 6. Emitir evento WebSocket
+    // 7. Emitir evento WebSocket
     this.wsEventsGateway.emitApprovalUpdated({ id: requestId, status: 'REJECTED', orderId: request.orderId });
 
     // Re-fetch para retornar datos actualizados

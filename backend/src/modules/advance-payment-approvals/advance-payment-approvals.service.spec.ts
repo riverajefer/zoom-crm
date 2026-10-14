@@ -4,7 +4,7 @@ import { PrismaService } from '../../database/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { ApprovalRequestRegistry } from '../whatsapp/approval-request-registry';
 import { WhatsappService } from '../whatsapp/whatsapp.service';
-import { NotFoundException, ForbiddenException } from '@nestjs/common';
+import { NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { EditRequestStatus, NotificationType, Prisma } from '../../generated/prisma';
 import { WsEventsGateway } from '../ws-events/ws-events.gateway';
 import { CreditBalanceService } from '../credit-balance/credit-balance.service';
@@ -41,6 +41,9 @@ describe('AdvancePaymentApprovalsService', () => {
       },
       cashMovement: {
         update: jest.fn(),
+      },
+      creditBalanceApplication: {
+        findMany: jest.fn().mockResolvedValue([]),
       },
       $transaction: jest.fn(),
       // `lockOrderForUpdate` bloquea la OP con SQL crudo.
@@ -407,6 +410,125 @@ describe('AdvancePaymentApprovalsService', () => {
     it('should throw NotFoundException if request not found', async () => {
       (prisma.advancePaymentApproval.findFirst as jest.Mock).mockResolvedValue(null);
       await expect(service.reject('req1', 'rev1', {})).rejects.toThrow(NotFoundException);
+    });
+
+    // Regresión OP-2026-3724: un abono duplicado de 225.000 se gastó como
+    // saldo a favor en otras OPs mientras esperaba a Caja. Al rechazarlo, la OP
+    // quedaba debiendo 138.600 con 425.000 abonados sobre 360.000.
+    describe('cuando el saldo a favor del pago ya se gastó', () => {
+      const reviewer = {
+        role: { permissions: [{ permission: { name: 'approve_advance_payments' } }] },
+      };
+
+      beforeEach(() => {
+        (prisma.advancePaymentApproval.findFirst as jest.Mock).mockResolvedValue({
+          id: 'req-3724',
+          orderId: 'order-3724',
+          paymentId: 'pay-duplicado',
+          requestedById: 'u1',
+          order: { orderNumber: 'OP-2026-3724', total: 360000 },
+        } as any);
+        (prisma.user.findUnique as jest.Mock).mockResolvedValue(reviewer as any);
+        (prisma.order.findUnique as jest.Mock).mockResolvedValue({
+          total: new Prisma.Decimal(360000),
+          appliedCreditAmount: new Prisma.Decimal(203600),
+          refundedAmount: new Prisma.Decimal(0),
+          reversedAmount: new Prisma.Decimal(0),
+        } as any);
+        // Los abonos que sobreviven al rechazo: 425.000.
+        (prisma.payment.findMany as jest.Mock).mockResolvedValue([
+          { amount: new Prisma.Decimal(225000) },
+          { amount: new Prisma.Decimal(200000) },
+        ] as any);
+        (prisma.creditBalanceApplication.findMany as jest.Mock).mockResolvedValue([
+          { amount: new Prisma.Decimal(2600), payment: { order: { orderNumber: 'OP-2026-2733' } } },
+          { amount: new Prisma.Decimal(100000), payment: { order: { orderNumber: 'OP-2026-3884' } } },
+          { amount: new Prisma.Decimal(1000), payment: { order: { orderNumber: 'OP-2026-2733' } } },
+          { amount: new Prisma.Decimal(100000), payment: { order: { orderNumber: 'OP-2026-2454' } } },
+        ] as any);
+      });
+
+      it('bloquea el rechazo y deja la solicitud pendiente', async () => {
+        await expect(
+          service.reject('req-3724', 'rev1', { reviewNotes: 'Duplicado' }),
+        ).rejects.toThrow(BadRequestException);
+
+        expect(prisma.advancePaymentApproval.update).not.toHaveBeenCalled();
+        expect(prisma.payment.delete).not.toHaveBeenCalled();
+        expect(prisma.order.update).not.toHaveBeenCalled();
+        expect(notificationsService.create).not.toHaveBeenCalled();
+      });
+
+      it('calcula el faltante sin el pago rechazado', async () => {
+        await service.reject('req-3724', 'rev1', {}).catch(() => undefined);
+
+        expect(prisma.payment.findMany).toHaveBeenCalledWith({
+          where: {
+            orderId: 'order-3724',
+            id: { not: 'pay-duplicado' },
+            isVoided: false,
+          },
+          select: { amount: true },
+        });
+      });
+
+      it('lista las OPs que consumieron el saldo y el faltante', async () => {
+        const error = await service
+          .reject('req-3724', 'rev1', {})
+          .catch((e: BadRequestException) => e);
+
+        // Aplicado 203.600 - excedente real 65.000 = 138.600.
+        expect((error as BadRequestException).message).toBe(
+          'No se puede rechazar este pago: $138.600 de su valor ya se usó como saldo a favor ' +
+            'para pagar OP-2026-2733 ($3.600), OP-2026-3884 ($100.000), OP-2026-2454 ($100.000). ' +
+            'Primero elimina o edita esos pagos con saldo a favor y luego rechaza este.',
+        );
+      });
+
+      it('también bloquea el rechazo por WhatsApp', async () => {
+        await expect(
+          service.rejectViaWhatsApp('req-3724', 'rev1'),
+        ).rejects.toThrow(BadRequestException);
+
+        expect(prisma.advancePaymentApproval.update).not.toHaveBeenCalled();
+        expect(prisma.payment.delete).not.toHaveBeenCalled();
+      });
+
+      it('permite el rechazo si el excedente que queda cubre lo aplicado', async () => {
+        (prisma.order.findUnique as jest.Mock).mockResolvedValue({
+          total: new Prisma.Decimal(360000),
+          appliedCreditAmount: new Prisma.Decimal(65000),
+          refundedAmount: new Prisma.Decimal(0),
+          reversedAmount: new Prisma.Decimal(0),
+        } as any);
+        (prisma.advancePaymentApproval.findUnique as jest.Mock).mockResolvedValue({
+          id: 'req-3724',
+          status: EditRequestStatus.REJECTED,
+        } as any);
+
+        await service.reject('req-3724', 'rev1', { reviewNotes: 'Duplicado' });
+
+        expect(prisma.payment.delete).toHaveBeenCalledWith({ where: { id: 'pay-duplicado' } });
+        expect(prisma.creditBalanceApplication.findMany).not.toHaveBeenCalled();
+      });
+
+      it('no consulta nada si la OP no tiene saldo a favor aplicado', async () => {
+        (prisma.order.findUnique as jest.Mock).mockResolvedValue({
+          total: new Prisma.Decimal(360000),
+          appliedCreditAmount: new Prisma.Decimal(0),
+          refundedAmount: new Prisma.Decimal(0),
+          reversedAmount: new Prisma.Decimal(0),
+        } as any);
+        (prisma.advancePaymentApproval.findUnique as jest.Mock).mockResolvedValue({
+          id: 'req-3724',
+          status: EditRequestStatus.REJECTED,
+        } as any);
+
+        await service.reject('req-3724', 'rev1', {});
+
+        expect(prisma.payment.delete).toHaveBeenCalled();
+        expect(prisma.creditBalanceApplication.findMany).not.toHaveBeenCalled();
+      });
     });
   });
 

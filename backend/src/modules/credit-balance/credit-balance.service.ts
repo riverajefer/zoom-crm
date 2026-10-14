@@ -1,12 +1,13 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { Prisma } from '../../generated/prisma';
-import {
-  computeAvailableOverpayment,
-  computeOrderBalance,
-} from '../../common/utils/order-balance.util';
+import { computeOrderBalance } from '../../common/utils/order-balance.util';
 import { lockOrderForUpdate } from '../../common/utils/order-lock.util';
 import { withoutLocationScope } from '../../common/utils/location-context';
+import {
+  CREDIT_SOURCE_ORDER_SELECT,
+  computeCreditSourceAvailable,
+} from './credit-source.util';
 
 export interface CreditSource {
   orderId: string;
@@ -38,6 +39,10 @@ export class CreditBalanceService {
    * anulada no se pudiera usar, el cliente lo perdería — una OP anulada tampoco
    * admite devolución ni puede salir de ese estado. Además la ficha del cliente ya
    * mostraba ese saldo; el pago lo rechazaba.
+   *
+   * Los pagos pendientes de aprobación de Caja NO generan saldo: si Caja los
+   * rechaza se borran, y lo que ya se hubiera gastado de ellos quedaría como
+   * deuda en la OP de origen (caso OP-2026-3724).
    */
   async listCreditSources(
     clientId: string,
@@ -56,10 +61,7 @@ export class CreditBalanceService {
         id: true,
         orderNumber: true,
         orderDate: true,
-        total: true,
-        paidAmount: true,
-        appliedCreditAmount: true,
-        reversedAmount: true,
+        ...CREDIT_SOURCE_ORDER_SELECT,
       },
       orderBy: { orderDate: 'asc' },
     }));
@@ -69,12 +71,7 @@ export class CreditBalanceService {
         orderId: order.id,
         orderNumber: order.orderNumber,
         orderDate: order.orderDate,
-        available: computeAvailableOverpayment({
-          total: order.total,
-          paidAmount: order.paidAmount,
-          appliedCreditAmount: order.appliedCreditAmount,
-          reversedAmount: order.reversedAmount,
-        }),
+        available: computeCreditSourceAvailable(order),
       }))
       .filter((source) => source.available.greaterThan(0));
   }

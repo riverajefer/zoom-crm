@@ -1,4 +1,4 @@
-import { Prisma } from '../../generated/prisma';
+import { EditRequestStatus, Prisma } from '../../generated/prisma';
 
 type DecimalLike = Prisma.Decimal | number | string | null | undefined;
 
@@ -107,6 +107,35 @@ export function computeAvailableOverpayment(
 ): Prisma.Decimal {
   const balance = computeOrderBalance(input);
   return balance.lessThan(0) ? balance.negated() : new Prisma.Decimal(0);
+}
+
+/**
+ * Pagos vivos que Caja todavía no aprueba.
+ *
+ * Suman a `paidAmount` desde que se registran, pero ese dinero aún no está
+ * confirmado: si Caja rechaza el pago, se borra. Por eso no pueden generar
+ * saldo a favor gastable.
+ */
+export const PENDING_APPROVAL_PAYMENT_WHERE = {
+  ...ACTIVE_PAYMENT_WHERE,
+  advancePaymentApproval: { is: { status: EditRequestStatus.PENDING } },
+} satisfies Prisma.PaymentWhereInput;
+
+/**
+ * Saldo a favor de una orden que se puede gastar en otras órdenes.
+ *
+ * Es el excedente sin contar los pagos pendientes de aprobación de Caja. Si se
+ * contaran, el cliente podría gastar dinero que Caja después rechaza, y lo
+ * gastado quedaría como deuda en la OP de origen (caso OP-2026-3724).
+ */
+export function computeSpendableOverpayment(
+  input: OrderBalanceInput & { pendingPaidAmount: DecimalLike },
+): Prisma.Decimal {
+  const { pendingPaidAmount, ...balanceInput } = input;
+  return computeAvailableOverpayment({
+    ...balanceInput,
+    paidAmount: toDecimal(input.paidAmount).sub(toDecimal(pendingPaidAmount)),
+  });
 }
 
 /**

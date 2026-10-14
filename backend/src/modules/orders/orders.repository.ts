@@ -3,6 +3,10 @@ import { PrismaService } from '../../database/prisma.service';
 import { Prisma, OrderStatus, EditRequestStatus } from '../../generated/prisma';
 import { clampPageSize, MAX_REPORT_PAGE_SIZE } from '../../common/dto/pagination.dto';
 import { LOCATION_SUMMARY_SELECT } from '../../common/constants/location-select';
+import {
+  CREDIT_SOURCE_ORDER_SELECT,
+  sumClientCreditBalance,
+} from '../credit-balance/credit-source.util';
 
 /**
  * Resuelve el filtro de estado. Las pantallas de ventas piden `excludeAnulado`
@@ -177,7 +181,7 @@ export class OrdersRepository {
         },
         orders: {
           where: { balance: { lt: 0 } },
-          select: { balance: true }
+          select: CREDIT_SOURCE_ORDER_SELECT,
         }
       },
     },
@@ -313,7 +317,7 @@ export class OrdersRepository {
       let processedClient: any = order.client;
       if (order.client) {
         const { orders, ...clientRest } = order.client as any;
-        const saldoAFavor = orders?.reduce((sum: number, o: any) => sum + Math.abs(Number(o.balance)), 0) || 0;
+        const saldoAFavor = sumClientCreditBalance(orders);
         processedClient = { ...clientRest, saldoAFavor };
       }
       return { ...order, client: processedClient };
@@ -452,7 +456,7 @@ export class OrdersRepository {
         let processedClient: any = order.client;
         if (order.client) {
           const { orders, advisors, ...clientRest } = order.client as any;
-          const saldoAFavor = orders?.reduce((sum: number, o: any) => sum + Math.abs(Number(o.balance)), 0) || 0;
+          const saldoAFavor = sumClientCreditBalance(orders);
           processedClient = {
             ...clientRest,
             advisors,
@@ -512,7 +516,7 @@ export class OrdersRepository {
     let processedClient: any = order.client;
     if (order.client) {
       const { orders, advisors, ...clientRest } = order.client as any;
-      const saldoAFavor = orders?.reduce((sum: number, o: any) => sum + Math.abs(Number(o.balance)), 0) || 0;
+      const saldoAFavor = sumClientCreditBalance(orders);
       processedClient = {
         ...clientRest,
         advisors,
@@ -555,7 +559,7 @@ export class OrdersRepository {
     let processedClient: any = order.client;
     if (order.client) {
       const { orders, advisors, ...clientRest } = order.client as any;
-      const saldoAFavor = orders?.reduce((sum: number, o: any) => sum + Math.abs(Number(o.balance)), 0) || 0;
+      const saldoAFavor = sumClientCreditBalance(orders);
       processedClient = {
         ...clientRest,
         advisors,

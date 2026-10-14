@@ -25,6 +25,7 @@ import { PATHS } from '../../../router/paths';
 import type { BalancePreview } from '../../../types/cash-register.types';
 import { useSingleFlight } from '../../../hooks/useSingleFlight';
 import { LoadingButton } from '../../../components/common/LoadingButton';
+import { getErrorMessage } from '../../../utils/helpers';
 
 type Phase = 'counting' | 'reviewing';
 
@@ -49,8 +50,8 @@ const CloseSessionPage: React.FC = () => {
       const data = await cashRegisterApi.getBalancePreview(id);
       setPreview(data);
       setPhase('reviewing');
-    } catch {
-      setPreviewError('Error al obtener el balance del sistema. Intenta nuevamente.');
+    } catch (error) {
+      setPreviewError(`Error al obtener el balance del sistema: ${getErrorMessage(error)}`);
     } finally {
       setLoadingPreview(false);
     }

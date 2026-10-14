@@ -10,6 +10,7 @@ import { LOCATION_SUMMARY_SELECT } from '../../common/constants/location-select'
 import { withoutLocationScope } from '../../common/utils/location-context';
 import { CASH_HANDOVER_REFERENCE, EXCLUDE_REVERSALS } from '../cash-movement/cash-movement.helpers';
 import { findActiveCashSessionForLocation } from '../cash-session/active-cash-session.util';
+import { REVIEWABLE_PAYMENT_WHERE } from '../payment-verifications/payment-verifications.repository';
 
 const USER_SELECT = { id: true, firstName: true, lastName: true } as const;
 
@@ -155,6 +156,8 @@ export class GeneralClosingsRepository {
           referenceType: CASH_HANDOVER_REFERENCE,
           referenceId: { in: sourceSessionIds },
           isVoided: false,
+          // La contrapartida de una entrega anulada hereda su referencia.
+          ...EXCLUDE_REVERSALS,
         },
         select: HANDOVER_SELECT,
       }),
@@ -206,6 +209,18 @@ export class GeneralClosingsRepository {
         select: { id: true, openedAt: true },
       }),
     );
+  }
+
+  /**
+   * Los pagos del día que contabilidad tiene que revisar, con su sede. Mismo
+   * criterio y misma fecha (`paymentDate`) que la página de verificación, para
+   * que los conteos coincidan con lo que se ve allá.
+   */
+  findReviewablePayments(from: Date, to: Date) {
+    return this.prisma.payment.findMany({
+      where: { ...REVIEWABLE_PAYMENT_WHERE, paymentDate: { gte: from, lte: to } },
+      select: { amount: true, accountingStatus: true, order: { select: { locationId: true } } },
+    });
   }
 
   findByDate(date: Date) {

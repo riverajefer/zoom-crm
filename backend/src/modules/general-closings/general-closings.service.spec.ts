@@ -16,6 +16,7 @@ const mockRepository = {
   findExpenseOrders: jest.fn(),
   findAccountsPayable: jest.fn(),
   findHeadquartersOpenSession: jest.fn(),
+  findReviewablePayments: jest.fn(),
   findByDate: jest.fn(),
   findById: jest.fn(),
   saveReview: jest.fn(),
@@ -112,6 +113,7 @@ describe('GeneralClosingsService', () => {
     mockRepository.findHandovers.mockResolvedValue([]);
     mockRepository.findExpenseOrders.mockResolvedValue([]);
     mockRepository.findAccountsPayable.mockResolvedValue([]);
+    mockRepository.findReviewablePayments.mockResolvedValue([]);
     mockRepository.findByDate.mockResolvedValue(null);
 
     const module: TestingModule = await Test.createTestingModule({
@@ -204,7 +206,24 @@ describe('GeneralClosingsService', () => {
       expect(day.registers[0].status).toBe('OPEN');
       expect(day.registers[0].totals.expected).toBe(130000);
       expect(day.registers[0].totals.counted).toBeNull();
-      expect(day.blockers).toEqual(['Caja 104 sigue abierta', 'Caja 119 está sin revisar']);
+      expect(day.blockers).toEqual([
+        { cashRegisterId: 'r104', cashRegisterName: 'Caja 104', action: 'La sede tiene que cerrar la caja' },
+        { cashRegisterId: 'r119', cashRegisterName: 'Caja 119', action: 'Confirmar que no abrió' },
+      ]);
+    });
+
+    it('dice lo que falta en cada caja como una acción', async () => {
+      mockRepository.findSessionsOpenedBetween.mockResolvedValue([
+        session('s1', 'r104', { discrepancy: -5000 }),
+        session('s2', 'r119'),
+      ]);
+
+      const { blockers } = await service.getDay(DAY);
+
+      expect(blockers.map((b) => `${b.cashRegisterName}: ${b.action}`)).toEqual([
+        'Caja 104: Dejar el cuadre observado, con nota',
+        'Caja 119: Revisar el cuadre',
+      ]);
     });
 
     it('un día firmado devuelve la foto y lo que cambió después', async () => {
@@ -225,6 +244,62 @@ describe('GeneralClosingsService', () => {
         { cashRegisterId: 'r104', cashRegisterName: 'Caja 104', field: 'incomeTransfer', signed: 0, current: 80000 },
       ]);
       expect(day.blockers).toEqual([]);
+    });
+  });
+
+  describe('pagos del día', () => {
+    const payment = (locationId: string, accountingStatus: string, amount = 100000) => ({
+      amount,
+      accountingStatus,
+      order: { locationId },
+    });
+
+    it('cuenta los pagos de cada sede por estado, con la misma fecha que la verificación', async () => {
+      mockRepository.findReviewablePayments.mockResolvedValue([
+        payment('loc-r104', 'PENDING', 150000),
+        payment('loc-r104', 'PENDING', 50000),
+        payment('loc-r104', 'VERIFIED'),
+        payment('loc-r104', 'OBSERVED'),
+        payment('loc-r119', 'VERIFIED'),
+      ]);
+
+      const day = await service.getDay(DAY);
+
+      const [from, to] = mockRepository.findReviewablePayments.mock.calls[0];
+      expect(from).toEqual(new Date('2026-10-12T05:00:00.000Z'));
+      expect(to).toEqual(new Date('2026-10-13T04:59:59.999Z'));
+      expect(day.registers[0].payments).toEqual({
+        total: 4,
+        pending: 2,
+        observed: 1,
+        verified: 1,
+        pendingAmount: 200000,
+      });
+      // El 119 no abrió caja, pero su pago igual se muestra.
+      expect(day.registers[1].payments).toMatchObject({ total: 1, verified: 1, pending: 0 });
+    });
+
+    it('no se firma el día con pagos sin verificar; los observados cuentan como revisados', async () => {
+      mockRepository.findByDate.mockResolvedValue(
+        closing({
+          reviews: [
+            review('r104', GeneralClosingReviewStatus.VERIFIED),
+            review('r119', GeneralClosingReviewStatus.NO_OPERATION),
+          ],
+        }),
+      );
+      mockRepository.findReviewablePayments.mockResolvedValue([
+        payment('loc-r104', 'PENDING'),
+        payment('loc-r104', 'OBSERVED'),
+      ]);
+
+      await expect(service.closeDay(DAY, {}, 'conta-1')).rejects.toMatchObject({
+        response: { blockers: ['Caja 104: Verificar 1 pago'] },
+      });
+
+      mockRepository.findReviewablePayments.mockResolvedValue([payment('loc-r104', 'OBSERVED')]);
+      mockRepository.close.mockResolvedValue(true);
+      await expect(service.closeDay(DAY, {}, 'conta-1')).resolves.toBeDefined();
     });
   });
 
@@ -324,14 +399,24 @@ describe('GeneralClosingsService', () => {
       expect(mockCashMovements.createMovement).not.toHaveBeenCalled();
     });
 
-    it('exige la caja de la Matriz abierta, y abierta después del cierre del local', async () => {
+    it('exige la caja de la Matriz abierta, de un día posterior y después del cierre del local', async () => {
       mockRepository.findHeadquartersOpenSession.mockResolvedValue(null);
       await expect(service.receiveHandover(DAY, 'r104', { baseLeft: 0 }, 'c')).rejects.toThrow(
         'Abre la caja de la Matriz',
       );
 
-      // El local cerró a las 23:00Z; la Matriz sigue con la sesión de esa mañana.
-      matrizOpen('2026-10-12T13:00:00Z');
+      // Una sesión de la Matriz del mismo día contaría el efectivo dos veces,
+      // aunque haya abierto después del cierre del local (23:00Z = 6 p. m.).
+      matrizOpen('2026-10-13T01:00:00Z');
+      await expect(service.receiveHandover(DAY, 'r104', { baseLeft: 0 }, 'c')).rejects.toThrow(
+        'abierta un día después',
+      );
+
+      // Del día siguiente, pero abierta antes de que el local cerrara.
+      mockRepository.findSessionsOpenedBetween.mockResolvedValue([
+        session('s1', 'r104', { closedAt: new Date('2026-10-13T06:00:00Z') }),
+      ]);
+      matrizOpen('2026-10-13T05:30:00Z');
       await expect(service.receiveHandover(DAY, 'r104', { baseLeft: 0 }, 'c')).rejects.toThrow(
         'desde antes de que cerrara',
       );
@@ -444,7 +529,7 @@ describe('GeneralClosingsService', () => {
       );
 
       await expect(service.closeDay(DAY, {}, 'conta-1')).rejects.toMatchObject({
-        response: { blockers: ['Caja 119 está sin revisar'] },
+        response: { blockers: ['Caja 119: Confirmar que no abrió'] },
       });
       expect(mockRepository.close).not.toHaveBeenCalled();
     });
@@ -454,7 +539,7 @@ describe('GeneralClosingsService', () => {
       mockRepository.findSessionsOpenedBetween.mockResolvedValue([session('s1', 'r104'), session('s2', 'r119')]);
 
       await expect(service.closeDay(DAY, {}, 'conta-1')).rejects.toMatchObject({
-        response: { blockers: [expect.stringContaining('Caja 119 sí tuvo sesión')] },
+        response: { blockers: ['Caja 119: Revisar de nuevo: la caja sí abrió'] },
       });
     });
 
@@ -484,6 +569,56 @@ describe('GeneralClosingsService', () => {
       mockRepository.findById.mockResolvedValue(closing());
       mockRepository.reopen.mockResolvedValue(false);
       await expect(service.reopen('closing-1', { reason: 'm' }, 'admin-1')).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('getByLocation', () => {
+    it('resume cada caja en el periodo: días cuadrados, faltantes, sobrantes y dinero', async () => {
+      mockRepository.findSessionsOpenedBetween.mockResolvedValue([
+        // 104: un día cuadrado, uno con faltante (dos sesiones que suman -3.000) y uno con sobrante.
+        session('a', 'r104', { openedAt: new Date('2026-10-01T13:00:00Z'), discrepancy: 0 }),
+        session('b', 'r104', { openedAt: new Date('2026-10-02T13:00:00Z'), discrepancy: -5000 }),
+        session('c', 'r104', { openedAt: new Date('2026-10-02T20:00:00Z'), discrepancy: 2000 }),
+        session('d', 'r104', { openedAt: new Date('2026-10-03T13:00:00Z'), discrepancy: 1500 }),
+        // 119: un día con la caja todavía abierta, que no cuenta como cuadrado.
+        session('e', 'r119', { openedAt: new Date('2026-10-03T13:00:00Z'), status: 'OPEN', discrepancy: null }),
+      ]);
+      mockRepository.sumMovements.mockResolvedValue([
+        movement('a', 'INCOME', 'CASH', 100000),
+        movement('b', 'INCOME', 'TRANSFER', 300000),
+        movement('d', 'EXPENSE', 'CASH', 20000),
+        movement('e', 'INCOME', 'CASH', 50000),
+      ]);
+      mockRepository.findHandovers.mockResolvedValue([
+        { id: 'h', amount: 90000, receiptNumber: 'MAT-RC-1', referenceId: 'a', createdAt: new Date(), performedBy: null },
+      ]);
+      mockRepository.findReviewablePayments.mockResolvedValue([
+        { amount: 300000, accountingStatus: 'OBSERVED', order: { locationId: 'loc-r104' } },
+      ]);
+
+      const { rows, totals } = await service.getByLocation('2026-10-01', '2026-10-13');
+
+      expect(rows[0]).toMatchObject({
+        daysWithCash: 3,
+        daysBalanced: 1,
+        daysShort: 1,
+        shortTotal: 3000,
+        daysOver: 1,
+        overTotal: 1500,
+        openSessions: 0,
+        incomeCash: 100000,
+        incomeTransfer: 300000,
+        cashExpenses: 20000,
+        handedOver: 90000,
+        payments: { total: 1, observed: 1, pending: 0 },
+      });
+      expect(rows[1]).toMatchObject({ daysWithCash: 1, daysBalanced: 0, openSessions: 1, incomeCash: 50000 });
+      expect(totals).toMatchObject({ shortTotal: 3000, incomeCash: 150000, openSessions: 1 });
+    });
+
+    it('rechaza un periodo al revés o de más de 93 días', async () => {
+      await expect(service.getByLocation('2026-10-10', '2026-10-01')).rejects.toThrow('posterior');
+      await expect(service.getByLocation('2026-06-01', '2026-10-01')).rejects.toThrow('93 días');
     });
   });
 

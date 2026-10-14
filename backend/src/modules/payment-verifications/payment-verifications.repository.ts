@@ -38,6 +38,22 @@ const VERIFICATION_SELECT = {
   },
 } as const;
 
+/**
+ * Lo que contabilidad revisa: abonos vivos que movieron dinero nuevo (el saldo
+ * a favor ya se revisó en la OP de origen). Los pagos que todavía esperan a
+ * Caja no entran; en Zoom ya no se crean solicitudes nuevas (`requiresApproval`),
+ * así que solo aplica a las que quedaron pendientes de antes. Sin filtro de
+ * sede: lo usa también el cierre general, que cruza sedes.
+ */
+export const REVIEWABLE_PAYMENT_WHERE: Prisma.PaymentWhereInput = {
+  isVoided: false,
+  paymentMethod: { not: PaymentMethod.CREDIT_BALANCE },
+  OR: [
+    { advancePaymentApproval: null },
+    { advancePaymentApproval: { status: EditRequestStatus.APPROVED } },
+  ],
+};
+
 export interface PaymentVerificationFilters {
   status?: PaymentAccountingStatus;
   dateFrom?: Date;
@@ -64,15 +80,7 @@ export class PaymentVerificationsRepository {
    * Matriz, que no tiene OP—, y el resto solo los de su sede.
    */
   private reviewableWhere(): Prisma.PaymentWhereInput {
-    return {
-      isVoided: false,
-      paymentMethod: { not: PaymentMethod.CREDIT_BALANCE },
-      OR: [
-        { advancePaymentApproval: null },
-        { advancePaymentApproval: { status: EditRequestStatus.APPROVED } },
-      ],
-      order: { ...queueLocationFilter() },
-    };
+    return { ...REVIEWABLE_PAYMENT_WHERE, order: { ...queueLocationFilter() } };
   }
 
   private buildWhere(filters: PaymentVerificationFilters): Prisma.PaymentWhereInput {

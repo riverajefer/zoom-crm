@@ -26,7 +26,6 @@ import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import LockIcon from '@mui/icons-material/Lock';
-import LockOpenIcon from '@mui/icons-material/LockOpen';
 import { useSnackbar } from 'notistack';
 import { PageHeader } from '../../../components/common/PageHeader';
 import { useAuthStore } from '../../../store/authStore';
@@ -36,8 +35,11 @@ import {
   type RegisterDayRow,
 } from '../../../types/general-closing.types';
 import { PERMISSIONS } from '../../../utils/constants';
-import { ClosingDayTable } from '../components/ClosingDayTable';
+import { RegisterCard } from '../components/RegisterCard';
 import { ConsolidatedSheet } from '../components/ConsolidatedSheet';
+import { ByLocationView } from '../components/ByLocationView';
+import { CloseDayPanel } from '../components/CloseDayPanel';
+import { DayPaymentsDialog } from '../components/DayPaymentsDialog';
 import { HandoverDialog } from '../components/HandoverDialog';
 import { NoteDialog } from '../components/NoteDialog';
 import {
@@ -49,6 +51,7 @@ import {
 import {
   addDays,
   businessToday,
+  discrepancyLabel,
   exportGeneralClosingExcel,
   formatCurrency,
   formatDateTime,
@@ -67,7 +70,7 @@ const errorMessage = (error: unknown, fallback: string) => {
 
 const FIELD_LABELS = Object.fromEntries(TOTAL_COLUMNS.map((c) => [c.field, c.label]));
 
-type View = 'day' | 'history';
+type View = 'day' | 'by-location' | 'history';
 
 /**
  * Cierre general diario (solo Zoom): contabilidad ve las cajas de todas las
@@ -87,6 +90,7 @@ const GeneralClosingPage: React.FC = () => {
   const [view, setView] = useState<View>('day');
   const [observing, setObserving] = useState<RegisterDayRow | null>(null);
   const [handingOver, setHandingOver] = useState<RegisterDayRow | null>(null);
+  const [paymentsOf, setPaymentsOf] = useState<RegisterDayRow | null>(null);
   const [closingOpen, setClosingOpen] = useState(false);
   const [reopenOpen, setReopenOpen] = useState(false);
   const [historyPage, setHistoryPage] = useState(0);
@@ -178,6 +182,7 @@ const GeneralClosingPage: React.FC = () => {
         sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}
       >
         <Tab value="day" label="Día" />
+        <Tab value="by-location" label="Por sede" />
         <Tab value="history" label="Historial" />
       </Tabs>
 
@@ -278,49 +283,31 @@ const GeneralClosingPage: React.FC = () => {
                 </Alert>
               )}
 
-              <ClosingDayTable
-                day={day}
-                canReview={canPerform && !signed}
-                canOpenSessions={canOpenSessions}
-                busy={busy}
-                onReview={handleReview}
-                onHandover={setHandingOver}
-              />
-
-              <Stack direction="row" spacing={2} alignItems="flex-start" sx={{ mt: 2 }}>
-                {!signed && day.blockers.length > 0 && (
-                  <Box sx={{ flexGrow: 1 }}>
-                    <Typography variant="subtitle2">Falta para cerrar el día</Typography>
-                    {day.blockers.map((blocker) => (
-                      <Typography key={blocker} variant="body2" color="text.secondary">
-                        · {blocker}
-                      </Typography>
-                    ))}
-                  </Box>
-                )}
-                <Box sx={{ flexGrow: 1 }} />
-                {!signed && canPerform && (
-                  <Button
-                    variant="contained"
-                    startIcon={<LockIcon />}
-                    disabled={busy || day.blockers.length > 0}
-                    onClick={() => setClosingOpen(true)}
-                  >
-                    Cerrar el día
-                  </Button>
-                )}
-                {signed && canReopen && (
-                  <Button
-                    variant="outlined"
-                    color="warning"
-                    startIcon={<LockOpenIcon />}
-                    disabled={busy}
-                    onClick={() => setReopenOpen(true)}
-                  >
-                    Reabrir
-                  </Button>
-                )}
+              <Stack spacing={1.5}>
+                {day.registers.map((row) => (
+                  <RegisterCard
+                    key={row.cashRegister.id}
+                    row={row}
+                    canReview={canPerform && !signed}
+                    canOpenSessions={canOpenSessions}
+                    busy={busy}
+                    onReview={handleReview}
+                    onHandover={setHandingOver}
+                    onPayments={setPaymentsOf}
+                    canReceiveToday={date < today}
+                  />
+                ))}
               </Stack>
+
+              <CloseDayPanel
+                day={day}
+                signed={signed}
+                canPerform={canPerform}
+                canReopen={canReopen}
+                busy={busy}
+                onClose={() => setClosingOpen(true)}
+                onReopen={() => setReopenOpen(true)}
+              />
 
               <ConsolidatedSheet consolidated={day.consolidated} />
 
@@ -342,6 +329,8 @@ const GeneralClosingPage: React.FC = () => {
           )}
         </>
       )}
+
+      {view === 'by-location' && <ByLocationView />}
 
       {view === 'history' && (
         <Paper variant="outlined">
@@ -413,16 +402,23 @@ const GeneralClosingPage: React.FC = () => {
 
       <NoteDialog
         open={!!observing}
-        title={`Observar ${observing?.cashRegister.name ?? ''}`}
-        description="La caja no se reabre ni cambia su cuadre: queda la constancia de lo que encontró contabilidad."
-        label="¿Qué encontraste?"
-        confirmLabel="Observar"
+        title={`Observación · ${observing?.cashRegister.name ?? ''}`}
+        description={
+          observing && (observing.totals.discrepancy ?? 0) !== 0
+            ? `La caja cerró con ${discrepancyLabel(observing.totals.discrepancy ?? 0).toLowerCase()}. ` +
+              'Anota qué pasó (por ejemplo, a quién se le pidió explicación o cómo se va a reponer). ' +
+              'La caja no se reabre ni cambia su cuadre.'
+            : 'Anota lo que encontraste. La caja no se reabre ni cambia su cuadre.'
+        }
+        label="Nota de contabilidad"
+        confirmLabel="Guardar nota"
         confirmColor="warning"
         required
         loading={reviewMutation.isPending}
         onClose={() => setObserving(null)}
         onConfirm={(notes) => observing && review(observing, 'OBSERVED', notes)}
       />
+      <DayPaymentsDialog row={paymentsOf} date={date} onClose={() => setPaymentsOf(null)} />
       <HandoverDialog
         row={handingOver}
         loading={handoverMutation.isPending}

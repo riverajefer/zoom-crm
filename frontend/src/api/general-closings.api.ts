@@ -1,5 +1,6 @@
 import axiosInstance from './axios';
 import type {
+  GeneralClosingByLocation,
   GeneralClosingDay,
   GeneralClosingHistoryResponse,
   GeneralClosingPendingDay,
@@ -19,6 +20,13 @@ export const generalClosingsApi = {
 
   getPendingDays: async () => {
     const { data } = await axiosInstance.get<GeneralClosingPendingDay[]>(`${BASE_URL}/pending-days`);
+    return data;
+  },
+
+  getByLocation: async (from: string, to: string) => {
+    const { data } = await axiosInstance.get<GeneralClosingByLocation>(`${BASE_URL}/by-location`, {
+      params: { from, to },
+    });
     return data;
   },
 

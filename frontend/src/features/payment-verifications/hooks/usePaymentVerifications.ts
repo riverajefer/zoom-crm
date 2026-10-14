@@ -4,11 +4,12 @@ import type { FilterPaymentVerificationsDto } from '../../../types/payment-verif
 
 export const PAYMENT_VERIFICATIONS_KEY = ['payment-verifications'] as const;
 
-export const usePaymentVerifications = (filters: FilterPaymentVerificationsDto) =>
+export const usePaymentVerifications = (filters: FilterPaymentVerificationsDto, enabled = true) =>
   useQuery({
     queryKey: [...PAYMENT_VERIFICATIONS_KEY, 'list', filters],
     queryFn: () => paymentVerificationsApi.findAll(filters),
     placeholderData: keepPreviousData,
+    enabled,
   });
 
 export const usePaymentVerificationSummary = () =>

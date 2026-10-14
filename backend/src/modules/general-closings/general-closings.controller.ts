@@ -6,6 +6,7 @@ import { PermissionsGuard } from '../../common/guards/permissions.guard';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import {
   CloseGeneralClosingDto,
+  FilterByLocationDto,
   FilterGeneralClosingsDto,
   ReceiveHandoverDto,
   ReopenGeneralClosingDto,
@@ -32,6 +33,14 @@ export class GeneralClosingsController {
   @ApiOperation({ summary: 'Días pasados con caja y sin cierre general firmado' })
   findPendingDays() {
     return this.service.findPendingDays();
+  }
+
+  @Get('by-location')
+  @RequirePermissions('read_all_cash_sessions')
+  @ApiOperation({ summary: 'Comparativo de las cajas por sede en un periodo (cuadres y dinero manejado)' })
+  @ApiResponse({ status: 400, description: 'Fechas inválidas o periodo de más de 93 días' })
+  getByLocation(@Query() filters: FilterByLocationDto) {
+    return this.service.getByLocation(filters.from, filters.to);
   }
 
   @Get('day/:date')

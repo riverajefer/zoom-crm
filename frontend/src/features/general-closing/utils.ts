@@ -7,7 +7,7 @@ import {
 } from '../../types/general-closing.types';
 
 export { formatCurrency, formatDateTime, fullName } from '../payment-verifications/utils';
-import { formatDateTime, fullName } from '../payment-verifications/utils';
+import { formatCurrency, formatDateTime, fullName } from '../payment-verifications/utils';
 
 const BUSINESS_TIMEZONE = 'America/Bogota';
 
@@ -34,6 +34,21 @@ export const formatDay = (day: string) =>
     month: 'short',
     year: 'numeric',
   });
+
+/** Color de una diferencia de caja: verde si cuadra, rojo si falta, ámbar si sobra. */
+export const discrepancyColor = (value: number | null) => {
+  if (value === null) return 'text.disabled';
+  if (value === 0) return 'success.main';
+  return value < 0 ? 'error.main' : 'warning.main';
+};
+
+export const discrepancyLabel = (value: number) =>
+  value === 0
+    ? 'Cuadrada'
+    : `${value < 0 ? 'Faltante' : 'Sobrante'} ${formatCurrency(Math.abs(value))}`;
+
+/** `id` de la tarjeta de una caja, para llevar a ella desde la lista de pendientes. */
+export const registerAnchor = (cashRegisterId: string) => `caja-${cashRegisterId}`;
 
 export const formatTime = (iso: string) =>
   new Date(iso).toLocaleTimeString('es-CO', {

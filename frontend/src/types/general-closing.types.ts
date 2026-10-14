@@ -56,11 +56,11 @@ export const TOTAL_COLUMNS: { field: keyof RegisterDayTotals; label: string }[] 
   { field: 'incomeTransfer', label: 'Transferencia' },
   { field: 'incomeCard', label: 'Tarjeta' },
   { field: 'incomeOther', label: 'Otros' },
-  { field: 'deposits', label: 'Depósitos' },
+  { field: 'deposits', label: 'Retiros del banco' },
   { field: 'handoversIn', label: 'Recibido de locales' },
   { field: 'cashExpenses', label: 'Egresos' },
   { field: 'otherExpenses', label: 'Egresos no efectivo' },
-  { field: 'withdrawals', label: 'Retiros' },
+  { field: 'withdrawals', label: 'Consignaciones' },
   { field: 'expected', label: 'Esperado' },
   { field: 'counted', label: 'Contado' },
   { field: 'discrepancy', label: 'Diferencia' },
@@ -93,6 +93,8 @@ export interface RegisterDayRow {
   sessions: RegisterDaySession[];
   totals: RegisterDayTotals;
   review: RegisterDayReview | null;
+  /** Los pagos del día en la sede de la caja y cuántos revisó contabilidad. */
+  payments: { total: number; pending: number; observed: number; verified: number; pendingAmount: number };
   /** El efectivo que la Matriz recogió de esta caja después de su cierre. */
   handover: {
     amount: number;
@@ -132,6 +134,13 @@ export interface GeneralClosingEvent {
   user: ClosingUser | null;
 }
 
+export interface ClosingBlocker {
+  cashRegisterId: string;
+  cashRegisterName: string;
+  /** Lo que falta, dicho como acción: «Verificar 4 pagos». */
+  action: string;
+}
+
 export interface ClosingDrift {
   cashRegisterId: string;
   cashRegisterName: string;
@@ -154,8 +163,8 @@ export interface GeneralClosingDay {
   registers: RegisterDayRow[];
   totals: RegisterDayTotals;
   consolidated: ClosingConsolidated;
-  /** Lo que falta para poder firmar. */
-  blockers: string[];
+  /** Lo que falta para poder firmar, caja por caja. */
+  blockers: ClosingBlocker[];
   /** Lo que cambió después de firmar. */
   drift: ClosingDrift[];
 }
@@ -174,6 +183,36 @@ export interface GeneralClosingHistoryItem {
 export interface GeneralClosingHistoryResponse {
   data: GeneralClosingHistoryItem[];
   meta: { total: number; page: number; limit: number; totalPages: number };
+}
+
+/** Una caja en un periodo, para comparar sedes desde el control de caja. */
+export interface LocationPeriodRow {
+  cashRegister: RegisterDayRow['cashRegister'];
+  daysWithCash: number;
+  daysBalanced: number;
+  daysShort: number;
+  shortTotal: number;
+  daysOver: number;
+  overTotal: number;
+  openSessions: number;
+  incomeCash: number;
+  incomeTransfer: number;
+  incomeCard: number;
+  incomeOther: number;
+  cashExpenses: number;
+  handedOver: number;
+  handoversIn: number;
+  payments: RegisterDayRow['payments'];
+}
+
+export interface GeneralClosingByLocation {
+  from: string;
+  to: string;
+  rows: LocationPeriodRow[];
+  totals: Omit<
+    LocationPeriodRow,
+    'cashRegister' | 'daysWithCash' | 'daysBalanced' | 'handoversIn'
+  >;
 }
 
 export interface GeneralClosingPendingDay {

@@ -12,6 +12,14 @@ export const useGeneralClosingDay = (date: string) =>
     placeholderData: keepPreviousData,
   });
 
+export const useGeneralClosingByLocation = (from: string, to: string, enabled: boolean) =>
+  useQuery({
+    queryKey: [...GENERAL_CLOSING_KEY, 'by-location', from, to],
+    queryFn: () => generalClosingsApi.getByLocation(from, to),
+    placeholderData: keepPreviousData,
+    enabled: enabled && !!from && !!to && from <= to,
+  });
+
 export const useGeneralClosingPendingDays = () =>
   useQuery({
     queryKey: [...GENERAL_CLOSING_KEY, 'pending-days'],

@@ -291,6 +291,8 @@ describe('ClientsRepository', () => {
   // ---------------------------------------------------------------------------
   describe('findClientStats', () => {
     it('saldoAFavor no cuenta los pagos pendientes de aprobación de Caja', async () => {
+      // Solo Zoom: la ficha también trae las COT del cliente (fase 4 de sedes).
+      prisma.quote.findMany.mockResolvedValue([]);
       prisma.order.findMany.mockResolvedValue([
         {
           ...op3724,

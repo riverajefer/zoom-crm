@@ -172,6 +172,50 @@ describe('AdvancePaymentApprovalsService', () => {
   });
 
   describe('reject', () => {
+    // Registrar un abono en efectivo y rechazarlo uno mismo borra el ingreso de
+    // la caja sin que nadie más lo vea.
+    it('no deja que quien registró el abono lo rechace', async () => {
+      (prisma.advancePaymentApproval.findFirst as jest.Mock).mockResolvedValue({
+        id: 'req1',
+        orderId: 'o1',
+        paymentId: 'pay1',
+        requestedById: 'cajera',
+        order: { orderNumber: '123', total: 1000 },
+      } as any);
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue({
+        role: {
+          name: 'caja',
+          permissions: [{ permission: { name: 'approve_advance_payments' } }],
+        },
+      } as any);
+
+      await expect(
+        service.reject('req1', 'cajera', { reviewNotes: 'No' }),
+      ).rejects.toThrow(ForbiddenException);
+      expect(prisma.payment.delete).not.toHaveBeenCalled();
+      expect(prisma.advancePaymentApproval.update).not.toHaveBeenCalled();
+    });
+
+    it('no deja que quien registró el abono lo apruebe', async () => {
+      (prisma.advancePaymentApproval.findFirst as jest.Mock).mockResolvedValue({
+        id: 'req1',
+        orderId: 'o1',
+        requestedById: 'cajera',
+        order: { id: 'o1', orderNumber: '123' },
+      } as any);
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue({
+        role: {
+          name: 'caja',
+          permissions: [{ permission: { name: 'approve_advance_payments' } }],
+        },
+      } as any);
+
+      await expect(service.approve('req1', 'cajera', {})).rejects.toThrow(
+        ForbiddenException,
+      );
+      expect(prisma.advancePaymentApproval.update).not.toHaveBeenCalled();
+    });
+
     it('should reject a request, delete payment and update order balance', async () => {
       (prisma.advancePaymentApproval.findFirst as jest.Mock).mockResolvedValue({
         id: 'req1',

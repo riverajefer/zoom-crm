@@ -238,6 +238,36 @@ describe('RefundRequestsService', () => {
       ).rejects.toThrow(BadRequestException);
     });
 
+    // Caso OP-2026-3724: un abono que Caja aún no aprueba no es dinero. Si
+    // respaldara una devolución, saldría efectivo por una plata que, si Caja la
+    // rechaza, nunca entró.
+    it('no cuenta los abonos pendientes de Caja como dinero para devolver', async () => {
+      prisma.order.findUnique.mockResolvedValue({
+        id: orderId,
+        orderNumber: 'OP-1',
+        total: '500',
+        paidAmount: '700',
+        appliedCreditAmount: '0',
+        reversedAmount: '0',
+        balance: '-200',
+      });
+      prisma.refundRequest.findFirst.mockResolvedValue(null);
+      // De los 700 abonados, 150 esperan aprobación: solo sobran 50 de verdad.
+      prisma.payment.aggregate.mockResolvedValue({ _sum: { amount: '150' } });
+
+      await expect(
+        service.create(userId, { ...baseDto, refundAmount: 100 }),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.payment.aggregate).toHaveBeenCalledWith({
+        where: {
+          orderId,
+          isVoided: false,
+          advancePaymentApproval: { is: { status: EditRequestStatus.PENDING } },
+        },
+        _sum: { amount: true },
+      });
+    });
+
     // Anular deja lo pagado (menos lo retenido) como saldo a favor; el cliente
     // puede pedir que se lo devuelvan.
     describe('orden anulada', () => {
@@ -754,6 +784,35 @@ describe('RefundRequestsService', () => {
       );
     });
 
+    it('rechaza la autorización si el dinero a devolver depende de abonos que Caja no ha aprobado', async () => {
+      prisma.refundRequest.findFirst.mockResolvedValue(pendiente());
+      prisma.user.findUnique.mockResolvedValue(revisorConPermiso());
+      // Sobran 200, pero 150 de ellos son un abono pendiente.
+      prisma.payment.aggregate.mockResolvedValue({ _sum: { amount: '150' } });
+
+      await expect(service.approve(requestId, reviewerId, {})).rejects.toThrow(
+        'Caja aún no aprueba',
+      );
+      expect(prisma.refundRequest.update).not.toHaveBeenCalled();
+    });
+
+    it('no deja que quien pidió la devolución la autorice', async () => {
+      prisma.refundRequest.findFirst.mockResolvedValue(
+        pendiente({ requestedById: reviewerId }),
+      );
+      prisma.user.findUnique.mockResolvedValue({
+        role: {
+          name: 'contabilidad',
+          permissions: [{ permission: { name: 'approve_refunds' } }],
+        },
+      });
+
+      await expect(service.approve(requestId, reviewerId, {})).rejects.toThrow(
+        ForbiddenException,
+      );
+      expect(prisma.refundRequest.update).not.toHaveBeenCalled();
+    });
+
     // Sin dinero de por medio no hay nada que Caja tenga que pagar: si la
     // solicitud quedara "pendiente de pago", nadie la cerraría nunca.
     describe('anulación de ítems sin devolución de dinero', () => {
@@ -957,6 +1016,26 @@ describe('RefundRequestsService', () => {
           }),
         }),
       );
+    });
+
+    it('Caja puede pagar una devolución que ella misma pidió: ya la autorizó otra persona', async () => {
+      prisma.refundRequest.findFirst.mockResolvedValue(
+        aprobada({ requestedById: executorId }),
+      );
+
+      await service.execute(requestId, executorId);
+
+      expect(prisma.cashMovement.create).toHaveBeenCalled();
+    });
+
+    it('no paga si entre autorizar y pagar el dinero quedó dependiendo de un abono pendiente', async () => {
+      prisma.refundRequest.findFirst.mockResolvedValue(aprobada());
+      prisma.payment.aggregate.mockResolvedValue({ _sum: { amount: '150' } });
+
+      await expect(service.execute(requestId, executorId)).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(prisma.cashMovement.create).not.toHaveBeenCalled();
     });
 
     it('registra el monto devuelto en refundedAmount para que sobreviva a un recálculo', async () => {

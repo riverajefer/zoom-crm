@@ -38,12 +38,14 @@ import {
   WorkOrderStatus,
 } from '../../generated/prisma';
 import {
-  computeAvailableOverpayment,
+  PENDING_APPROVAL_PAYMENT_WHERE,
   computeItemsSaleValue,
   computeOrderBalance,
   computeReversedNetAmount,
+  computeSpendableOverpayment,
 } from '../../common/utils/order-balance.util';
 import { queueLocationFilter } from '../../common/utils/location-context';
+import { assertNotSelfReview } from '../../common/utils/self-review.util';
 
 const ITEMS_SELECT = {
   select: {
@@ -322,12 +324,17 @@ export class RefundRequestsService
     // Dinero disponible para devolver: el excedente que queda una vez anulada
     // esa parte de la venta. Con `reversedAmount = 0` es exactamente el saldo a
     // favor de siempre, descontando lo que ya se aplicó como pago de otras
-    // órdenes (ese saldo ya se gastó y no puede salir en efectivo).
-    const overpayment = computeAvailableOverpayment({
+    // órdenes (ese saldo ya se gastó y no puede salir en efectivo) y los pagos
+    // que Caja aún no aprueba (si los rechaza, esa plata nunca entró).
+    const overpayment = computeSpendableOverpayment({
       total: order.total,
       paidAmount: order.paidAmount,
       appliedCreditAmount: order.appliedCreditAmount,
       reversedAmount: alreadyReversed.add(reversedAmount),
+      pendingPaidAmount: await this.sumPendingApprovalPaid(
+        this.prisma,
+        order.id,
+      ),
     });
 
     // Anular ítems no exige que sobre plata: si el cliente no ha abonado más de
@@ -519,10 +526,17 @@ export class RefundRequestsService
     }
 
     await this.validateReviewerPermission(reviewerId);
+    await assertNotSelfReview(this.prisma, {
+      requestedById: request.requestedById,
+      reviewerId,
+    });
 
     // Se revalida contra el estado actual de la orden: entre la solicitud y la
     // aprobación pudieron entrar pagos, devoluciones o ediciones de ítems.
-    this.assertRefundStillViable(request);
+    this.assertRefundStillViable(
+      request,
+      await this.sumPendingApprovalPaid(this.prisma, request.orderId),
+    );
     await this.loadAnnullableLines(this.prisma, requestId);
 
     // Una anulación de ítems que no devuelve dinero no tiene nada que esperar
@@ -671,7 +685,10 @@ export class RefundRequestsService
         `Orden con id ${request.orderId} no encontrada`,
       );
     }
-    this.assertRefundStillViable({ ...request, order });
+    this.assertRefundStillViable(
+      { ...request, order },
+      await this.sumPendingApprovalPaid(tx, request.orderId),
+    );
 
     const lines = await this.loadAnnullableLines(tx, request.id);
     for (const line of lines) {
@@ -990,7 +1007,10 @@ export class RefundRequestsService
     // Esta es la comprobación rápida, para no gastar un número de recibo en
     // una devolución que ya no procede; la que cuenta se repite abajo, con la
     // OP bloqueada.
-    this.assertRefundStillViable(request);
+    this.assertRefundStillViable(
+      request,
+      await this.sumPendingApprovalPaid(this.prisma, request.orderId),
+    );
     await this.loadAnnullableLines(this.prisma, requestId);
 
     // El recibo se numera en la sede de la OP (docs/PLAN_SEDES.md §3).
@@ -1073,18 +1093,24 @@ export class RefundRequestsService
    * Se llama al autorizar y al pagar porque entre la solicitud y el pago pueden
    * pasar días: pagos nuevos, otra devolución, una edición de ítems que cambia
    * el total. Aprobar a ciegas sacaría de la caja plata que la OP ya no respalda.
+   *
+   * `pendingPaidAmount` son los pagos de la OP que Caja aún no aprueba: no
+   * respaldan una devolución, porque si Caja los rechaza esa plata nunca entró.
    */
-  private assertRefundStillViable(request: {
-    refundAmount: Prisma.Decimal;
-    reversedAmount: Prisma.Decimal | null;
-    order: {
-      total: Prisma.Decimal;
-      paidAmount: Prisma.Decimal;
-      appliedCreditAmount: Prisma.Decimal;
-      reversedAmount: Prisma.Decimal;
-      status: OrderStatus;
-    };
-  }): void {
+  private assertRefundStillViable(
+    request: {
+      refundAmount: Prisma.Decimal;
+      reversedAmount: Prisma.Decimal | null;
+      order: {
+        total: Prisma.Decimal;
+        paidAmount: Prisma.Decimal;
+        appliedCreditAmount: Prisma.Decimal;
+        reversedAmount: Prisma.Decimal;
+        status: OrderStatus;
+      };
+    },
+    pendingPaidAmount: Prisma.Decimal,
+  ): void {
     const { order } = request;
 
     // Si la OP se anuló después de pedir la devolución, el dinero sigue
@@ -1111,18 +1137,35 @@ export class RefundRequestsService
       );
     }
 
-    const available = computeAvailableOverpayment({
+    const available = computeSpendableOverpayment({
       total: order.total,
       paidAmount: order.paidAmount,
       appliedCreditAmount: order.appliedCreditAmount,
       reversedAmount: alreadyReversed.add(reversedAmount),
+      pendingPaidAmount,
     });
 
     if (new Prisma.Decimal(request.refundAmount).greaterThan(available)) {
       throw new BadRequestException(
-        `El dinero disponible en la orden (${available.toString()}) ya no alcanza para esta devolución`,
+        pendingPaidAmount.greaterThan(0)
+          ? `El dinero disponible en la orden (${available.toString()}) no alcanza para esta devolución: hay pagos por ${pendingPaidAmount.toString()} que Caja aún no aprueba`
+          : `El dinero disponible en la orden (${available.toString()}) ya no alcanza para esta devolución`,
       );
     }
+  }
+
+  /**
+   * Suma de los pagos vivos de la OP que Caja todavía no aprueba.
+   */
+  private async sumPendingApprovalPaid(
+    db: Prisma.TransactionClient | PrismaService,
+    orderId: string,
+  ): Promise<Prisma.Decimal> {
+    const result = await db.payment.aggregate({
+      where: { orderId, ...PENDING_APPROVAL_PAYMENT_WHERE },
+      _sum: { amount: true },
+    });
+    return new Prisma.Decimal(result?._sum?.amount ?? 0);
   }
 
   /**
@@ -1146,6 +1189,10 @@ export class RefundRequestsService
     }
 
     await this.validateReviewerPermission(reviewerId);
+    await assertNotSelfReview(this.prisma, {
+      requestedById: request.requestedById,
+      reviewerId,
+    });
 
     await this.prisma.refundRequest.update({
       where: { id: requestId },

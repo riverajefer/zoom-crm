@@ -18,6 +18,7 @@ import {
   GerenciaRejectApPaymentReversalDto,
 } from './dto';
 import { queueLocationFilter } from '../../common/utils/location-context';
+import { assertNotSelfReview } from '../../common/utils/self-review.util';
 
 const USER_SELECT = { id: true, email: true, firstName: true, lastName: true } as const;
 
@@ -97,6 +98,10 @@ export class AccountsPayablePaymentReversalRequestsService {
       },
     });
     if (!reversal) throw new NotFoundException('Solicitud no encontrada o ya procesada');
+    await assertNotSelfReview(this.prisma, {
+      requestedById: reversal.requestedById,
+      reviewerId: userId,
+    });
 
     const updated = await this.prisma.accountPayablePaymentReversalRequest.update({
       where: { id },
@@ -146,6 +151,10 @@ export class AccountsPayablePaymentReversalRequestsService {
       },
     });
     if (!reversal) throw new NotFoundException('Solicitud no encontrada o ya procesada');
+    await assertNotSelfReview(this.prisma, {
+      requestedById: reversal.requestedById,
+      reviewerId: userId,
+    });
 
     const updated = await this.prisma.accountPayablePaymentReversalRequest.update({
       where: { id },

@@ -1175,14 +1175,15 @@ export const OrderDetailPage: React.FC = () => {
       {order.discountApprovalStatus === 'PENDING' && (
         <Alert severity='warning' icon={<WarningIcon />} sx={{ mt: 2 }}>
           <strong>Descuento pendiente de aprobación.</strong> El descuento
-          aplicado en esta orden está siendo revisado. No se puede cambiar el
-          estado hasta que sea aprobado o rechazado.
+          de esta orden está siendo revisado y no se resta del total hasta que
+          sea aprobado. No se puede cambiar el estado hasta que sea aprobado o
+          rechazado.
         </Alert>
       )}
       {order.discountApprovalStatus === 'REJECTED' && (
         <Alert severity='error' sx={{ mt: 2 }}>
-          <strong>Descuento rechazado.</strong> El descuento aplicado en esta
-          orden fue rechazado. Verifique con administración.
+          <strong>Descuento rechazado.</strong> El descuento de esta orden fue
+          rechazado y no se restó del total. Verifica con administración.
         </Alert>
       )}
 

@@ -300,6 +300,27 @@ describe('AccountsPayablePaymentAuthRequestsService', () => {
     });
   });
 
+  // Flujo diario de Caja: ella pide el pago, un admin lo aprueba y ella misma
+  // lo paga. El bloqueo de autoaprobación aplica al paso del admin, no a este.
+  describe('cajaApprove — Caja paga lo que ella misma solicitó', () => {
+    it('completa el pago aunque la solicitud la haya creado la misma cajera', async () => {
+      prisma.accountPayablePaymentAuthRequest.findFirst.mockResolvedValue(
+        requestStub({
+          status: ApPaymentAuthRequestStatus.ADMIN_APPROVED,
+          requestedById: 'caja-1',
+          adminReviewedById: 'admin-1',
+          accountPayable: { apNumber: 'CP-2026-001', id: 'ap-1' },
+        }) as any,
+      );
+      prisma.accountPayablePaymentAuthRequest.update.mockResolvedValue({} as any);
+
+      await expect(
+        service.cajaApprove('req-1', { id: 'caja-1' } as any),
+      ).resolves.toEqual({ id: 'pay-1' });
+      expect(accountsPayable.registerPaymentFromAuthRequest).toHaveBeenCalled();
+    });
+  });
+
   describe('cajaReject', () => {
     const currentUser = { id: 'caja-1' } as any;
     const dto = { reason: 'sin fondos' } as any;

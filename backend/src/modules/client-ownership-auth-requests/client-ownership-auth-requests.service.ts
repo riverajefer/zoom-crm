@@ -20,6 +20,7 @@ import {
 } from './dto';
 import { ApprovalRequestType, EditRequestStatus, NotificationType } from '../../generated/prisma';
 import { queueLocationFilter } from '../../common/utils/location-context';
+import { assertNotSelfReview } from '../../common/utils/self-review.util';
 
 const USER_SELECT = {
   id: true,
@@ -311,6 +312,10 @@ export class ClientOwnershipAuthRequestsService implements OnModuleInit, Approva
     }
 
     await this.validateReviewerPermission(reviewerId);
+    await assertNotSelfReview(this.prisma, {
+      requestedById: request.requestedById,
+      reviewerId,
+    });
 
     const updatedRequest = await this.prisma.clientOwnershipAuthRequest.update({
       where: { id: requestId },
@@ -365,6 +370,10 @@ export class ClientOwnershipAuthRequestsService implements OnModuleInit, Approva
     }
 
     await this.validateReviewerPermission(reviewerId);
+    await assertNotSelfReview(this.prisma, {
+      requestedById: request.requestedById,
+      reviewerId,
+    });
 
     await this.prisma.clientOwnershipAuthRequest.update({
       where: { id: requestId },

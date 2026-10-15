@@ -17,8 +17,26 @@ import {
   ApproveDiscountApprovalDto,
   RejectDiscountApprovalDto,
 } from './dto';
-import { ApprovalRequestType, EditRequestStatus, NotificationType } from '../../generated/prisma';
+import {
+  ApprovalRequestType,
+  EditRequestStatus,
+  NotificationType,
+  Prisma,
+} from '../../generated/prisma';
 import { queueLocationFilter } from '../../common/utils/location-context';
+import { assertNotSelfReview } from '../../common/utils/self-review.util';
+
+/**
+ * Recalcula los totales de una OP dentro de la transacción indicada.
+ *
+ * Lo registra `OrdersService` al iniciar: el recálculo vive allá (redondeo,
+ * retenciones, descuento por nómina) y `OrdersService` ya depende de este
+ * servicio, así que inyectarlo al revés armaría un ciclo entre módulos.
+ */
+export type OrderTotalsRecalculator = (
+  orderId: string,
+  tx: Prisma.TransactionClient,
+) => Promise<unknown>;
 
 const USER_SELECT = {
   id: true,
@@ -30,6 +48,7 @@ const USER_SELECT = {
 @Injectable()
 export class DiscountApprovalsService implements OnModuleInit, ApprovalRequestHandler {
   private readonly logger = new Logger(DiscountApprovalsService.name);
+  private recalculateOrderTotals: OrderTotalsRecalculator | null = null;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -40,6 +59,57 @@ export class DiscountApprovalsService implements OnModuleInit, ApprovalRequestHa
 
   onModuleInit() {
     this.approvalRegistry.register('DISCOUNT_APPROVAL', this);
+  }
+
+  registerOrderTotalsRecalculator(recalculator: OrderTotalsRecalculator) {
+    this.recalculateOrderTotals = recalculator;
+  }
+
+  /**
+   * Marca la solicitud como aprobada y recalcula la OP para que el descuento,
+   * que hasta ahora no contaba, baje el total. Todo en una transacción: un
+   * descuento aprobado que no se refleja en el total sería otra forma de saldo
+   * equivocado.
+   */
+  private async markApproved(
+    requestId: string,
+    orderId: string,
+    data: Pick<
+      Prisma.DiscountApprovalUncheckedUpdateInput,
+      'reviewedById' | 'reviewNotes'
+    >,
+  ) {
+    const recalculate = this.recalculateOrderTotals;
+    if (!recalculate) {
+      throw new Error(
+        'DiscountApprovalsService: OrdersService no registró el recálculo de totales',
+      );
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.discountApproval.update({
+        where: { id: requestId },
+        data: {
+          ...data,
+          status: EditRequestStatus.APPROVED,
+          reviewedAt: new Date(),
+        },
+        include: {
+          requestedBy: { select: USER_SELECT },
+          reviewedBy: { select: USER_SELECT },
+          order: { select: { id: true, orderNumber: true } },
+        },
+      });
+
+      await recalculate(orderId, tx);
+
+      await tx.order.update({
+        where: { id: orderId },
+        data: { discountApprovalStatus: EditRequestStatus.APPROVED },
+      });
+
+      return updated;
+    });
   }
 
   // ─── ApprovalRequestHandler interface ───
@@ -59,20 +129,16 @@ export class DiscountApprovalsService implements OnModuleInit, ApprovalRequestHa
   }
 
   async approveViaWhatsApp(requestId: string, reviewerId: string): Promise<void> {
-    const request = await this.prisma.discountApproval.update({
-      where: { id: requestId },
-      data: {
-        status: EditRequestStatus.APPROVED,
-        reviewedById: reviewerId,
-        reviewedAt: new Date(),
-        reviewNotes: 'Aprobado vía WhatsApp',
-      },
+    const request = await this.prisma.discountApproval.findFirst({
+      where: { id: requestId, status: EditRequestStatus.PENDING },
       include: { order: { select: { id: true, orderNumber: true } } },
     });
 
-    await this.prisma.order.update({
-      where: { id: request.orderId },
-      data: { discountApprovalStatus: EditRequestStatus.APPROVED },
+    if (!request) return;
+
+    await this.markApproved(requestId, request.orderId, {
+      reviewedById: reviewerId,
+      reviewNotes: 'Aprobado vía WhatsApp',
     });
 
     await this.notificationsService.create({
@@ -180,51 +246,56 @@ export class DiscountApprovalsService implements OnModuleInit, ApprovalRequestHa
   }
 
   /**
-   * Crear solicitud de aprobación de descuento (llamado automáticamente al aplicar descuento)
+   * Crea la solicitud de aprobación de un descuento recién aplicado.
+   *
+   * Corre dentro de la transacción que crea el descuento y ANTES de recalcular
+   * la OP: el recálculo ignora los descuentos con una solicitud sin aprobar, así
+   * que el total no baja hasta que alguien con `approve_discounts` lo autorice.
+   * Las notificaciones salen aparte, con `notifyPendingRequest`, una vez
+   * confirmada la transacción.
    */
-  async createFromDiscountApplication(
-    userId: string,
-    orderId: string,
-    discountId: string,
-  ) {
-    const [order, user, discount] = await Promise.all([
-      this.prisma.order.findUnique({
-        where: { id: orderId },
-        select: { id: true, orderNumber: true },
-      }),
-      this.prisma.user.findUnique({
-        where: { id: userId },
-        select: USER_SELECT,
-      }),
-      this.prisma.orderDiscount.findUnique({
-        where: { id: discountId },
-        select: { amount: true, reason: true },
-      }),
-    ]);
-
-    if (!order) {
-      throw new NotFoundException(`Orden con id ${orderId} no encontrada`);
-    }
-
-    // Crear solicitud
-    const request = await this.prisma.discountApproval.create({
+  async createPendingRequest(
+    tx: Prisma.TransactionClient,
+    params: { requestedById: string; orderId: string; discountId: string },
+  ): Promise<{ id: string }> {
+    const request = await tx.discountApproval.create({
       data: {
-        orderId,
-        discountId,
-        requestedById: userId,
+        orderId: params.orderId,
+        discountId: params.discountId,
+        requestedById: params.requestedById,
         status: EditRequestStatus.PENDING,
       },
+      select: { id: true },
+    });
+
+    await tx.order.update({
+      where: { id: params.orderId },
+      data: { discountApprovalStatus: EditRequestStatus.PENDING },
+    });
+
+    return request;
+  }
+
+  /**
+   * Avisa a quienes pueden aprobar descuentos (in-app y WhatsApp).
+   */
+  async notifyPendingRequest(requestId: string): Promise<void> {
+    const request = await this.prisma.discountApproval.findUnique({
+      where: { id: requestId },
       include: {
         requestedBy: { select: USER_SELECT },
         order: { select: { id: true, orderNumber: true } },
+        discount: { select: { amount: true, reason: true } },
       },
     });
 
-    // Actualizar estado de aprobación de descuento en la orden
-    await this.prisma.order.update({
-      where: { id: orderId },
-      data: { discountApprovalStatus: EditRequestStatus.PENDING },
-    });
+    if (!request) {
+      throw new NotFoundException(
+        `Solicitud de descuento ${requestId} no encontrada`,
+      );
+    }
+
+    const { requestedBy: user, order, discount } = request;
 
     // Formatear monto y razón para los mensajes
     const amountFormatted = discount
@@ -260,8 +331,6 @@ export class DiscountApprovalsService implements OnModuleInit, ApprovalRequestHa
       `aprobación del descuento${discountDetail} de la orden ${order.orderNumber}`,
       `El descuento requiere aprobación`,
     );
-
-    return request;
   }
 
   /**
@@ -287,27 +356,15 @@ export class DiscountApprovalsService implements OnModuleInit, ApprovalRequestHa
 
     // 2. Validar que revisor tiene permiso
     await this.validateReviewerPermission(reviewerId);
-
-    // 3. Actualizar solicitud a APPROVED
-    const updatedRequest = await this.prisma.discountApproval.update({
-      where: { id: requestId },
-      data: {
-        status: EditRequestStatus.APPROVED,
-        reviewedById: reviewerId,
-        reviewedAt: new Date(),
-        reviewNotes: dto.reviewNotes,
-      },
-      include: {
-        requestedBy: { select: USER_SELECT },
-        reviewedBy: { select: USER_SELECT },
-        order: { select: { id: true, orderNumber: true } },
-      },
+    await assertNotSelfReview(this.prisma, {
+      requestedById: request.requestedById,
+      reviewerId,
     });
 
-    // 4. Actualizar estado de aprobación de descuento en la orden
-    await this.prisma.order.update({
-      where: { id: request.orderId },
-      data: { discountApprovalStatus: EditRequestStatus.APPROVED },
+    // 3. Aprobar y aplicar el descuento al total de la orden
+    const updatedRequest = await this.markApproved(requestId, request.orderId, {
+      reviewedById: reviewerId,
+      reviewNotes: dto.reviewNotes,
     });
 
     // 5. Notificar al solicitante
@@ -346,6 +403,10 @@ export class DiscountApprovalsService implements OnModuleInit, ApprovalRequestHa
 
     // 2. Validar que revisor tiene permiso
     await this.validateReviewerPermission(reviewerId);
+    await assertNotSelfReview(this.prisma, {
+      requestedById: request.requestedById,
+      reviewerId,
+    });
 
     // 3. Actualizar solicitud a REJECTED
     await this.prisma.discountApproval.update({

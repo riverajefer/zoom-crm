@@ -200,6 +200,32 @@ describe('PaymentEditApprovalsService', () => {
   });
 
   describe('approve', () => {
+    // Caja puede editar pagos y también aprobar ediciones: sin este bloqueo
+    // podría bajarle el monto a un pago en efectivo y aprobárselo ella misma.
+    it('does not let the requester approve their own payment edit', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'cajera',
+        role: {
+          name: 'caja',
+          permissions: [{ permission: { name: 'approve_payment_edits' } }],
+        },
+      });
+      prisma.paymentEditApproval.findFirst.mockResolvedValue({
+        id: 'req1',
+        orderId: 'o1',
+        paymentId: 'p1',
+        requestedById: 'cajera',
+        status: EditRequestStatus.PENDING,
+        newAmount: new Prisma.Decimal(1000),
+        order: { id: 'o1', orderNumber: 'OP-1' },
+      });
+
+      await expect(service.approve('req1', 'cajera', {})).rejects.toThrow(
+        'tú mismo creaste',
+      );
+      expect(prisma.payment.update).not.toHaveBeenCalled();
+    });
+
     it('applies the new payload to the payment and recalculates paidAmount/balance', async () => {
       // validateReviewerPermission
       prisma.user.findUnique.mockResolvedValue({

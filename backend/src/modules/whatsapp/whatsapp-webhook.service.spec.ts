@@ -27,6 +27,7 @@ describe('WhatsappWebhookService', () => {
     const mockPrisma = {
       user: {
         findFirst: jest.fn(),
+        findUnique: jest.fn(),
       },
       orderEditRequest: {
         findFirst: jest.fn(),
@@ -540,6 +541,30 @@ describe('WhatsappWebhookService', () => {
         '57300000000', expect.stringContaining('fue rechazada'),
       );
       expect(prisma.whatsappActionContext.delete).not.toHaveBeenCalled();
+    });
+
+    it('should not let a non-admin approve their own request by WhatsApp', async () => {
+      mockHandler.findReviewerByPhone = jest.fn().mockResolvedValue({ id: 'u2' });
+      prisma.user.findUnique.mockResolvedValue({ role: { name: 'caja' } });
+
+      await service.processWebhook(buildGenericButton('REJECT'));
+
+      expect(mockHandler.rejectViaWhatsApp).not.toHaveBeenCalled();
+      expect(whatsappService.sendTextMessage).toHaveBeenCalledWith(
+        '57300000000',
+        expect.stringContaining('tú mismo creaste'),
+      );
+      // La solicitud sigue pendiente: otra persona puede revisarla desde el mismo mensaje.
+      expect(prisma.whatsappActionContext.delete).not.toHaveBeenCalled();
+    });
+
+    it('should let an admin approve their own request by WhatsApp', async () => {
+      prisma.user.findFirst.mockResolvedValue({ id: 'u2', role: { name: 'admin' } });
+      prisma.user.findUnique.mockResolvedValue({ role: { name: 'admin' } });
+
+      await service.processWebhook(buildGenericButton());
+
+      expect(mockHandler.approveViaWhatsApp).toHaveBeenCalledWith('greq1', 'u2');
     });
 
     it('should delete action context after generic approval', async () => {

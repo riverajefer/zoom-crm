@@ -11,6 +11,7 @@ describe('DiscountApprovalsService', () => {
   let service: DiscountApprovalsService;
   let prisma: jest.Mocked<PrismaService>;
   let notificationsService: jest.Mocked<NotificationsService>;
+  let recalculateOrderTotals: jest.Mock;
 
   const mockRegistry = { register: jest.fn() };
   const mockWhatsapp = {
@@ -39,7 +40,9 @@ describe('DiscountApprovalsService', () => {
       orderDiscount: {
         findUnique: jest.fn(),
       },
+      $transaction: jest.fn(),
     } as any;
+    (prisma.$transaction as jest.Mock).mockImplementation((cb) => cb(prisma));
 
     notificationsService = {
       notifyUsersWithPermission: jest.fn().mockResolvedValue(undefined),
@@ -57,6 +60,9 @@ describe('DiscountApprovalsService', () => {
     }).compile();
 
     service = module.get<DiscountApprovalsService>(DiscountApprovalsService);
+
+    recalculateOrderTotals = jest.fn().mockResolvedValue(undefined);
+    service.registerOrderTotalsRecalculator(recalculateOrderTotals);
   });
 
   afterEach(() => jest.clearAllMocks());
@@ -96,13 +102,23 @@ describe('DiscountApprovalsService', () => {
   // ─── approveViaWhatsApp ───
 
   describe('approveViaWhatsApp', () => {
-    it('updates approval to APPROVED and notifies requester', async () => {
-      (prisma.discountApproval.update as jest.Mock).mockResolvedValue({
+    it('does nothing when the request is no longer pending', async () => {
+      (prisma.discountApproval.findFirst as jest.Mock).mockResolvedValue(null);
+
+      await service.approveViaWhatsApp('req-1', 'reviewer-1');
+
+      expect(prisma.discountApproval.update).not.toHaveBeenCalled();
+      expect(recalculateOrderTotals).not.toHaveBeenCalled();
+    });
+
+    it('approves, applies the discount to the order total and notifies requester', async () => {
+      (prisma.discountApproval.findFirst as jest.Mock).mockResolvedValue({
         id: 'req-1',
         orderId: 'order-1',
         requestedById: 'user-1',
         order: { id: 'order-1', orderNumber: 'OP-001' },
       });
+      (prisma.discountApproval.update as jest.Mock).mockResolvedValue({ id: 'req-1' });
       (prisma.order.update as jest.Mock).mockResolvedValue({});
 
       await service.approveViaWhatsApp('req-1', 'reviewer-1');
@@ -113,7 +129,10 @@ describe('DiscountApprovalsService', () => {
           data: expect.objectContaining({ status: EditRequestStatus.APPROVED, reviewedById: 'reviewer-1' }),
         }),
       );
-      expect(prisma.order.update).toHaveBeenCalled();
+      expect(recalculateOrderTotals).toHaveBeenCalledWith('order-1', prisma);
+      expect(prisma.order.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: { discountApprovalStatus: EditRequestStatus.APPROVED } }),
+      );
       expect(notificationsService.create).toHaveBeenCalledWith(
         expect.objectContaining({ type: NotificationType.DISCOUNT_APPROVAL_APPROVED }),
       );
@@ -187,107 +206,101 @@ describe('DiscountApprovalsService', () => {
     });
   });
 
-  // ─── createFromDiscountApplication ───
+  // ─── createPendingRequest / notifyPendingRequest ───
 
-  describe('createFromDiscountApplication', () => {
-    it('throws NotFoundException when order not found', async () => {
-      (prisma.order.findUnique as jest.Mock).mockResolvedValue(null);
-      (prisma.user.findUnique as jest.Mock).mockResolvedValue({ id: 'user-1', email: 'u@t.com', firstName: 'A', lastName: 'B' });
-      (prisma.orderDiscount.findUnique as jest.Mock).mockResolvedValue(null);
+  describe('createPendingRequest', () => {
+    it('creates the PENDING request and flags the order inside the given transaction', async () => {
+      const tx = {
+        discountApproval: { create: jest.fn().mockResolvedValue({ id: 'req-new' }) },
+        order: { update: jest.fn().mockResolvedValue({}) },
+      };
 
-      await expect(
-        service.createFromDiscountApplication('user-1', 'order-missing', 'disc-1'),
-      ).rejects.toThrow(NotFoundException);
+      const res = await service.createPendingRequest(tx as any, {
+        requestedById: 'user-1',
+        orderId: 'order-1',
+        discountId: 'disc-1',
+      });
+
+      expect(tx.discountApproval.create).toHaveBeenCalledWith({
+        data: {
+          orderId: 'order-1',
+          discountId: 'disc-1',
+          requestedById: 'user-1',
+          status: EditRequestStatus.PENDING,
+        },
+        select: { id: true },
+      });
+      expect(tx.order.update).toHaveBeenCalledWith({
+        where: { id: 'order-1' },
+        data: { discountApprovalStatus: EditRequestStatus.PENDING },
+      });
+      // Nada sale por fuera de la transacción ni se notifica todavía.
+      expect(prisma.discountApproval.create).not.toHaveBeenCalled();
+      expect(notificationsService.notifyUsersWithPermission).not.toHaveBeenCalled();
+      expect(res).toEqual({ id: 'req-new' });
+    });
+  });
+
+  describe('notifyPendingRequest', () => {
+    const pendingRequest = (discount: unknown) => ({
+      id: 'req-new',
+      orderId: 'order-1',
+      requestedById: 'user-1',
+      requestedBy: { id: 'user-1', email: 'u@t.com', firstName: 'Ana', lastName: 'Lopez' },
+      order: { id: 'order-1', orderNumber: 'OP-001' },
+      discount,
     });
 
-    it('creates approval request and notifies', async () => {
-      (prisma.order.findUnique as jest.Mock).mockResolvedValue({ id: 'order-1', orderNumber: 'OP-001' });
-      (prisma.user.findUnique as jest.Mock).mockResolvedValue({ id: 'user-1', email: 'u@t.com', firstName: 'Ana', lastName: 'Lopez' });
-      (prisma.orderDiscount.findUnique as jest.Mock).mockResolvedValue({ amount: 50, reason: 'Loyalty' });
-      (prisma.discountApproval.create as jest.Mock).mockResolvedValue({
-        id: 'req-new',
-        orderId: 'order-1',
-        requestedById: 'user-1',
-        requestedBy: { id: 'user-1', email: 'u@t.com', firstName: 'Ana', lastName: 'Lopez' },
-        order: { id: 'order-1', orderNumber: 'OP-001' },
-      });
-      (prisma.order.update as jest.Mock).mockResolvedValue({});
+    it('throws NotFoundException when the request does not exist', async () => {
+      (prisma.discountApproval.findUnique as jest.Mock).mockResolvedValue(null);
 
-      const res = await service.createFromDiscountApplication('user-1', 'order-1', 'disc-1');
+      await expect(service.notifyPendingRequest('missing')).rejects.toThrow(NotFoundException);
+    });
 
-      expect(prisma.discountApproval.create).toHaveBeenCalled();
-      expect(prisma.order.update).toHaveBeenCalledWith(
-        expect.objectContaining({ data: { discountApprovalStatus: EditRequestStatus.PENDING } }),
+    it('notifies reviewers in-app with the discount detail', async () => {
+      (prisma.discountApproval.findUnique as jest.Mock).mockResolvedValue(
+        pendingRequest({ amount: 50, reason: 'Loyalty' }),
       );
+
+      await service.notifyPendingRequest('req-new');
+
       expect(notificationsService.notifyUsersWithPermission).toHaveBeenCalledWith(
         'approve_discounts',
-        expect.objectContaining({ type: NotificationType.DISCOUNT_APPROVAL_PENDING }),
+        expect.objectContaining({
+          type: NotificationType.DISCOUNT_APPROVAL_PENDING,
+          relatedId: 'req-new',
+          message: expect.stringContaining('Loyalty'),
+        }),
         // Solo Zoom: el aviso solo llega a la sede de la OP.
         { orderId: expect.any(String) },
       );
-      expect(res.id).toBe('req-new');
-    });
-
-    it('creates approval without discount details when discount not found', async () => {
-      (prisma.order.findUnique as jest.Mock).mockResolvedValue({ id: 'order-1', orderNumber: 'OP-001' });
-      (prisma.user.findUnique as jest.Mock).mockResolvedValue({ id: 'user-1', email: 'u@t.com', firstName: null, lastName: null });
-      (prisma.orderDiscount.findUnique as jest.Mock).mockResolvedValue(null);
-      (prisma.discountApproval.create as jest.Mock).mockResolvedValue({
-        id: 'req-new2',
-        orderId: 'order-1',
-        requestedById: 'user-1',
-        requestedBy: { id: 'user-1', email: 'u@t.com' },
-        order: { id: 'order-1', orderNumber: 'OP-001' },
-      });
-      (prisma.order.update as jest.Mock).mockResolvedValue({});
-
-      const res = await service.createFromDiscountApplication('user-1', 'order-1', 'disc-missing');
-      expect(res.id).toBe('req-new2');
     });
 
     it('sends WhatsApp notifications when reviewers with phones exist', async () => {
-      (prisma.order.findUnique as jest.Mock).mockResolvedValue({ id: 'order-1', orderNumber: 'OP-001' });
-      (prisma.user.findUnique as jest.Mock).mockResolvedValue({ id: 'user-1', email: 'u@t.com', firstName: 'Ana', lastName: 'Lopez' });
-      (prisma.orderDiscount.findUnique as jest.Mock).mockResolvedValue({ amount: 20, reason: 'VIP' });
-      (prisma.discountApproval.create as jest.Mock).mockResolvedValue({
-        id: 'req-wa',
-        orderId: 'order-1',
-        requestedById: 'user-1',
-        requestedBy: {},
-        order: { id: 'order-1', orderNumber: 'OP-001' },
-      });
-      (prisma.order.update as jest.Mock).mockResolvedValue({});
+      (prisma.discountApproval.findUnique as jest.Mock).mockResolvedValue(
+        pendingRequest({ amount: 20, reason: 'VIP' }),
+      );
       // Los teléfonos llegan ya normalizados y deduplicados desde WhatsappService
       mockWhatsapp.getPhonesByPermission.mockResolvedValue(['573001234567']);
 
-      await service.createFromDiscountApplication('user-1', 'order-1', 'disc-1');
+      await service.notifyPendingRequest('req-new');
       // Flush fire-and-forget promises
       await new Promise<void>((resolve) => setImmediate(resolve));
 
-      expect(mockWhatsapp.getPhonesByPermission).toHaveBeenCalledWith(
-        'approve_discounts',
-      );
+      expect(mockWhatsapp.getPhonesByPermission).toHaveBeenCalledWith('approve_discounts');
       expect(mockWhatsapp.sendApprovalNotification).toHaveBeenCalledWith(
         expect.objectContaining({ telefono: '573001234567' }),
       );
     });
 
     it('handles WhatsApp notification error gracefully', async () => {
-      (prisma.order.findUnique as jest.Mock).mockResolvedValue({ id: 'order-1', orderNumber: 'OP-001' });
-      (prisma.user.findUnique as jest.Mock).mockResolvedValue({ id: 'user-1', email: 'u@t.com', firstName: 'Ana', lastName: null });
-      (prisma.orderDiscount.findUnique as jest.Mock).mockResolvedValue({ amount: 10, reason: 'Test' });
-      (prisma.discountApproval.create as jest.Mock).mockResolvedValue({
-        id: 'req-err',
-        orderId: 'order-1',
-        requestedById: 'user-1',
-        requestedBy: {},
-        order: { id: 'order-1', orderNumber: 'OP-001' },
-      });
-      (prisma.order.update as jest.Mock).mockResolvedValue({});
+      (prisma.discountApproval.findUnique as jest.Mock).mockResolvedValue(
+        pendingRequest({ amount: 10, reason: 'Test' }),
+      );
       mockWhatsapp.getPhonesByPermission.mockRejectedValue(new Error('DB error'));
 
       // Should not throw – fire and forget
-      await expect(service.createFromDiscountApplication('user-1', 'order-1', 'disc-1')).resolves.toBeDefined();
+      await expect(service.notifyPendingRequest('req-new')).resolves.toBeUndefined();
       await new Promise<void>((resolve) => setImmediate(resolve));
     });
   });
@@ -341,6 +354,8 @@ describe('DiscountApprovalsService', () => {
       expect(prisma.discountApproval.update).toHaveBeenCalledWith(
         expect.objectContaining({ data: expect.objectContaining({ status: EditRequestStatus.APPROVED }) }),
       );
+      // Aprobar es lo que hace que el descuento baje el total.
+      expect(recalculateOrderTotals).toHaveBeenCalledWith('order-1', prisma);
       expect(prisma.order.update).toHaveBeenCalledWith(
         expect.objectContaining({ data: { discountApprovalStatus: EditRequestStatus.APPROVED } }),
       );
@@ -348,6 +363,52 @@ describe('DiscountApprovalsService', () => {
         expect.objectContaining({ type: NotificationType.DISCOUNT_APPROVAL_APPROVED }),
       );
       expect(res.id).toBe('req-1');
+    });
+  });
+
+  describe('approve — revisar la propia solicitud', () => {
+    const ownRequest = {
+      id: 'req-1',
+      orderId: 'order-1',
+      requestedById: 'user-1',
+      requestedBy: {},
+      order: { id: 'order-1', orderNumber: 'OP-001' },
+    };
+
+    it('blocks a non-admin approving their own discount', async () => {
+      (prisma.discountApproval.findFirst as jest.Mock).mockResolvedValue(ownRequest);
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue({
+        role: { name: 'contabilidad', permissions: [{ permission: { name: 'approve_discounts' } }] },
+      });
+
+      await expect(service.approve('req-1', 'user-1', {})).rejects.toThrow(
+        'No puedes aprobar ni rechazar una solicitud que tú mismo creaste',
+      );
+      expect(prisma.discountApproval.update).not.toHaveBeenCalled();
+      expect(recalculateOrderTotals).not.toHaveBeenCalled();
+    });
+
+    it('lets an admin approve their own discount', async () => {
+      (prisma.discountApproval.findFirst as jest.Mock).mockResolvedValue(ownRequest);
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue({
+        role: { name: 'admin', permissions: [{ permission: { name: 'approve_discounts' } }] },
+      });
+      (prisma.discountApproval.update as jest.Mock).mockResolvedValue({ id: 'req-1' });
+      (prisma.order.update as jest.Mock).mockResolvedValue({});
+
+      await expect(service.approve('req-1', 'user-1', {})).resolves.toEqual({ id: 'req-1' });
+    });
+
+    it('fails loudly if OrdersService never registered the recalculator', async () => {
+      service.registerOrderTotalsRecalculator(null as any);
+      (prisma.discountApproval.findFirst as jest.Mock).mockResolvedValue(ownRequest);
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue({
+        role: { name: 'contabilidad', permissions: [{ permission: { name: 'approve_discounts' } }] },
+      });
+
+      await expect(service.approve('req-1', 'rev-1', {})).rejects.toThrow(
+        'no registró el recálculo',
+      );
     });
   });
 
@@ -415,6 +476,26 @@ describe('DiscountApprovalsService', () => {
 
       const notifCall = (notificationsService.create as jest.Mock).mock.calls[0][0];
       expect(notifCall.message).toContain('Not enough justification');
+    });
+  });
+
+  describe('reject — revisar la propia solicitud', () => {
+    it('blocks a non-admin rejecting their own discount', async () => {
+      (prisma.discountApproval.findFirst as jest.Mock).mockResolvedValue({
+        id: 'req-1',
+        orderId: 'order-1',
+        requestedById: 'user-1',
+        requestedBy: {},
+        order: { id: 'order-1', orderNumber: 'OP-001' },
+      });
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue({
+        role: { name: 'contabilidad', permissions: [{ permission: { name: 'approve_discounts' } }] },
+      });
+
+      await expect(service.reject('req-1', 'user-1', { reviewNotes: 'x' })).rejects.toThrow(
+        ForbiddenException,
+      );
+      expect(prisma.discountApproval.update).not.toHaveBeenCalled();
     });
   });
 

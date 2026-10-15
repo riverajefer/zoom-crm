@@ -1,6 +1,7 @@
 import {
   Injectable,
   Logger,
+  OnModuleInit,
   NotFoundException,
   BadRequestException,
   ForbiddenException,
@@ -215,8 +216,31 @@ const PAYMENT_RESPONSE_SELECT = {
   },
 } as const;
 
+/**
+ * Descuentos que bajan el total: los que no requerían aprobación y los ya
+ * aprobados. Uno pendiente o rechazado no cuenta; si contara, la OP valdría
+ * menos (y podría generar saldo a favor o una devolución) antes de que alguien
+ * autorice el descuento.
+ */
+const COUNTED_DISCOUNT_WHERE = {
+  approvals: { none: { status: { not: EditRequestStatus.APPROVED } } },
+} satisfies Prisma.OrderDiscountWhereInput;
+
+/**
+ * Descuentos que todavía pueden llegar a contar: los que cuentan más los
+ * pendientes. Sirve para no aceptar un descuento nuevo que, sumado a los que
+ * esperan aprobación, deje la OP en negativo cuando se aprueben.
+ */
+const LIVE_DISCOUNT_WHERE = {
+  approvals: {
+    none: {
+      status: { in: [EditRequestStatus.REJECTED, EditRequestStatus.EXPIRED] },
+    },
+  },
+} satisfies Prisma.OrderDiscountWhereInput;
+
 @Injectable()
-export class OrdersService {
+export class OrdersService implements OnModuleInit {
   private readonly logger = new Logger(OrdersService.name);
 
   constructor(
@@ -235,6 +259,12 @@ export class OrdersService {
     private readonly payrollDeductionsService: PayrollDeductionsService,
     private readonly creditBalanceService: CreditBalanceService,
   ) {}
+
+  onModuleInit() {
+    this.discountApprovalsService.registerOrderTotalsRecalculator(
+      (orderId, tx) => this.recalculateOrderTotals(orderId, tx),
+    );
+  }
 
   async findAll(filters: FilterOrdersDto) {
     const { status, statuses, search, clientId, orderDateFrom, orderDateTo, paymentDateFrom, paymentDateTo, page, limit, excludeWithWorkOrder, productionAreaId, createdById, hasBalance, paymentStatus, deliveryStatus, advancePaymentStatus, excludeAnulado } = filters;
@@ -2967,9 +2997,9 @@ export class OrdersService {
     const reteICAAmount = subtotal.mul(reteICARate);
     const reteIVAAmount = tax.mul(reteIVARate);
 
-    // Calcular discountAmount sumando todos los descuentos
+    // Calcular discountAmount sumando los descuentos que ya cuentan
     const discounts = await tx.orderDiscount.findMany({
-      where: { orderId },
+      where: { orderId, ...COUNTED_DISCOUNT_WHERE },
       select: { amount: true },
     });
 
@@ -3262,9 +3292,16 @@ export class OrdersService {
 
     const discountAmount = new Prisma.Decimal(applyDiscountDto.amount);
 
-    // Validar que el descuento no exceda el total de la orden
-    const currentTotal = new Prisma.Decimal(order.total);
-    const currentDiscountAmount = new Prisma.Decimal(order.discountAmount);
+    // Validar que el descuento no exceda el total de la orden. Se suman también
+    // los pendientes: aún no bajan el total, pero lo harán si se aprueban.
+    const liveDiscounts = await this.prisma.orderDiscount.findMany({
+      where: { orderId, ...LIVE_DISCOUNT_WHERE },
+      select: { amount: true },
+    });
+    const currentDiscountAmount = liveDiscounts.reduce(
+      (sum, discount) => sum.add(discount.amount),
+      new Prisma.Decimal(0),
+    );
     const newDiscountAmount = currentDiscountAmount.add(discountAmount);
 
     // El total base es subtotal + tax
@@ -3276,34 +3313,47 @@ export class OrdersService {
       );
     }
 
-    // Usar transacción para crear descuento y recalcular totales
-    const discountId = await this.prisma.$transaction(async (tx) => {
-      // Crear el descuento
-      const discount = await tx.orderDiscount.create({
-        data: {
-          orderId,
-          amount: discountAmount,
-          reason: applyDiscountDto.reason,
-          appliedById,
-        },
-        select: {
-          id: true,
-        },
-      });
+    // Quien no tiene `approve_discounts` deja el descuento pendiente: la
+    // solicitud se crea dentro de la transacción y antes del recálculo, que
+    // ignora los descuentos sin aprobar. Así el total no baja hasta que alguien
+    // lo autorice.
+    const discountApprovalCheck =
+      await this.discountApprovalsService.requiresApproval(appliedById);
 
-      // Recalcular totales de la orden
-      await this.recalculateOrderTotals(orderId, tx);
+    const { discountId, approvalRequestId } = await this.prisma.$transaction(
+      async (tx) => {
+        const discount = await tx.orderDiscount.create({
+          data: {
+            orderId,
+            amount: discountAmount,
+            reason: applyDiscountDto.reason,
+            appliedById,
+          },
+          select: {
+            id: true,
+          },
+        });
 
-      return discount.id;
-    });
+        const approvalRequest = discountApprovalCheck.required
+          ? await this.discountApprovalsService.createPendingRequest(tx, {
+              requestedById: appliedById,
+              orderId,
+              discountId: discount.id,
+            })
+          : null;
 
-    // Verificar si el descuento requiere aprobación (usuario sin permiso approve_discounts)
-    const discountApprovalCheck = await this.discountApprovalsService.requiresApproval(appliedById);
-    if (discountApprovalCheck.required) {
-      await this.discountApprovalsService.createFromDiscountApplication(
-        appliedById,
-        orderId,
-        discountId,
+        await this.recalculateOrderTotals(orderId, tx);
+
+        return {
+          discountId: discount.id,
+          approvalRequestId: approvalRequest?.id ?? null,
+        };
+      },
+    );
+
+    if (approvalRequestId) {
+      await this.discountApprovalsService.notifyPendingRequest(
+        approvalRequestId,
       );
     }
 

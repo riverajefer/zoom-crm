@@ -25,6 +25,7 @@ import {
   EditRequestStatus,
   NotificationType,
 } from '../../generated/prisma';
+import { assertNotSelfReview } from '../../common/utils/self-review.util';
 
 const APPROVE_PERMISSION = 'approve_client_advisor';
 
@@ -281,6 +282,10 @@ export class ClientAdvisorRequestsService
     if (!request) {
       throw new NotFoundException('Solicitud no encontrada o ya procesada');
     }
+    await assertNotSelfReview(this.prisma, {
+      requestedById: request.requestedById,
+      reviewerId,
+    });
 
     // Validar que el asesor destino sigue activo
     const advisor = await this.prisma.user.findUnique({
@@ -352,6 +357,10 @@ export class ClientAdvisorRequestsService
     if (!request) {
       throw new NotFoundException('Solicitud no encontrada o ya procesada');
     }
+    await assertNotSelfReview(this.prisma, {
+      requestedById: request.requestedById,
+      reviewerId,
+    });
 
     const updatedRequest = await this.prisma.clientAdvisorRequest.update({
       where: { id: requestId },

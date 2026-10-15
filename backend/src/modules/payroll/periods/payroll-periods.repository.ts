@@ -18,6 +18,80 @@ const periodSelect = {
   updatedAt: true,
 };
 
+const userSummarySelect = {
+  select: { id: true, firstName: true, lastName: true, email: true },
+} as const;
+
+/**
+ * Anticipo con su trazabilidad completa: quién lo pidió, quién lo aprobó
+ * (Gerencia) y quién lo desembolsó (Caja). La autorización de la CP
+ * (`authorizedBy`) no se usa en los anticipos: la aprobación real vive en la
+ * doble firma del pago (`AccountPayablePaymentAuthRequest`).
+ */
+const advanceSelect = {
+  id: true,
+  apNumber: true,
+  description: true,
+  observations: true,
+  totalAmount: true,
+  paidAmount: true,
+  balance: true,
+  status: true,
+  dueDate: true,
+  createdAt: true,
+  createdBy: userSummarySelect,
+  beneficiaryUser: userSummarySelect,
+  payments: {
+    select: {
+      id: true,
+      amount: true,
+      paymentMethod: true,
+      paymentDate: true,
+      reference: true,
+      notes: true,
+      isReversed: true,
+      reversedAt: true,
+      createdAt: true,
+      registeredBy: userSummarySelect,
+      paymentAuthRequest: {
+        select: {
+          id: true,
+          reason: true,
+          createdAt: true,
+          requestedBy: userSummarySelect,
+          adminReviewedBy: userSummarySelect,
+          adminReviewedAt: true,
+          adminNotes: true,
+          cajaReviewedBy: userSummarySelect,
+          cajaReviewedAt: true,
+        },
+      },
+    },
+    orderBy: { createdAt: 'asc' },
+  },
+  // Solicitudes de pago que no terminaron en desembolso (pendientes,
+  // rechazadas o vencidas): explican por qué un anticipo sigue sin pagarse.
+  paymentAuthRequests: {
+    where: { createdPayment: { is: null } },
+    select: {
+      id: true,
+      status: true,
+      amount: true,
+      paymentMethod: true,
+      reason: true,
+      createdAt: true,
+      requestedBy: userSummarySelect,
+      adminReviewedBy: userSummarySelect,
+      adminReviewedAt: true,
+      adminNotes: true,
+      cajaReviewedBy: userSummarySelect,
+      cajaReviewedAt: true,
+      cajaRejectionReason: true,
+    },
+    orderBy: { createdAt: 'desc' },
+  },
+} satisfies Prisma.AccountPayableSelect;
+
 @Injectable()
 export class PayrollPeriodsRepository {
   constructor(private readonly prisma: PrismaService) {}
@@ -93,25 +167,13 @@ export class PayrollPeriodsRepository {
 
   /**
    * Anticipos (cuentas por pagar Personal/Anticipos) vinculados a un periodo,
-   * con su beneficiario y estado de pago. Excluye los anulados.
+   * con su beneficiario, estado de pago y trazabilidad de aprobación y
+   * desembolso (ver `advanceSelect`). Excluye los anulados.
    */
   async findAdvancesByPeriod(periodId: string) {
     return this.prisma.accountPayable.findMany({
       where: { payrollPeriodId: periodId, status: { not: 'CANCELLED' } },
-      select: {
-        id: true,
-        apNumber: true,
-        description: true,
-        totalAmount: true,
-        paidAmount: true,
-        balance: true,
-        status: true,
-        dueDate: true,
-        createdAt: true,
-        beneficiaryUser: {
-          select: { id: true, firstName: true, lastName: true, email: true },
-        },
-      },
+      select: advanceSelect,
       orderBy: { createdAt: 'desc' },
     });
   }

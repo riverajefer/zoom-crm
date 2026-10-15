@@ -12,9 +12,11 @@ import {
   Alert,
   Menu,
   MenuItem,
+  Tab,
+  Tabs,
 } from '@mui/material';
 import { AutoAwesome, Edit, KeyboardArrowDown, ReceiptLong } from '@mui/icons-material';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useSnackbar } from 'notistack';
 import { PageHeader } from '../../../components/common/PageHeader';
 import { LoadingSpinner } from '../../../components/common/LoadingSpinner';
@@ -25,6 +27,8 @@ import { usePayrollPeriods } from '../hooks/usePayrollPeriods';
 import { usePayrollItems } from '../hooks/usePayrollItems';
 import { payrollPeriodsApi } from '../../../api/payroll-periods.api';
 import { getItemColumns } from '../config/columns';
+import { PayrollAdvancesTab } from '../components/PayrollAdvancesTab';
+import { advanceDisbursed, advanceNotDisbursed, sumDisbursed, sumNotDisbursed } from '../utils/advances';
 import { generatePayrollSlipsPdf } from '../utils/generatePayrollSlipPdf';
 import type { PayrollItem } from '../../../types/payroll-item.types';
 import { PATHS } from '../../../router/paths';
@@ -75,6 +79,11 @@ const PayrollPeriodDetailPage: React.FC = () => {
   const [toDelete, setToDelete] = useState<PayrollItem | null>(null);
   const [statusAnchorEl, setStatusAnchorEl] = useState<null | HTMLElement>(null);
   const [generatingSlips, setGeneratingSlips] = useState(false);
+  // La pestaña vive en la URL para poder compartir el enlace directo a los anticipos.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tab = searchParams.get('tab') === 'anticipos' ? 'anticipos' : 'registros';
+  const setTab = (value: 'registros' | 'anticipos') =>
+    setSearchParams(value === 'registros' ? {} : { tab: value }, { replace: true });
 
   const handleStatusChange = async (newStatus: string) => {
     try {
@@ -142,18 +151,24 @@ const PayrollPeriodDetailPage: React.FC = () => {
   const items = itemsQuery.data ?? [];
   const summary = summaryQuery.data;
 
-  // Anticipos vinculados agrupados por empleado beneficiario.
+  // Anticipos vinculados agrupados por empleado beneficiario. Solo se descuenta
+  // lo que Caja desembolsó; lo rechazado o vencido se muestra aparte.
   const advances = advancesQuery.data ?? [];
-  const advancesTotal = advances.reduce((sum, a) => sum + Number(a.totalAmount), 0);
-  const advancesByEmployee = advances.reduce<Record<string, { name: string; total: number; count: number }>>(
+  const advancesTotal = sumDisbursed(advances);
+  const advancesNotDisbursed = sumNotDisbursed(advances);
+  const notDisbursedCount = advances.filter((a) => advanceNotDisbursed(a) > 0).length;
+  const advancesByEmployee = advances.reduce<
+    Record<string, { name: string; total: number; notDisbursed: number; count: number }>
+  >(
     (acc, a) => {
       const key = a.beneficiaryUser?.id ?? 'sin-empleado';
       const name =
         `${a.beneficiaryUser?.firstName ?? ''} ${a.beneficiaryUser?.lastName ?? ''}`.trim() ||
         a.beneficiaryUser?.email ||
         'Empleado';
-      if (!acc[key]) acc[key] = { name, total: 0, count: 0 };
-      acc[key].total += Number(a.totalAmount);
+      if (!acc[key]) acc[key] = { name, total: 0, notDisbursed: 0, count: 0 };
+      acc[key].total += advanceDisbursed(a);
+      acc[key].notDisbursed += advanceNotDisbursed(a);
       acc[key].count += 1;
       return acc;
     },
@@ -305,14 +320,32 @@ const PayrollPeriodDetailPage: React.FC = () => {
         </Button>
       </Stack>
 
+      <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}>
+        <Tab value="registros" label={`Registros de nómina (${items.length})`} />
+        <Tab value="anticipos" label={`Anticipos (${advances.length})`} />
+      </Tabs>
+
+      {tab === 'anticipos' && (
+        <PayrollAdvancesTab advances={advances} loading={advancesQuery.isLoading} />
+      )}
+
       {/* Anticipos vinculados al periodo */}
-      {advances.length > 0 && (
+      {tab === 'registros' && advances.length > 0 && (
         <Alert severity="info" sx={{ mb: 2 }}>
           <Typography variant="subtitle2" fontWeight="bold" sx={{ mb: 0.5 }}>
-            {advances.length} anticipo(s) vinculado(s) — total {formatCOP(advancesTotal)}
+            {advances.length} anticipo(s) vinculado(s) — a descontar {formatCOP(advancesTotal)}
           </Typography>
+          {advancesNotDisbursed > 0 && (
+            <Typography variant="body2" color="warning.main" sx={{ mb: 0.5 }}>
+              No incluye {formatCOP(advancesNotDisbursed)} de {notDisbursedCount} anticipo
+              {notDisbursedCount === 1 ? '' : 's'} que Caja no desembolsó: no se descuentan.
+            </Typography>
+          )}
           <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-            Abre el registro de cada empleado para aplicar el descuento de anticipos.
+            Abre el registro de cada empleado para aplicar el descuento de anticipos.{' '}
+            <Button size="small" sx={{ p: 0, minWidth: 0, verticalAlign: 'baseline' }} onClick={() => setTab('anticipos')}>
+              Ver detalle de cada anticipo
+            </Button>
           </Typography>
           <Stack spacing={0.25}>
             {Object.values(advancesByEmployee).map((e) => (
@@ -321,6 +354,11 @@ const PayrollPeriodDetailPage: React.FC = () => {
                 <Typography component="span" variant="caption" color="text.secondary">
                   ({e.count} anticipo{e.count > 1 ? 's' : ''})
                 </Typography>
+                {e.notDisbursed > 0 && (
+                  <Typography component="span" variant="caption" color="warning.main">
+                    {' '}· {formatCOP(e.notDisbursed)} sin desembolsar
+                  </Typography>
+                )}
               </Typography>
             ))}
           </Stack>
@@ -328,18 +366,20 @@ const PayrollPeriodDetailPage: React.FC = () => {
       )}
 
       {/* Items table */}
-      <DataTable
-        density="compact"
-        pageSize={20}
-        pageSizeOptions={[20, 50, 100]}
-        rows={items}
-        columns={columns}
-        loading={itemsQuery.isLoading}
-        onAdd={canEdit ? () => navigate(PATHS.PAYROLL_ITEM_EDIT.replace(':periodId', id!).replace(':itemId', 'new')) : undefined}
-        addButtonText="Agregar Registro"
-        searchPlaceholder="Buscar empleado..."
-        emptyMessage="No hay registros de nómina. Usa 'Generar para todos los activos' para crearlos automáticamente."
-      />
+      {tab === 'registros' && (
+        <DataTable
+          density="compact"
+          pageSize={20}
+          pageSizeOptions={[20, 50, 100]}
+          rows={items}
+          columns={columns}
+          loading={itemsQuery.isLoading}
+          onAdd={canEdit ? () => navigate(PATHS.PAYROLL_ITEM_EDIT.replace(':periodId', id!).replace(':itemId', 'new')) : undefined}
+          addButtonText="Agregar Registro"
+          searchPlaceholder="Buscar empleado..."
+          emptyMessage="No hay registros de nómina. Usa 'Generar para todos los activos' para crearlos automáticamente."
+        />
+      )}
 
       <ConfirmDialog
         open={!!toDelete}

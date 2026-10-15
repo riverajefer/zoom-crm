@@ -73,20 +73,68 @@ export interface PayrollPeriodSummary {
  * Anticipo (Cuenta por Pagar tipo Personal/Anticipos) vinculado a un periodo de
  * nómina. `beneficiaryUser.id` es el userId del empleado; se agrupan por ese id.
  */
+export interface PayrollAdvanceUser {
+  id: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  email?: string | null;
+}
+
+/** Desembolso del anticipo con la doble firma que lo autorizó. */
+export interface PayrollAdvancePayment {
+  id: string;
+  amount: string;
+  paymentMethod: string;
+  paymentDate: string;
+  reference?: string | null;
+  notes?: string | null;
+  isReversed: boolean;
+  reversedAt?: string | null;
+  createdAt: string;
+  registeredBy: PayrollAdvanceUser;
+  paymentAuthRequest: {
+    id: string;
+    reason?: string | null;
+    createdAt: string;
+    requestedBy: PayrollAdvanceUser;
+    adminReviewedBy: PayrollAdvanceUser | null;
+    adminReviewedAt: string | null;
+    adminNotes?: string | null;
+    cajaReviewedBy: PayrollAdvanceUser | null;
+    cajaReviewedAt: string | null;
+  } | null;
+}
+
+/** Solicitud de pago que no terminó en desembolso (pendiente, rechazada o vencida). */
+export interface PayrollAdvancePendingRequest {
+  id: string;
+  status: 'PENDING' | 'ADMIN_APPROVED' | 'COMPLETED' | 'ADMIN_REJECTED' | 'CAJA_REJECTED' | 'EXPIRED';
+  amount: string;
+  paymentMethod: string;
+  reason?: string | null;
+  createdAt: string;
+  requestedBy: PayrollAdvanceUser;
+  adminReviewedBy: PayrollAdvanceUser | null;
+  adminReviewedAt: string | null;
+  adminNotes?: string | null;
+  cajaReviewedBy: PayrollAdvanceUser | null;
+  cajaReviewedAt: string | null;
+  cajaRejectionReason?: string | null;
+}
+
 export interface PayrollAdvance {
   id: string;
   apNumber: string;
   description: string;
+  observations?: string | null;
   totalAmount: string;
   paidAmount: string;
   balance: string;
   status: string;
   dueDate: string;
   createdAt: string;
-  beneficiaryUser: {
-    id: string;
-    firstName?: string | null;
-    lastName?: string | null;
-    email?: string | null;
-  } | null;
+  createdBy: PayrollAdvanceUser;
+  beneficiaryUser: PayrollAdvanceUser | null;
+  payments: PayrollAdvancePayment[];
+  paymentAuthRequests: PayrollAdvancePendingRequest[];
 }

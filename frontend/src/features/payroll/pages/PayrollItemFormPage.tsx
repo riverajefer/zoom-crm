@@ -30,6 +30,7 @@ import { usePayrollPeriods } from '../hooks/usePayrollPeriods';
 import { usePayrollEmployees } from '../hooks/usePayrollEmployees';
 import { payrollItemsApi } from '../../../api/payroll-items.api';
 import { payrollPeriodsApi } from '../../../api/payroll-periods.api';
+import { advanceDisbursed, advanceNotDisbursed, sumDisbursed, sumNotDisbursed } from '../utils/advances';
 import { useQuery } from '@tanstack/react-query';
 import type { CreatePayrollItemDto, UpdatePayrollItemDto } from '../../../types';
 import { PATHS } from '../../../router/paths';
@@ -406,7 +407,10 @@ const PayrollItemFormPage: React.FC = () => {
   const employeeAdvances = (advancesQuery.data ?? []).filter(
     (a) => !!employeeUserId && a.beneficiaryUser?.id === employeeUserId,
   );
-  const advancesTotal = employeeAdvances.reduce((sum, a) => sum + Number(a.totalAmount), 0);
+  // Solo se descuenta lo que Caja desembolsó: un anticipo rechazado o vencido
+  // sigue vinculado, pero el empleado nunca recibió ese dinero.
+  const advancesTotal = sumDisbursed(employeeAdvances);
+  const advancesNotDisbursed = sumNotDisbursed(employeeAdvances);
   const currentAdvancesValue = rawNum(values.advances);
   const applyAdvancesDiscount = () => setValue('advances', String(Math.round(advancesTotal)));
 
@@ -655,9 +659,15 @@ const PayrollItemFormPage: React.FC = () => {
                   </Typography>
                   <Typography variant="caption" color="text.secondary">
                     Cuentas por Pagar (Personal / Anticipos) registradas para este empleado en el periodo.
+                    Solo se descuenta lo que Caja ya desembolsó.
                   </Typography>
+                  {advancesNotDisbursed > 0 && (
+                    <Typography variant="caption" color="warning.main" component="div">
+                      {formatCOP(advancesNotDisbursed)} vinculados sin desembolsar quedan por fuera del descuento.
+                    </Typography>
+                  )}
                 </Box>
-                <Tooltip title="Copiar el total de anticipos al campo de descuento 'Anticipos'">
+                <Tooltip title="Copiar el total desembolsado al campo de descuento 'Anticipos'">
                   <span>
                     <Button
                       size="small"
@@ -673,19 +683,29 @@ const PayrollItemFormPage: React.FC = () => {
               </Stack>
 
               <Stack spacing={0.5}>
-                {employeeAdvances.map((a) => (
-                  <Stack key={a.id} direction="row" justifyContent="space-between" spacing={2}>
-                    <Typography variant="body2" sx={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {a.apNumber} — {a.description || 'Anticipo'}
-                    </Typography>
-                    <Typography variant="body2" fontWeight={600} sx={{ whiteSpace: 'nowrap' }}>
-                      {formatCOP(Number(a.totalAmount))}
-                    </Typography>
-                  </Stack>
-                ))}
+                {employeeAdvances.map((a) => {
+                  const pending = advanceNotDisbursed(a);
+                  return (
+                    <Stack key={a.id} direction="row" justifyContent="space-between" spacing={2}>
+                      <Box sx={{ minWidth: 0 }}>
+                        <Typography variant="body2" sx={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {a.apNumber} — {a.description || 'Anticipo'}
+                        </Typography>
+                        {pending > 0 && (
+                          <Typography variant="caption" color="warning.main" component="div">
+                            {formatCOP(pending)} de {formatCOP(Number(a.totalAmount))} sin desembolsar por Caja: no se descuenta
+                          </Typography>
+                        )}
+                      </Box>
+                      <Typography variant="body2" fontWeight={600} sx={{ whiteSpace: 'nowrap' }}>
+                        {formatCOP(advanceDisbursed(a))}
+                      </Typography>
+                    </Stack>
+                  );
+                })}
                 <Divider sx={{ my: 0.5 }} />
                 <Stack direction="row" justifyContent="space-between">
-                  <Typography variant="body2" fontWeight="bold">Total anticipos</Typography>
+                  <Typography variant="body2" fontWeight="bold">Total desembolsado</Typography>
                   <Typography variant="body2" fontWeight="bold" color="warning.main">
                     {formatCOP(advancesTotal)}
                   </Typography>
@@ -695,7 +715,7 @@ const PayrollItemFormPage: React.FC = () => {
               {currentAdvancesValue !== Math.round(advancesTotal) && (
                 <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
                   El descuento "Anticipos" actual ({formatCOP(currentAdvancesValue)}) difiere del total
-                  vinculado. Usa "Aplicar como descuento" para igualarlo.
+                  desembolsado. Usa "Aplicar como descuento" para igualarlo.
                 </Typography>
               )}
             </Box>

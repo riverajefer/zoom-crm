@@ -72,6 +72,7 @@ import { ActionToolbar } from '../../orders/components/ActionToolbar';
 import { exportMovementsPdf, exportMovementsExcel } from '../utils/exportMovements';
 import { generateMovementReceipt } from '../utils/generateMovementReceipt';
 import { useAuthStore } from '../../../store/authStore';
+import { ALL_LOCATIONS, useLocationStore } from '../../../store/locationStore';
 import { PERMISSIONS } from '../../../utils/constants';
 import { PATHS } from '../../../router/paths';
 import { useCashSession, useCashMovements, useCashMutations } from '../hooks/useCashRegister';
@@ -166,6 +167,8 @@ const ActiveSessionPage: React.FC = () => {
   const [exportAnchorEl, setExportAnchorEl] = useState<null | HTMLElement>(null);
 
   const session = sessionQuery.data;
+  const activeLocationId = useLocationStore((s) => s.activeLocationId);
+  const sessionLocationId = session?.cashRegister.location?.id;
   const movements = movementsQuery.data?.data || [];
 
   const filteredMovements = useMemo(() => {
@@ -272,6 +275,17 @@ const ActiveSessionPage: React.FC = () => {
       navigate(PATHS.CASH_SESSION_HISTORY_DETAIL.replace(':id', id), { replace: true });
     }
   }, [session, id, navigate]);
+
+  // La sesión está atada a la URL, pero la sede activa la elige el Topbar: si
+  // cambia a otra sede, esta sesión queda fuera de su alcance (el GET da 404 y
+  // React Query sigue mostrando la anterior). Se busca la caja abierta de la
+  // sede nueva. En "Todas" se queda: la sesión sigue siendo visible.
+  React.useEffect(() => {
+    if (!sessionLocationId || !activeLocationId || activeLocationId === ALL_LOCATIONS) return;
+    if (activeLocationId !== sessionLocationId) {
+      navigate(PATHS.CASH_SESSION_ACTIVE_BASE, { replace: true, state: { fromSedeSwitch: true } });
+    }
+  }, [activeLocationId, sessionLocationId, navigate]);
 
   // Compute running balance from movements (client-side)
   const runningBalance = useMemo(() => {

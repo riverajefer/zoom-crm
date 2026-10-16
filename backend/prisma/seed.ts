@@ -399,6 +399,8 @@ async function main() {
     { name: 'read_payroll_periods', description: 'Ver periodos de nómina' },
     { name: 'update_payroll_periods', description: 'Editar periodos de nómina' },
     { name: 'delete_payroll_periods', description: 'Eliminar periodos de nómina' },
+    { name: 'pay_payroll', description: 'Registrar el pago o abono de la nómina de cada empleado (efectivo o transferencia)' },
+    { name: 'void_payroll_payments', description: 'Anular con motivo un pago de nómina registrado por error' },
 
     // Payroll Deductions (Descuento de OP por nómina)
     { name: 'read_payroll_deductions', description: 'Ver las órdenes que se van a descontar de la nómina de un empleado' },

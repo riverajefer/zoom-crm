@@ -3,6 +3,7 @@ import { PayrollPeriodsController } from './payroll-periods.controller';
 import { PayrollPeriodsService } from './payroll-periods.service';
 import { PayrollItemsService } from '../items/payroll-items.service';
 import { PrismaService } from '../../../database/prisma.service';
+import { PayrollPaymentsService } from '../payments/payroll-payments.service';
 
 describe('PayrollPeriodsController', () => {
   let controller: PayrollPeriodsController;
@@ -32,6 +33,7 @@ describe('PayrollPeriodsController', () => {
       providers: [
         { provide: PayrollPeriodsService, useValue: periodsService },
         { provide: PayrollItemsService, useValue: itemsService },
+        { provide: PayrollPaymentsService, useValue: {} },
         { provide: PrismaService, useValue: {} },
       ],
     }).compile();

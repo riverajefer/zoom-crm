@@ -83,6 +83,8 @@ model User {
   requestedPayrollDeductions                PayrollDeduction[]                     @relation("RequestedPayrollDeductions")
   approvedPayrollDeductions                 PayrollDeduction[]                     @relation("ApprovedPayrollDeductions")
   appliedPayrollDeductions                  PayrollDeduction[]                     @relation("AppliedPayrollDeductions")
+  createdPayrollPayments                    PayrollPayment[]                       @relation("CreatedPayrollPayments")
+  voidedPayrollPayments                     PayrollPayment[]                       @relation("VoidedPayrollPayments")
   attendanceRecords                         AttendanceRecord[]
   dtfRecords                                DtfRecord[]                            @relation("DtfCreatedBy")
   dtfStatusChanges                          DtfStatusHistory[]                     @relation("DtfStatusChangedBy")
@@ -2111,6 +2113,7 @@ model PayrollItem {
   employee    Employee            @relation(fields: [employeeId], references: [id])
   extraShifts PayrollExtraShift[]
   deductions  PayrollDeduction[]
+  payments    PayrollPayment[]
 
   @@unique([periodId, employeeId])
   @@map("payroll_items")
@@ -2196,6 +2199,38 @@ model PayrollDeduction {
   @@index([payrollItemId])
   @@index([status])
   @@map("payroll_deductions")
+}
+
+/// Pago (o abono) de la nómina de un empleado. El cliente paga uno a uno y a
+/// veces divide el valor entre efectivo y transferencia: cada parte es una fila.
+///
+/// Es solo registro: no crea `CashMovement` porque el efectivo de nómina no sale
+/// del cajón del punto de venta. Lo pagado se deriva sumando las filas no
+/// anuladas; un error se corrige anulando con motivo, nunca borrando.
+model PayrollPayment {
+  id            String        @id @default(uuid())
+  payrollItemId String        @map("payroll_item_id")
+  amount        Decimal       @db.Decimal(12, 2)
+  paymentMethod PaymentMethod @map("payment_method")
+  paidAt        DateTime      @map("paid_at")
+  reference     String?
+  bankEntity    String?       @map("bank_entity")
+  notes         String?
+
+  createdById String   @map("created_by_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  isVoided   Boolean   @default(false) @map("is_voided")
+  voidedAt   DateTime? @map("voided_at")
+  voidedById String?   @map("voided_by_id")
+  voidReason String?   @map("void_reason")
+
+  payrollItem PayrollItem @relation(fields: [payrollItemId], references: [id], onDelete: Restrict)
+  createdBy   User        @relation("CreatedPayrollPayments", fields: [createdById], references: [id])
+  voidedBy    User?       @relation("VoidedPayrollPayments", fields: [voidedById], references: [id])
+
+  @@index([payrollItemId])
+  @@map("payroll_payments")
 }
 
 // ──────────────────────────────────────────

@@ -14,6 +14,8 @@ import {
   MenuItem,
   Tab,
   Tabs,
+  ToggleButton,
+  ToggleButtonGroup,
 } from '@mui/material';
 import { AutoAwesome, Edit, KeyboardArrowDown, ReceiptLong } from '@mui/icons-material';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
@@ -28,6 +30,10 @@ import { usePayrollItems } from '../hooks/usePayrollItems';
 import { payrollPeriodsApi } from '../../../api/payroll-periods.api';
 import { getItemColumns } from '../config/columns';
 import { PayrollAdvancesTab } from '../components/PayrollAdvancesTab';
+import { RegisterPayrollPaymentDialog } from '../components/RegisterPayrollPaymentDialog';
+import { PayrollPaymentsDialog } from '../components/PayrollPaymentsDialog';
+import { apiErrorMessage, itemPaymentStatus } from '../utils/payments';
+import type { PayrollPaymentStatus } from '../../../types/payroll-item.types';
 import { advanceDisbursed, advanceNotDisbursed, sumDisbursed, sumNotDisbursed } from '../utils/advances';
 import { generatePayrollSlipsPdf } from '../utils/generatePayrollSlipPdf';
 import type { PayrollItem } from '../../../types/payroll-item.types';
@@ -65,6 +71,8 @@ const PayrollPeriodDetailPage: React.FC = () => {
   const { enqueueSnackbar } = useSnackbar();
   const { hasPermission } = useAuthStore();
   const canEdit = hasPermission(PERMISSIONS.UPDATE_PAYROLL_PERIODS);
+  const canPay = hasPermission(PERMISSIONS.PAY_PAYROLL);
+  const canVoidPayments = hasPermission(PERMISSIONS.VOID_PAYROLL_PAYMENTS);
 
   const { getPeriodQuery, getSummaryQuery, generateItemsMutation, updateMutation } = usePayrollPeriods();
   const periodQuery = getPeriodQuery(id!);
@@ -79,6 +87,10 @@ const PayrollPeriodDetailPage: React.FC = () => {
   const [toDelete, setToDelete] = useState<PayrollItem | null>(null);
   const [statusAnchorEl, setStatusAnchorEl] = useState<null | HTMLElement>(null);
   const [generatingSlips, setGeneratingSlips] = useState(false);
+  // Control de pagos uno a uno: a quién se le paga ahora y de quién se ve el historial.
+  const [payItem, setPayItem] = useState<PayrollItem | null>(null);
+  const [paymentsItemId, setPaymentsItemId] = useState<string | null>(null);
+  const [paymentFilter, setPaymentFilter] = useState<'ALL' | PayrollPaymentStatus>('ALL');
   // La pestaña vive en la URL para poder compartir el enlace directo a los anticipos.
   const [searchParams, setSearchParams] = useSearchParams();
   const tab = searchParams.get('tab') === 'anticipos' ? 'anticipos' : 'registros';
@@ -138,8 +150,8 @@ const PayrollPeriodDetailPage: React.FC = () => {
       await deleteMutation.mutateAsync(toDelete.id);
       enqueueSnackbar('Registro eliminado', { variant: 'success' });
       setToDelete(null);
-    } catch {
-      enqueueSnackbar('Error al eliminar registro', { variant: 'error' });
+    } catch (err) {
+      enqueueSnackbar(apiErrorMessage(err, 'Error al eliminar registro'), { variant: 'error' });
     }
   };
 
@@ -182,7 +194,18 @@ const PayrollPeriodDetailPage: React.FC = () => {
       ),
     (item) => setToDelete(item),
     period,
+    {
+      onPay: canPay ? (item) => setPayItem(item) : undefined,
+      onViewPayments: (item) => setPaymentsItemId(item.id),
+    },
   );
+
+  const statusCount = summary?.paymentStatusCount;
+  const pendingCount = statusCount ? statusCount.PENDING + statusCount.PARTIAL : 0;
+  const filteredItems =
+    paymentFilter === 'ALL' ? items : items.filter((i) => itemPaymentStatus(i) === paymentFilter);
+  // Se busca en la lista viva para que el historial se refresque tras anular.
+  const paymentsItem = items.find((i) => i.id === paymentsItemId) ?? null;
 
   return (
     <Box sx={{ p: { xs: 1, sm: 2, md: 3 } }}>
@@ -223,8 +246,17 @@ const PayrollPeriodDetailPage: React.FC = () => {
                 <MenuItem onClick={() => handleStatusChange('CALCULATED')} disabled={period.status === 'CALCULATED' || updateMutation.isPending}>
                   Calculado
                 </MenuItem>
-                <MenuItem onClick={() => handleStatusChange('PAID')} disabled={period.status === 'PAID' || updateMutation.isPending}>
+                {/* «Pagado» se pone solo al registrar el pago de todos. */}
+                <MenuItem
+                  onClick={() => handleStatusChange('PAID')}
+                  disabled={period.status === 'PAID' || updateMutation.isPending || pendingCount > 0}
+                >
                   Pagado
+                  {pendingCount > 0 && (
+                    <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
+                      (falta pagarle a {pendingCount})
+                    </Typography>
+                  )}
                 </MenuItem>
               </Menu>
             </CardContent>
@@ -274,6 +306,57 @@ const PayrollPeriodDetailPage: React.FC = () => {
           </Grid>
         )}
       </Grid>
+
+      {/* Control de pagos: cuánto salió en efectivo, cuánto por transferencia y cuánto falta */}
+      {summary && items.length > 0 && (
+        <Grid container spacing={2} sx={{ mb: 3 }}>
+          <Grid item xs={12} sm={6} md={3}>
+            <Card variant="outlined">
+              <CardContent>
+                <Typography variant="body2" color="text.secondary">Pagados</Typography>
+                <Typography variant="h5" fontWeight="bold">
+                  {statusCount?.PAID ?? 0} de {summary.employeeCount}
+                </Typography>
+                {!!statusCount?.PARTIAL && (
+                  <Typography variant="caption" color="warning.main">
+                    {statusCount.PARTIAL} con abono
+                  </Typography>
+                )}
+              </CardContent>
+            </Card>
+          </Grid>
+          <Grid item xs={12} sm={6} md={3}>
+            <Card variant="outlined">
+              <CardContent>
+                <Typography variant="body2" color="text.secondary">Pagado en efectivo</Typography>
+                <Typography variant="h5" fontWeight="bold">{formatCOP(summary.totalPaidCash)}</Typography>
+              </CardContent>
+            </Card>
+          </Grid>
+          <Grid item xs={12} sm={6} md={3}>
+            <Card variant="outlined">
+              <CardContent>
+                <Typography variant="body2" color="text.secondary">Pagado por transferencia</Typography>
+                <Typography variant="h5" fontWeight="bold">{formatCOP(summary.totalPaidTransfer)}</Typography>
+              </CardContent>
+            </Card>
+          </Grid>
+          <Grid item xs={12} sm={6} md={3}>
+            <Card variant="outlined">
+              <CardContent>
+                <Typography variant="body2" color="text.secondary">Pendiente por pagar</Typography>
+                <Typography
+                  variant="h5"
+                  fontWeight="bold"
+                  color={summary.totalPending > 0 ? 'warning.main' : 'success.main'}
+                >
+                  {formatCOP(summary.totalPending)}
+                </Typography>
+              </CardContent>
+            </Card>
+          </Grid>
+        </Grid>
+      )}
 
       {/* Overtime rates info */}
       {(period.overtimeDaytimeRate || period.overtimeNighttimeRate) && (
@@ -365,13 +448,29 @@ const PayrollPeriodDetailPage: React.FC = () => {
         </Alert>
       )}
 
+      {/* Filtro para trabajar la lista como checklist de pagos */}
+      {tab === 'registros' && items.length > 0 && (
+        <ToggleButtonGroup
+          size="small"
+          exclusive
+          value={paymentFilter}
+          onChange={(_, v) => v && setPaymentFilter(v)}
+          sx={{ mb: 1.5, flexWrap: 'wrap' }}
+        >
+          <ToggleButton value="ALL">Todos ({items.length})</ToggleButton>
+          <ToggleButton value="PENDING">Pendientes ({statusCount?.PENDING ?? 0})</ToggleButton>
+          <ToggleButton value="PARTIAL">Abonados ({statusCount?.PARTIAL ?? 0})</ToggleButton>
+          <ToggleButton value="PAID">Pagados ({statusCount?.PAID ?? 0})</ToggleButton>
+        </ToggleButtonGroup>
+      )}
+
       {/* Items table */}
       {tab === 'registros' && (
         <DataTable
           density="compact"
           pageSize={20}
           pageSizeOptions={[20, 50, 100]}
-          rows={items}
+          rows={filteredItems}
           columns={columns}
           loading={itemsQuery.isLoading}
           onAdd={canEdit ? () => navigate(PATHS.PAYROLL_ITEM_EDIT.replace(':periodId', id!).replace(':itemId', 'new')) : undefined}
@@ -380,6 +479,18 @@ const PayrollPeriodDetailPage: React.FC = () => {
           emptyMessage="No hay registros de nómina. Usa 'Generar para todos los activos' para crearlos automáticamente."
         />
       )}
+
+      <RegisterPayrollPaymentDialog
+        periodId={id!}
+        item={payItem}
+        onClose={() => setPayItem(null)}
+      />
+      <PayrollPaymentsDialog
+        periodId={id!}
+        item={paymentsItem}
+        canVoid={canVoidPayments}
+        onClose={() => setPaymentsItemId(null)}
+      />
 
       <ConfirmDialog
         open={!!toDelete}

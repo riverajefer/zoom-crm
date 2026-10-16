@@ -1,6 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../../database/prisma.service';
 import { Prisma } from '../../../generated/prisma';
+import {
+  computeItemBalance,
+  computeItemPaidAmount,
+  computeItemPaymentStatus,
+} from '../../../common/utils/payroll-payment-status.util';
 
 const periodSelect = {
   id: true,
@@ -131,6 +136,11 @@ export class PayrollPeriodsRepository {
             observations: true,
             createdAt: true,
             updatedAt: true,
+            payments: {
+              where: { isVoided: false },
+              select: { id: true, amount: true, paymentMethod: true, paidAt: true },
+              orderBy: { paidAt: 'asc' },
+            },
             employee: {
               select: {
                 id: true,
@@ -231,6 +241,11 @@ export class PayrollPeriodsRepository {
     });
   }
 
+  /** Pagos registrados en el periodo, anulados incluidos (guardan la historia). */
+  async countPayments(periodId: string) {
+    return this.prisma.payrollPayment.count({ where: { payrollItem: { periodId } } });
+  }
+
   async getSummary(id: string) {
     const items = await this.prisma.payrollItem.findMany({
       where: { periodId: id },
@@ -240,6 +255,10 @@ export class PayrollPeriodsRepository {
         epsAndPensionDiscount: true,
         employeeFundSavings: true,
         orderDeductions: true,
+        payments: {
+          where: { isVoided: false },
+          select: { amount: true, paymentMethod: true },
+        },
       },
     });
 
@@ -264,8 +283,29 @@ export class PayrollPeriodsRepository {
       0,
     );
 
+    // Control de pagos uno a uno: cuánto salió en efectivo, cuánto por
+    // transferencia y cuánto falta. Solo cuenta pagos no anulados.
+    let totalPaidCash = 0;
+    let totalPaidTransfer = 0;
+    let totalPending = 0;
+    const paymentStatusCount = { PENDING: 0, PARTIAL: 0, PAID: 0 };
+    for (const item of items) {
+      for (const p of item.payments) {
+        if (p.paymentMethod === 'CASH') totalPaidCash += Number(p.amount);
+        else totalPaidTransfer += Number(p.amount);
+      }
+      const paid = computeItemPaidAmount(item.payments);
+      totalPending += Math.max(computeItemBalance(item.totalPayment, paid), 0);
+      paymentStatusCount[computeItemPaymentStatus(item.totalPayment, paid)] += 1;
+    }
+
     return {
       employeeCount: items.length,
+      totalPaidCash,
+      totalPaidTransfer,
+      totalPaid: totalPaidCash + totalPaidTransfer,
+      totalPending,
+      paymentStatusCount,
       totalBaseSalary,
       totalPayment,
       totalEpsAndPension,

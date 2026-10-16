@@ -147,6 +147,8 @@ export const PERMISSIONS = {
   READ_PAYROLL_PERIODS: 'read_payroll_periods',
   UPDATE_PAYROLL_PERIODS: 'update_payroll_periods',
   DELETE_PAYROLL_PERIODS: 'delete_payroll_periods',
+  PAY_PAYROLL: 'pay_payroll',
+  VOID_PAYROLL_PAYMENTS: 'void_payroll_payments',
   // Descuentos de OP por nómina
   READ_PAYROLL_DEDUCTIONS: 'read_payroll_deductions',
   APPROVE_PAYROLL_DEDUCTIONS: 'approve_payroll_deductions',

@@ -7,6 +7,8 @@ import { PayrollPeriodsService } from './periods/payroll-periods.service';
 import { PayrollPeriodsRepository } from './periods/payroll-periods.repository';
 import { PayrollItemsService } from './items/payroll-items.service';
 import { PayrollItemsRepository } from './items/payroll-items.repository';
+import { PayrollPaymentsService } from './payments/payroll-payments.service';
+import { PayrollPaymentsRepository } from './payments/payroll-payments.repository';
 import { UsersModule } from '../users/users.module';
 import { RolesModule } from '../roles/roles.module';
 
@@ -20,6 +22,8 @@ import { RolesModule } from '../roles/roles.module';
     PayrollPeriodsRepository,
     PayrollItemsService,
     PayrollItemsRepository,
+    PayrollPaymentsService,
+    PayrollPaymentsRepository,
   ],
 })
 export class PayrollModule {}

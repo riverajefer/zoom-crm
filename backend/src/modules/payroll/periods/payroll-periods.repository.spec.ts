@@ -108,12 +108,14 @@ describe('PayrollPeriodsRepository', () => {
           baseSalary: 800,
           epsAndPensionDiscount: 100,
           employeeFundSavings: 50,
+          payments: [],
         },
         {
           totalPayment: 2000,
           baseSalary: 1600,
           epsAndPensionDiscount: 200,
           employeeFundSavings: 50,
+          payments: [],
         },
       ]);
       const result = await repository.getSummary('p1');
@@ -125,6 +127,11 @@ describe('PayrollPeriodsRepository', () => {
         totalEmployeeFundSavings: 100,
         totalOrderDeductions: 0,
         totalPayrollCost: 3400,
+        totalPaidCash: 0,
+        totalPaidTransfer: 0,
+        totalPaid: 0,
+        totalPending: 3000,
+        paymentStatusCount: { PENDING: 2, PARTIAL: 0, PAID: 0 },
       });
       expect(prisma.payrollItem.findMany).toHaveBeenCalledWith({
         where: { periodId: 'p1' },
@@ -134,6 +141,10 @@ describe('PayrollPeriodsRepository', () => {
           orderDeductions: true,
           epsAndPensionDiscount: true,
           employeeFundSavings: true,
+          payments: {
+            where: { isVoided: false },
+            select: { amount: true, paymentMethod: true },
+          },
         },
       });
     });
@@ -145,6 +156,7 @@ describe('PayrollPeriodsRepository', () => {
           baseSalary: 400,
           epsAndPensionDiscount: null,
           employeeFundSavings: null,
+          payments: [],
         },
       ]);
       const result = await repository.getSummary('p1');
@@ -165,6 +177,7 @@ describe('PayrollPeriodsRepository', () => {
           epsAndPensionDiscount: 0,
           employeeFundSavings: 0,
           orderDeductions: 250,
+          payments: [],
         },
       ]);
 
@@ -186,7 +199,36 @@ describe('PayrollPeriodsRepository', () => {
         totalEmployeeFundSavings: 0,
         totalOrderDeductions: 0,
         totalPayrollCost: 0,
+        totalPaidCash: 0,
+        totalPaidTransfer: 0,
+        totalPaid: 0,
+        totalPending: 0,
+        paymentStatusCount: { PENDING: 0, PARTIAL: 0, PAID: 0 },
       });
+    });
+
+    // El control de pagos uno a uno: efectivo y transferencia por separado,
+    // sin contar los anulados (el filtro va en la consulta).
+    it('separa lo pagado en efectivo y por transferencia, y lo que falta', async () => {
+      prisma.payrollItem.findMany.mockResolvedValue([
+        {
+          totalPayment: 632000,
+          baseSalary: 0,
+          payments: [
+            { amount: 612000, paymentMethod: 'CASH' },
+            { amount: 20000, paymentMethod: 'TRANSFER' },
+          ],
+        },
+        { totalPayment: 1329000, baseSalary: 0, payments: [{ amount: 329000, paymentMethod: 'TRANSFER' }] },
+        { totalPayment: 970000, baseSalary: 0, payments: [] },
+      ]);
+
+      const result = await repository.getSummary('p1');
+
+      expect(result.totalPaidCash).toBe(612000);
+      expect(result.totalPaidTransfer).toBe(349000);
+      expect(result.totalPending).toBe(1000000 + 970000);
+      expect(result.paymentStatusCount).toEqual({ PENDING: 1, PARTIAL: 1, PAID: 1 });
     });
   });
 });

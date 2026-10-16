@@ -189,6 +189,8 @@ export const PERMISSION_LABELS: Record<string, string> = {
   read_payroll_periods: 'Ver Periodos de Nómina',
   update_payroll_periods: 'Editar Periodos y Registros de Nómina',
   delete_payroll_periods: 'Eliminar Periodos de Nómina',
+  pay_payroll: 'Registrar Pagos de Nómina a Empleados',
+  void_payroll_payments: 'Anular Pagos de Nómina',
 
   // Nómina — Descuento de órdenes
   read_payroll_deductions: 'Ver Descuento de Órdenes en Nómina',

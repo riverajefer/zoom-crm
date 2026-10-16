@@ -1,5 +1,6 @@
 import axiosInstance from './axios';
 import type { PayrollItem, CreatePayrollItemDto, UpdatePayrollItemDto } from '../types';
+import type { CreatePayrollPaymentsDto, PayrollPayment } from '../types/payroll-item.types';
 
 export const payrollItemsApi = {
   getByPeriod: async (periodId: string): Promise<PayrollItem[]> => {
@@ -29,5 +30,36 @@ export const payrollItemsApi = {
 
   delete: async (periodId: string, itemId: string): Promise<void> => {
     await axiosInstance.delete(`/payroll/periods/${periodId}/items/${itemId}`);
+  },
+
+  getPayments: async (periodId: string): Promise<PayrollPayment[]> => {
+    const { data } = await axiosInstance.get<PayrollPayment[]>(
+      `/payroll/periods/${periodId}/payments`,
+    );
+    return data;
+  },
+
+  registerPayments: async (
+    periodId: string,
+    itemId: string,
+    payload: CreatePayrollPaymentsDto,
+  ): Promise<{ payments: PayrollPayment[]; periodStatus: string }> => {
+    const { data } = await axiosInstance.post(
+      `/payroll/periods/${periodId}/items/${itemId}/payments`,
+      payload,
+    );
+    return data;
+  },
+
+  voidPayment: async (
+    periodId: string,
+    paymentId: string,
+    reason: string,
+  ): Promise<{ payment: PayrollPayment; periodStatus: string }> => {
+    const { data } = await axiosInstance.patch(
+      `/payroll/periods/${periodId}/payments/${paymentId}/void`,
+      { reason },
+    );
+    return data;
   },
 };

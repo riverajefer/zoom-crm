@@ -20,6 +20,7 @@ describe('PayrollItemsService', () => {
       update: jest.fn(),
       delete: jest.fn(),
       countAppliedDeductions: jest.fn().mockResolvedValue(0),
+      getPaymentTotals: jest.fn().mockResolvedValue({ paidAmount: 0, count: 0 }),
     } as any;
 
     periodsRepository = {
@@ -141,6 +142,39 @@ describe('PayrollItemsService', () => {
       itemsRepository.findById.mockResolvedValue({ id: 'i1', periodId: 'p1' } as any);
       itemsRepository.countAppliedDeductions.mockResolvedValue(1);
 
+      await expect(service.remove('p1', 'i1')).rejects.toThrow(BadRequestException);
+      expect(itemsRepository.delete).not.toHaveBeenCalled();
+    });
+  });
+
+  // Con pagos registrados el registro guarda la historia de lo entregado al
+  // empleado: no puede quedar con un total menor a lo pagado ni borrarse.
+  describe('con pagos registrados', () => {
+    beforeEach(() => {
+      itemsRepository.findById.mockResolvedValue({ id: 'i1', periodId: 'p1' } as any);
+      itemsRepository.getPaymentTotals.mockResolvedValue({ paidAmount: 500000, count: 1 });
+    });
+
+    it('rechaza bajar el total por debajo de lo pagado', async () => {
+      await expect(
+        service.update('p1', 'i1', { totalPayment: 400000 } as any),
+      ).rejects.toThrow(BadRequestException);
+      expect(itemsRepository.update).not.toHaveBeenCalled();
+    });
+
+    it('permite subir el total o dejarlo igual a lo pagado', async () => {
+      itemsRepository.update.mockResolvedValue({ id: 'i1' } as any);
+      await service.update('p1', 'i1', { totalPayment: 500000 } as any);
+      expect(itemsRepository.update).toHaveBeenCalled();
+    });
+
+    it('permite editar otros campos sin mirar los pagos', async () => {
+      itemsRepository.update.mockResolvedValue({ id: 'i1' } as any);
+      await service.update('p1', 'i1', { observations: 'x' } as any);
+      expect(itemsRepository.getPaymentTotals).not.toHaveBeenCalled();
+    });
+
+    it('bloquea el borrado', async () => {
       await expect(service.remove('p1', 'i1')).rejects.toThrow(BadRequestException);
       expect(itemsRepository.delete).not.toHaveBeenCalled();
     });

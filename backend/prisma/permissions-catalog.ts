@@ -201,6 +201,15 @@ export const permissionGroups: PermissionGroup[] = [
         name: 'delete_payroll_periods',
         description: 'Eliminar periodos de nómina',
       },
+      {
+        name: 'pay_payroll',
+        description:
+          'Registrar el pago o abono de la nómina de cada empleado (efectivo o transferencia)',
+      },
+      {
+        name: 'void_payroll_payments',
+        description: 'Anular con motivo un pago de nómina registrado por error',
+      },
     ],
   },
   {

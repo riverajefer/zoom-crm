@@ -67,6 +67,12 @@ export interface PayrollPeriodSummary {
   totalEpsAndPension: number;
   totalEmployeeFundSavings: number;
   totalPayrollCost: number;
+  /** Control de pagos uno a uno (solo pagos no anulados). */
+  totalPaidCash: number;
+  totalPaidTransfer: number;
+  totalPaid: number;
+  totalPending: number;
+  paymentStatusCount: { PENDING: number; PARTIAL: number; PAID: number };
 }
 
 /**

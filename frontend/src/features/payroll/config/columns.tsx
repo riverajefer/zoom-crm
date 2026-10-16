@@ -1,11 +1,18 @@
 import { GridColDef, GridRenderCellParams } from '@mui/x-data-grid';
 import { Chip, IconButton, Box, Tooltip } from '@mui/material';
-import { Edit, Delete, History, Visibility, ContentCopy } from '@mui/icons-material';
+import { Edit, Delete, History, Visibility, ContentCopy, Payments } from '@mui/icons-material';
 import type { PayrollEmployee } from '../../../types/payroll-employee.types';
 import type { PayrollPeriod } from '../../../types/payroll-period.types';
 import type { PayrollItem } from '../../../types/payroll-item.types';
 import type { ResponsiveGridColDef } from '../../../hooks';
 import { PayrollSlipButton } from '../components/PayrollSlipButton';
+import {
+  itemBalance,
+  itemPaidAmount,
+  itemPaidBy,
+  itemPaymentStatus,
+  paymentStatusMeta,
+} from '../utils/payments';
 
 const formatCOP = (value: string | number | null | undefined) => {
   if (value === null || value === undefined) return '—';
@@ -209,6 +216,11 @@ export const getItemColumns = (
   onDelete: (item: PayrollItem) => void,
   /** Necesario para el desprendible; si no está cargado, se oculta el botón. */
   period?: PayrollPeriod,
+  /** Control de pagos uno a uno. `onPay` solo llega si el usuario puede pagar. */
+  paymentActions?: {
+    onPay?: (item: PayrollItem) => void;
+    onViewPayments: (item: PayrollItem) => void;
+  },
 ): GridColDef[] => [
   {
     field: 'employeeName',
@@ -262,6 +274,56 @@ export const getItemColumns = (
     valueGetter: (_value: unknown, row: PayrollItem) => formatCOP(row.totalPayment),
   },
   {
+    field: 'paidAmount',
+    headerName: 'Pagado',
+    width: 130,
+    valueGetter: (_value: unknown, row: PayrollItem) => itemPaidAmount(row),
+    renderCell: (params: GridRenderCellParams<PayrollItem>) => {
+      const cash = itemPaidBy(params.row, 'CASH');
+      const transfer = itemPaidBy(params.row, 'TRANSFER');
+      if (cash + transfer === 0) return '—';
+      return (
+        <Tooltip
+          title={
+            <>
+              Efectivo: {formatCOP(cash)}
+              <br />
+              Transferencia: {formatCOP(transfer)}
+            </>
+          }
+        >
+          <span>{formatCOP(cash + transfer)}</span>
+        </Tooltip>
+      );
+    },
+  },
+  {
+    field: 'balance',
+    headerName: 'Saldo',
+    width: 120,
+    valueGetter: (_value: unknown, row: PayrollItem) => Math.max(itemBalance(row), 0),
+    valueFormatter: (value: number) => formatCOP(value),
+  },
+  {
+    field: 'paymentStatus',
+    headerName: 'Pago',
+    width: 125,
+    valueGetter: (_value: unknown, row: PayrollItem) =>
+      paymentStatusMeta[itemPaymentStatus(row)].label,
+    renderCell: (params: GridRenderCellParams<PayrollItem>) => {
+      const meta = paymentStatusMeta[itemPaymentStatus(params.row)];
+      return (
+        <Chip
+          size="small"
+          label={meta.label}
+          color={meta.color}
+          variant={meta.color === 'default' ? 'outlined' : 'filled'}
+          onClick={paymentActions ? () => paymentActions.onViewPayments(params.row) : undefined}
+        />
+      );
+    },
+  },
+  {
     field: 'observations',
     headerName: 'Observaciones',
     flex: 1,
@@ -271,10 +333,24 @@ export const getItemColumns = (
   {
     field: 'actions',
     headerName: 'Acciones',
-    width: 140,
+    width: 200,
     sortable: false,
     renderCell: (params: GridRenderCellParams<PayrollItem>) => (
       <Box>
+        {paymentActions?.onPay && itemBalance(params.row) > 0 && (
+          <Tooltip title="Registrar pago">
+            <IconButton size="small" color="success" onClick={() => paymentActions.onPay!(params.row)}>
+              <Payments fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        )}
+        {paymentActions && (params.row.payments?.length ?? 0) > 0 && (
+          <Tooltip title="Ver pagos">
+            <IconButton size="small" onClick={() => paymentActions.onViewPayments(params.row)}>
+              <History fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        )}
         {period && <PayrollSlipButton item={params.row} period={period} />}
         <Tooltip title="Editar registro">
           <IconButton size="small" onClick={() => onEdit(params.row)}>

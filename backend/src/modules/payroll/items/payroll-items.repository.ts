@@ -32,6 +32,11 @@ const itemSelect = {
   observations: true,
   createdAt: true,
   updatedAt: true,
+  payments: {
+    where: { isVoided: false },
+    select: { id: true, amount: true, paymentMethod: true, paidAt: true },
+    orderBy: { paidAt: 'asc' as const },
+  },
   extraShifts: {
     select: {
       id: true,
@@ -136,6 +141,18 @@ export class PayrollItemsRepository {
 
   async delete(id: string) {
     return this.prisma.payrollItem.delete({ where: { id } });
+  }
+
+  /** Lo pagado vigente (sin anulados) y cuántos pagos tiene en total, anulados incluidos. */
+  async getPaymentTotals(payrollItemId: string) {
+    const [active, count] = await Promise.all([
+      this.prisma.payrollPayment.aggregate({
+        where: { payrollItemId, isVoided: false },
+        _sum: { amount: true },
+      }),
+      this.prisma.payrollPayment.count({ where: { payrollItemId } }),
+    ]);
+    return { paidAmount: Number(active._sum.amount ?? 0), count };
   }
 
   /** Descuentos por nómina ya aplicados sobre este registro. */

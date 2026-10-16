@@ -9,6 +9,9 @@ import { PayrollEmployeesRepository } from '../employees/payroll-employees.repos
 import { CreatePayrollItemDto } from './dto/create-payroll-item.dto';
 import { UpdatePayrollItemDto } from './dto/update-payroll-item.dto';
 
+const cop = (n: number) =>
+  `$${Math.round(n).toLocaleString('es-CO', { maximumFractionDigits: 0 })}`;
+
 @Injectable()
 export class PayrollItemsService {
   constructor(
@@ -85,6 +88,15 @@ export class PayrollItemsService {
     if (item.periodId !== periodId) {
       throw new BadRequestException('El registro no pertenece al periodo indicado');
     }
+    if (dto.totalPayment !== undefined) {
+      const { paidAmount } = await this.itemsRepository.getPaymentTotals(itemId);
+      if (Number(dto.totalPayment) < paidAmount) {
+        throw new BadRequestException(
+          `A este empleado ya se le pagaron ${cop(paidAmount)}: el total del periodo ` +
+            'no puede quedar por debajo de eso. Si el pago fue un error, anúlalo primero.',
+        );
+      }
+    }
     const { extraShifts, ...itemData } = dto;
     return this.itemsRepository.update(itemId, itemData, extraShifts);
   }
@@ -101,6 +113,13 @@ export class PayrollItemsService {
       throw new BadRequestException(
         `El registro tiene ${applied} descuento(s) por nómina aplicado(s). ` +
           'Cancélalos desde Nómina › Descuento de Órdenes antes de eliminarlo.',
+      );
+    }
+
+    const { count } = await this.itemsRepository.getPaymentTotals(itemId);
+    if (count > 0) {
+      throw new BadRequestException(
+        `El registro tiene ${count} pago(s) registrado(s) (incluidos anulados) y no se puede eliminar.`,
       );
     }
 

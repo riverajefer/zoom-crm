@@ -11,6 +11,49 @@ export interface PayrollExtraShiftInput {
   amount: number;
 }
 
+/** La nómina se paga en efectivo o por transferencia; nada más. */
+export type PayrollPaymentMethod = 'CASH' | 'TRANSFER';
+
+export type PayrollPaymentStatus = 'PENDING' | 'PARTIAL' | 'PAID';
+
+interface PayrollPaymentUser {
+  id: string;
+  firstName: string | null;
+  lastName: string | null;
+}
+
+/** Pago (o abono) de la nómina de un empleado. Solo registro: no toca Caja. */
+export interface PayrollPayment {
+  id: string;
+  payrollItemId: string;
+  amount: string; // Decimal como string
+  paymentMethod: PayrollPaymentMethod;
+  paidAt: string;
+  reference: string | null;
+  bankEntity: string | null;
+  notes: string | null;
+  createdAt: string;
+  isVoided: boolean;
+  voidedAt: string | null;
+  voidReason: string | null;
+  createdBy: PayrollPaymentUser;
+  voidedBy: PayrollPaymentUser | null;
+}
+
+/** Pagos vigentes que vienen con el registro (los anulados no). */
+export type PayrollItemPayment = Pick<PayrollPayment, 'id' | 'amount' | 'paymentMethod' | 'paidAt'>;
+
+export interface CreatePayrollPaymentsDto {
+  paidAt: string;
+  lines: {
+    amount: number;
+    paymentMethod: PayrollPaymentMethod;
+    reference?: string;
+    bankEntity?: string;
+  }[];
+  notes?: string;
+}
+
 export interface PayrollItem {
   id: string;
   periodId: string;
@@ -36,6 +79,8 @@ export interface PayrollItem {
   totalPayment: string;
   observations: string | null;
   extraShifts?: PayrollExtraShift[];
+  /** Pagos no anulados. Opcional: los endpoints de historial no los traen. */
+  payments?: PayrollItemPayment[];
   createdAt: string;
   updatedAt: string;
   employee: {

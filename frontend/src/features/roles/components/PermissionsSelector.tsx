@@ -115,6 +115,8 @@ const PERMISSION_GROUPS: Record<string, string[]> = {
     'read_payroll_periods',
     'update_payroll_periods',
     'delete_payroll_periods',
+    'pay_payroll',
+    'void_payroll_payments',
   ],
   'Descuento de Órdenes (Nómina)': [
     'read_payroll_deductions',

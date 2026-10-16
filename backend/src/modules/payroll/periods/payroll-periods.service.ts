@@ -138,6 +138,20 @@ export class PayrollPeriodsService {
       }
     }
 
+    // «Pagado» se pone solo cuando a todos se les pagó. Marcarlo a mano con
+    // saldos pendientes escondería a quién falta por pagar.
+    if (dto.status === 'PAID') {
+      const summary = await this.periodsRepository.getSummary(id);
+      if (summary.totalPending > 0) {
+        const pendingCount =
+          summary.paymentStatusCount.PENDING + summary.paymentStatusCount.PARTIAL;
+        throw new BadRequestException(
+          `Aún hay ${pendingCount} empleado(s) con saldo por pagar. ` +
+            'El periodo pasa a «Pagado» solo cuando se registra el pago de todos.',
+        );
+      }
+    }
+
     return this.periodsRepository.update(id, {
       ...dto,
       ...(dto.startDate && { startDate: new Date(dto.startDate) }),
@@ -155,6 +169,15 @@ export class PayrollPeriodsService {
       throw new BadRequestException(
         `El periodo tiene ${applied} descuento(s) por nómina aplicado(s). ` +
           'Cancélalos desde Nómina › Descuento de Órdenes antes de eliminarlo.',
+      );
+    }
+
+    // La llave de los pagos es RESTRICT: borrar el periodo se llevaría la
+    // historia de a quién se le pagó y cómo.
+    const payments = await this.periodsRepository.countPayments(id);
+    if (payments > 0) {
+      throw new BadRequestException(
+        `El periodo tiene ${payments} pago(s) registrado(s) a empleados y no se puede eliminar.`,
       );
     }
 

@@ -22,6 +22,7 @@ describe('PayrollPeriodsService', () => {
       delete: jest.fn(),
       getSummary: jest.fn(),
       countAppliedDeductions: jest.fn().mockResolvedValue(0),
+      countPayments: jest.fn().mockResolvedValue(0),
     } as any;
 
     itemsRepository = {
@@ -301,6 +302,41 @@ describe('PayrollPeriodsService', () => {
 
       await service.update('p1', { name: 'New' });
       expect(periodsRepository.update).toHaveBeenCalledWith('p1', { name: 'New' });
+    });
+  });
+
+  describe('pagos a empleados', () => {
+    beforeEach(() => {
+      periodsRepository.findById.mockResolvedValue({ id: 'p1' } as any);
+    });
+
+    it('no deja marcar «Pagado» a mano con saldos pendientes', async () => {
+      periodsRepository.getSummary.mockResolvedValue({
+        totalPending: 20000,
+        paymentStatusCount: { PENDING: 1, PARTIAL: 1, PAID: 3 },
+      } as any);
+
+      await expect(service.update('p1', { status: 'PAID' } as any)).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(periodsRepository.update).not.toHaveBeenCalled();
+    });
+
+    it('deja marcar «Pagado» cuando no queda saldo', async () => {
+      periodsRepository.getSummary.mockResolvedValue({
+        totalPending: 0,
+        paymentStatusCount: { PENDING: 0, PARTIAL: 0, PAID: 5 },
+      } as any);
+      periodsRepository.update.mockResolvedValue({ id: 'p1' } as any);
+
+      await service.update('p1', { status: 'PAID' } as any);
+      expect(periodsRepository.update).toHaveBeenCalled();
+    });
+
+    it('bloquea el borrado si hay pagos registrados', async () => {
+      periodsRepository.countPayments.mockResolvedValue(3);
+      await expect(service.remove('p1')).rejects.toThrow(BadRequestException);
+      expect(periodsRepository.delete).not.toHaveBeenCalled();
     });
   });
 });

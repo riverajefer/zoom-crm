@@ -20,6 +20,8 @@ interface ConfirmDialogProps {
   cancelText?: string;
   isLoading?: boolean;
   severity?: 'warning' | 'error' | 'info';
+  /** Tercer botón opcional, a la izquierda de los otros dos. */
+  extraAction?: { label: string; onClick: () => void };
 }
 
 /**
@@ -35,6 +37,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   cancelText = 'Cancelar',
   isLoading = false,
   severity = 'warning',
+  extraAction,
 }) => {
   const severityColor = severity === 'error' ? 'error' : 'warning';
 
@@ -72,6 +75,16 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
         </Box>
       </DialogContent>
       <DialogActions sx={{ px: { xs: 2, sm: 3 }, pb: { xs: 2, sm: 3 }, gap: { xs: 1, sm: 1.5 } }}>
+        {extraAction && (
+          <Button
+            onClick={extraAction.onClick}
+            disabled={isLoading}
+            color="inherit"
+            sx={{ mr: 'auto' }}
+          >
+            {extraAction.label}
+          </Button>
+        )}
         <Button onClick={onCancel} disabled={isLoading}>
           {cancelText}
         </Button>

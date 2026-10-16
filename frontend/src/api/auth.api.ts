@@ -32,12 +32,13 @@ export const authApi = {
   /**
    * Logout del usuario actual
    * @param token Token explícito a usar (para cuando el store ya fue limpiado)
+   * @param force Salir con la caja abierta; el backend solo lo acepta fuera de producción
    */
-  logout: async (token?: string): Promise<void> => {
+  logout: async (token?: string, force = false): Promise<void> => {
     const config = token
       ? { headers: { Authorization: `Bearer ${token}` } }
       : {};
-    await axiosInstance.post('/auth/logout', {}, config);
+    await axiosInstance.post('/auth/logout', force ? { force: true } : {}, config);
   },
 
   /**

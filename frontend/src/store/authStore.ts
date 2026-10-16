@@ -58,7 +58,8 @@ interface AuthState {
 
   // Acciones
   login: (credentials: LoginDto) => Promise<void>;
-  logout: () => Promise<void>;
+  /** `force`: salir con la caja abierta (solo desarrollo local, ver Topbar). */
+  logout: (options?: { force?: boolean }) => Promise<void>;
   refreshAccessToken: () => Promise<void>;
   clearMustChangePassword: () => void;
   hasPermission: (permission: string) => boolean;
@@ -104,7 +105,7 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
-      logout: async () => {
+      logout: async (options) => {
         const { accessToken } = get();
 
         // Limpiar estado local PRIMERO para evitar loops de 401
@@ -123,7 +124,7 @@ export const useAuthStore = create<AuthState>()(
         // Intentar logout en backend con el token guardado explícitamente
         if (accessToken) {
           try {
-            await authApi.logout(accessToken);
+            await authApi.logout(accessToken, options?.force);
           } catch (error) {
             console.error('Error logging out from backend:', error);
           }

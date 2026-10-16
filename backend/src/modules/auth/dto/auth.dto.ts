@@ -1,5 +1,6 @@
-import { IsNotEmpty, IsString, MinLength, IsOptional } from 'class-validator';
+import { IsNotEmpty, IsString, MinLength, IsOptional, IsBoolean } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { Transform } from 'class-transformer';
 
 export class LoginDto {
   @ApiProperty({
@@ -37,6 +38,22 @@ export class RefreshTokenDto {
   @IsString()
   @IsNotEmpty({ message: 'Refresh token is required' })
   refreshToken: string;
+}
+
+export class LogoutDto {
+  @ApiProperty({
+    example: true,
+    description:
+      'Solo fuera de producción: sale aunque el encargado tenga la caja abierta ' +
+      '(para pruebas con varios usuarios). En producción se ignora.',
+    required: false,
+  })
+  // Del valor crudo: la conversión implícita global vuelve `true` cualquier
+  // texto, incluso "false".
+  @Transform(({ obj }) => obj.force === true)
+  @IsBoolean()
+  @IsOptional()
+  force?: boolean;
 }
 
 export class ChangePasswordDto {

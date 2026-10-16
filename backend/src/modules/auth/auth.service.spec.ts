@@ -398,6 +398,47 @@ describe('AuthService', () => {
       expect(mockSessionLogsService.createLogoutLog).not.toHaveBeenCalled();
       expect(mockAttendanceService.closeOpenRecordOnLogout).not.toHaveBeenCalled();
     });
+
+    describe('con force (salir con la caja abierta)', () => {
+      const originalNodeEnv = process.env.NODE_ENV;
+
+      beforeEach(() => {
+        (prisma.cashSession.findFirst as jest.Mock).mockResolvedValue({
+          id: 'session-1',
+          cashRegister: { name: 'Caja 104', location: { id: 'loc-104', name: 'Local 104' } },
+        });
+        (prisma.user.update as jest.Mock).mockResolvedValue({});
+      });
+
+      afterEach(() => {
+        process.env.NODE_ENV = originalNodeEnv;
+      });
+
+      it.each(['development', 'staging'])('lo deja salir en %s', async (env) => {
+        process.env.NODE_ENV = env;
+
+        await service.logout(mockUser.id, { force: true });
+
+        expect(prisma.user.update).toHaveBeenCalledWith({
+          where: { id: mockUser.id },
+          data: { refreshToken: null },
+        });
+        expect(mockSessionLogsService.createLogoutLog).toHaveBeenCalledWith(mockUser.id);
+      });
+
+      it.each([['production'], [undefined]])(
+        'lo ignora con NODE_ENV=%s y responde 409',
+        async (env) => {
+          if (env === undefined) delete process.env.NODE_ENV;
+          else process.env.NODE_ENV = env;
+
+          const error = await service.logout(mockUser.id, { force: true }).catch((e) => e);
+
+          expect(error).toBeInstanceOf(ConflictException);
+          expect(prisma.user.update).not.toHaveBeenCalled();
+        },
+      );
+    });
   });
 
   // ─────────────────────────────────────────────

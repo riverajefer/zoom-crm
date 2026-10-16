@@ -14,7 +14,7 @@ import { Request } from 'express';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { LocalAuthGuard, JwtAuthGuard } from './guards';
-import { LoginDto, RefreshTokenDto, UpdateProfilePhotoDto, ChangePasswordDto, VerifyPasswordDto } from './dto';
+import { LoginDto, RefreshTokenDto, LogoutDto, UpdateProfilePhotoDto, ChangePasswordDto, VerifyPasswordDto } from './dto';
 import { CurrentUser, Public } from '../../common/decorators';
 import { AuthenticatedUser, TokenPair } from '../../common/interfaces';
 
@@ -91,8 +91,9 @@ export class AuthController {
   @ApiResponse({ status: 409, description: 'CASH_SESSION_OPEN: el encargado de la caja debe cerrarla antes de salir' })
   async logout(
     @CurrentUser('id') userId: string,
+    @Body() logoutDto: LogoutDto,
   ): Promise<{ message: string }> {
-    await this.authService.logout(userId);
+    await this.authService.logout(userId, { force: logoutDto.force });
     return { message: 'Logged out successfully' };
   }
 

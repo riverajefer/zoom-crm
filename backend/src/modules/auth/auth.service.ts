@@ -23,6 +23,16 @@ import {
 } from '../../common/utils/location-support.util';
 import { CASHIER_ROLE_NAMES } from '../../common/constants/roles.constants';
 
+/**
+ * ¿Se permite `force` en el logout? Solo con `NODE_ENV` explícito de desarrollo
+ * o staging: `getEnvironment()` cae en desarrollo si falta, y un `NODE_ENV`
+ * olvidado en producción no debe abrir la puerta.
+ */
+function isForceLogoutAllowed(): boolean {
+  const env = process.env.NODE_ENV?.toLowerCase();
+  return env === 'development' || env === 'staging';
+}
+
 /** Sedes del usuario que viajan con el login y con `/auth/me`. */
 export interface UserLocations {
   locations: {
@@ -365,11 +375,15 @@ export class AuthService {
   }
 
   /**
-   * Cierra la sesión del usuario eliminando su refresh token
+   * Cierra la sesión del usuario eliminando su refresh token.
+   *
+   * `force` deja salir al encargado con la caja abierta, solo fuera de
+   * producción: sirve para probar con varios usuarios sin cerrar la caja. En
+   * producción se ignora y la regla aplica igual.
    */
-  async logout(userId: string): Promise<void> {
+  async logout(userId: string, { force = false }: { force?: boolean } = {}): Promise<void> {
     const { openCashSession } = await this.getLogoutCheck(userId);
-    if (openCashSession) {
+    if (openCashSession && !(force && isForceLogoutAllowed())) {
       throw new ConflictException({
         statusCode: 409,
         error: 'Conflict',

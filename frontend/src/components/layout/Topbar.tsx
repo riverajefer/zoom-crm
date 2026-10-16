@@ -27,6 +27,7 @@ import { authApi, LogoutCheck } from '../../api/auth.api';
 import { ConfirmDialog } from '../common/ConfirmDialog';
 import { useUIStore } from '../../store/uiStore';
 import { ROUTES } from '../../utils/constants';
+import { isDevMode, isDevelopment } from '../../utils/environment';
 import { formatFullName } from '../../utils/helpers';
 import { NotificationBell } from './NotificationBell';
 import { PendingApprovalsBell } from './PendingApprovalsBell';
@@ -80,6 +81,16 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuClick }) => {
       checkingLogout.current = false;
     }
     logout();
+    navigate(ROUTES.LOGIN);
+  };
+
+  // Solo en el dev server local: salir con la caja abierta para probar con
+  // otro usuario. El backend también lo rechaza en producción.
+  const canForceLogout = isDevMode() && isDevelopment();
+
+  const handleForceLogout = async () => {
+    setBlockingCashSession(null);
+    await logout({ force: true });
     navigate(ROUTES.LOGIN);
   };
 
@@ -536,6 +547,11 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuClick }) => {
           cancelText="Seguir trabajando"
           onConfirm={handleGoToCashSession}
           onCancel={() => setBlockingCashSession(null)}
+          extraAction={
+            canForceLogout
+              ? { label: 'Salir de todos modos', onClick: handleForceLogout }
+              : undefined
+          }
         />
       </Toolbar>
     </AppBar>

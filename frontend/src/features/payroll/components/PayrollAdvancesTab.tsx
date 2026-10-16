@@ -113,20 +113,9 @@ const toRow = (a: PayrollAdvance): AdvanceRow => {
   };
 };
 
-/** Nombre arriba y fecha/hora debajo, o un guion si ese paso no ocurrió. */
-const PersonAtCell: React.FC<{ name: string; at: string | null }> = ({ name, at }) =>
-  name ? (
-    <Box sx={{ lineHeight: 1.3, py: 0.5 }}>
-      <Typography variant="body2" noWrap>{name}</Typography>
-      {at && (
-        <Typography variant="caption" color="text.secondary" noWrap component="div">
-          {formatDateTime(at)}
-        </Typography>
-      )}
-    </Box>
-  ) : (
-    <Typography variant="body2" color="text.disabled">—</Typography>
-  );
+/** Guion atenuado para el paso de la firma que no ocurrió. */
+const orDash = (value: string) =>
+  value || <Typography component="span" variant="body2" color="text.disabled">—</Typography>;
 
 interface PayrollAdvancesTabProps {
   advances: PayrollAdvance[];
@@ -185,18 +174,28 @@ export const PayrollAdvancesTab: React.FC<PayrollAdvancesTabProps> = ({ advances
     {
       field: 'approvedBy',
       headerName: 'Aprobó (Gerencia)',
-      width: 210,
-      renderCell: (params: GridRenderCellParams<AdvanceRow>) => (
-        <PersonAtCell name={params.row.approvedBy} at={params.row.approvedAt} />
-      ),
+      width: 180,
+      renderCell: (params: GridRenderCellParams<AdvanceRow>) => orDash(params.row.approvedBy),
+    },
+    {
+      field: 'approvedAt',
+      headerName: 'Aprobado el',
+      width: 165,
+      renderCell: (params: GridRenderCellParams<AdvanceRow>) =>
+        orDash(formatDateTime(params.row.approvedAt)),
     },
     {
       field: 'disbursedBy',
       headerName: 'Desembolsó (Caja)',
-      width: 210,
-      renderCell: (params: GridRenderCellParams<AdvanceRow>) => (
-        <PersonAtCell name={params.row.disbursedBy} at={params.row.disbursedAt} />
-      ),
+      width: 180,
+      renderCell: (params: GridRenderCellParams<AdvanceRow>) => orDash(params.row.disbursedBy),
+    },
+    {
+      field: 'disbursedAt',
+      headerName: 'Desembolsado el',
+      width: 165,
+      renderCell: (params: GridRenderCellParams<AdvanceRow>) =>
+        orDash(formatDateTime(params.row.disbursedAt)),
     },
     { field: 'paymentMethod', headerName: 'Método', width: 130 },
     { field: 'requestedBy', headerName: 'Solicitó', width: 190 },
@@ -254,7 +253,7 @@ export const PayrollAdvancesTab: React.FC<PayrollAdvancesTabProps> = ({ advances
       )}
 
       <DataTable
-        density="comfortable"
+        density="compact"
         pageSize={20}
         pageSizeOptions={[20, 50, 100]}
         rows={rows}

@@ -22,14 +22,16 @@
  *   # Aplicar (usa el DATABASE_URL del ambiente cargado)
  *   npm run prisma:sync:permissions
  *
- *   # Apuntando explícitamente a producción
- *   DATABASE_URL="postgresql://..." npx ts-node prisma/sync-permissions.ts
+ *   # Apuntando a una base remota de Zoom (staging o producción). El script
+ *   # verifica que sea de Zoom y pide confirmar el servidor: assert-zoom-database.ts
+ *   DATABASE_URL="postgresql://..." CONFIRM_DB_HOST=<servidor> npm run prisma:sync:permissions
  */
 import { PrismaClient } from '../src/generated/prisma';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
 import 'dotenv/config';
 import { permissionGroups, allCatalogPermissions } from './permissions-catalog';
+import { assertZoomDatabase } from './assert-zoom-database';
 import {
   ADMIN_ROLE_NAME,
   isReservedPermission,
@@ -51,6 +53,7 @@ async function main() {
   console.log(
     `\n🔐 Sincronizando permisos${DRY_RUN ? ' — MODO DRY RUN, no se escribe nada' : ''}\n`,
   );
+  await assertZoomDatabase(prisma);
 
   const adminRole = await prisma.role.findUnique({ where: { name: ADMIN_ROLE_NAME } });
   const supportRole = await prisma.role.findUnique({ where: { name: SUPPORT_ROLE_NAME } });

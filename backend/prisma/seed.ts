@@ -11,6 +11,7 @@ import {
   SUPPORT_ROLE_NAME,
 } from '../src/common/constants/roles.constants';
 import { normName } from '../src/common/utils/normalize.util';
+import { assertZoomDatabase } from './assert-zoom-database';
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const adapter = new PrismaPg(pool);
@@ -53,6 +54,7 @@ function resolveAdminPassword(): string {
 
 async function main() {
   console.log('🌱 Starting database seed...\n');
+  await assertZoomDatabase(prisma);
   console.log(
     `   Ambiente: ${process.env.NODE_ENV ?? 'development'} · datos de demostración: ${SEED_DEMO ? 'SÍ' : 'no'}\n`,
   );

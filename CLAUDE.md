@@ -43,6 +43,14 @@ La mayor parte de esta guía describe código que Zoom heredó tal cual. Esta se
 
 GitHub no protege ramas en repos privados del plan Free: la protección de `master` es el hook `frontend/.husky/pre-push`. Vale el de la rama activa, así que estando en `master` no protege hasta que el guardián llegue allá.
 
+### High y Zoom se trabajan al mismo tiempo
+
+Las dos bases se parecen y es fácil apuntar a la equivocada (el 2026-10-14 casi se sincronizan los permisos de Zoom en la base de High, por una URL de High guardada en el `.env` de Zoom).
+
+- **Antes de cualquier comando contra una base que no sea local**, verificar que sea de Zoom: tiene la tabla `locations` y los roles `soporte` y `contabilidad`. High no tiene ninguno de los tres.
+- **La URL de staging o producción se pide al usuario** (Railway, proyecto Zoom, variable `DATABASE_PUBLIC_URL`); no se toma de archivos locales. En los `.env` de Zoom no van URLs de High.
+- `prisma:seed` y `prisma:sync:permissions` lo exigen solos (`prisma/assert-zoom-database.ts`): muestran a qué base apuntan, se niegan si no tiene `locations`, y fuera de localhost piden `CONFIRM_DB_HOST=<servidor>`. Los demás scripts de `prisma/` y `scripts/` vienen de High y no lo tienen.
+
 ### Traer cambios de High
 
 Los arreglos del núcleo nacen en High y se traen con cherry-pick; lo propio de Zoom nunca vuelve a High. El remoto `upstream` apunta a High con **push deshabilitado**.

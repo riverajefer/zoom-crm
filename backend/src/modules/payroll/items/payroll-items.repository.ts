@@ -34,7 +34,7 @@ const itemSelect = {
   updatedAt: true,
   payments: {
     where: { isVoided: false },
-    select: { id: true, amount: true, paymentMethod: true, paidAt: true },
+    select: { id: true, amount: true, paymentMethod: true, paidAt: true, bankEntity: true, reference: true },
     orderBy: { paidAt: 'asc' as const },
   },
   extraShifts: {

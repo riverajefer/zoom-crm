@@ -11,6 +11,8 @@ import {
   PDF_LAYOUT,
 } from '../../../utils/pdfConstants';
 import { pesosEnLetras } from './numeroALetras';
+import { paymentMethodLabel } from '../../../utils/paymentMethods';
+import { itemBalance, itemPaidAmount } from './payments';
 
 /**
  * Lo único que el desprendible necesita del periodo. Un `PayrollPeriod` completo
@@ -599,6 +601,114 @@ function drawNetPay(doc: jsPDF, y: number, item: PayrollItem): number {
   return y + 3;
 }
 
+/**
+ * Cómo y cuándo se le pagó al empleado (efectivo, transferencia, abonos).
+ * Solo aparece si hay pagos registrados: un desprendible impreso antes de
+ * pagar sale igual que siempre.
+ */
+function drawPayments(doc: jsPDF, y: number, item: PayrollItem): number {
+  const payments = item.payments ?? [];
+  if (payments.length === 0) return y;
+
+  const x0 = PDF_LAYOUT.marginLeft;
+  const rowHeight = 5.5;
+  const dateWidth = 30;
+
+  setDrawColor(doc, PDF_COLORS.tableHeaderBg);
+  doc.setLineWidth(0.4);
+  doc.line(x0, y, x0 + PDF_LAYOUT.contentWidth, y);
+  y += 4;
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(PDF_FONTS.sectionTitle);
+  setTextColor(doc, PDF_COLORS.sectionTitleText);
+  doc.text('Pagos realizados', x0, y);
+  y += 5;
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(PDF_FONTS.tableHeader);
+  setFillColor(doc, PDF_COLORS.tableHeaderBg);
+  doc.rect(x0, y, PDF_LAYOUT.contentWidth, rowHeight, 'F');
+  setTextColor(doc, PDF_COLORS.tableHeaderText);
+  doc.text('Fecha', x0 + 3, y + rowHeight * 0.72);
+  doc.text('Forma de pago', x0 + dateWidth + 3, y + rowHeight * 0.72);
+  doc.text('Valor', x0 + PDF_LAYOUT.contentWidth - 3, y + rowHeight * 0.72, {
+    align: 'right',
+  });
+  y += rowHeight;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(PDF_FONTS.tableBody);
+
+  let drawn = 0;
+  for (const payment of payments) {
+    // Se reservan filas para el aviso de truncado y los totales.
+    if (y + rowHeight * 3 > CONTENT_MAX_Y) break;
+
+    const bgColor = drawn % 2 === 0 ? PDF_COLORS.tableRowEven : PDF_COLORS.tableRowOdd;
+    setFillColor(doc, bgColor);
+    doc.rect(x0, y, PDF_LAYOUT.contentWidth, rowHeight, 'F');
+
+    const detail = [
+      paymentMethodLabel(payment.paymentMethod),
+      payment.bankEntity,
+      payment.reference ? `Ref. ${payment.reference}` : null,
+    ]
+      .filter(Boolean)
+      .join(' · ');
+
+    setTextColor(doc, PDF_COLORS.bodyText);
+    const textY = y + rowHeight * 0.72;
+    doc.text(formatDate(payment.paidAt), x0 + 3, textY);
+    doc.text(
+      doc.splitTextToSize(detail, PDF_LAYOUT.contentWidth - dateWidth - 45)[0],
+      x0 + dateWidth + 3,
+      textY,
+    );
+    doc.text(formatCurrency(payment.amount), x0 + PDF_LAYOUT.contentWidth - 3, textY, {
+      align: 'right',
+    });
+
+    y += rowHeight;
+    drawn += 1;
+  }
+
+  if (drawn < payments.length) {
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(PDF_FONTS.footer);
+    setTextColor(doc, PDF_COLORS.footerText);
+    doc.text(
+      `${ELLIPSIS} y ${payments.length - drawn} pago(s) más, incluidos en el total pagado.`,
+      x0 + 3,
+      y + 3.5,
+    );
+    y += rowHeight;
+    doc.setFontSize(PDF_FONTS.tableBody);
+  }
+
+  // Totales alineados a la derecha, como el neto a pagar.
+  const balance = Math.max(itemBalance(item), 0);
+  const labelX = x0 + PDF_LAYOUT.contentWidth - 75;
+  const valueX = x0 + PDF_LAYOUT.contentWidth - 3;
+  y += 1;
+  doc.setFont('helvetica', 'bold');
+  setTextColor(doc, PDF_COLORS.bodyText);
+  doc.text('Total pagado', labelX, y + rowHeight * 0.72);
+  doc.text(formatCurrency(itemPaidAmount(item)), valueX, y + rowHeight * 0.72, {
+    align: 'right',
+  });
+  y += rowHeight;
+
+  if (balance > 0) {
+    setTextColor(doc, [180, 60, 60]);
+    doc.text('Saldo pendiente', labelX, y + rowHeight * 0.72);
+    doc.text(formatCurrency(balance), valueX, y + rowHeight * 0.72, { align: 'right' });
+    y += rowHeight;
+  }
+
+  return y + 4;
+}
+
 function drawExtraShifts(doc: jsPDF, y: number, item: PayrollItem): number {
   const shifts = item.extraShifts ?? [];
   if (shifts.length === 0) return y;
@@ -720,8 +830,13 @@ function drawSignatures(doc: jsPDF, item: PayrollItem) {
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(PDF_FONTS.footer);
   setTextColor(doc, PDF_COLORS.footerText);
+  // Con abonos el empleado no firma que recibió el neto completo.
+  const hasPayments = (item.payments?.length ?? 0) > 0;
+  const balance = Math.max(itemBalance(item), 0);
   doc.text(
-    'Recibí a satisfacción el valor neto aquí relacionado, correspondiente al periodo liquidado.',
+    hasPayments && balance > 0
+      ? `Recibí los pagos aquí relacionados. Queda un saldo pendiente a mi favor de ${formatCurrency(balance)}.`
+      : 'Recibí a satisfacción el valor neto aquí relacionado, correspondiente al periodo liquidado.',
     x0,
     y,
   );
@@ -810,6 +925,7 @@ function drawSlip(
   y = drawEmployeeInfo(doc, y, item, period);
   y = drawConceptsTable(doc, y, item);
   y = drawNetPay(doc, y, item);
+  y = drawPayments(doc, y, item);
   y = drawExtraShifts(doc, y, item);
   drawObservations(doc, y, item);
 

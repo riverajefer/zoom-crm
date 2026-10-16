@@ -41,7 +41,10 @@ export interface PayrollPayment {
 }
 
 /** Pagos vigentes que vienen con el registro (los anulados no). */
-export type PayrollItemPayment = Pick<PayrollPayment, 'id' | 'amount' | 'paymentMethod' | 'paidAt'>;
+export type PayrollItemPayment = Pick<
+  PayrollPayment,
+  'id' | 'amount' | 'paymentMethod' | 'paidAt' | 'bankEntity' | 'reference'
+>;
 
 export interface CreatePayrollPaymentsDto {
   paidAt: string;

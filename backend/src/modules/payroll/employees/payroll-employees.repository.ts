@@ -125,6 +125,12 @@ export class PayrollEmployeesRepository {
         totalPayment: true,
         observations: true,
         createdAt: true,
+        // Pagos vigentes: el desprendible muestra cómo y cuándo se le pagó.
+        payments: {
+          where: { isVoided: false },
+          select: { id: true, amount: true, paymentMethod: true, paidAt: true, bankEntity: true, reference: true },
+          orderBy: { paidAt: 'asc' },
+        },
         extraShifts: {
           select: {
             id: true,

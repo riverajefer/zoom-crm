@@ -8,6 +8,8 @@ const item = (totalPayment: string, payments: [number, 'CASH' | 'TRANSFER'][] = 
     amount: String(amount),
     paymentMethod,
     paidAt: '2026-10-15',
+    bankEntity: null,
+    reference: null,
   })),
 });
 

@@ -1,0 +1,14 @@
+{
+  // Zoom y High se trabajan al mismo tiempo: el verde dice "esto es Zoom".
+  // High usa azul en su propio .vscode/settings.json.
+  "workbench.colorCustomizations": {
+    "titleBar.activeBackground": "#166534",
+    "titleBar.activeForeground": "#ffffff",
+    "titleBar.inactiveBackground": "#14532d",
+    "titleBar.inactiveForeground": "#d1fae5",
+    "statusBar.background": "#166534",
+    "statusBar.foreground": "#ffffff",
+    "activityBar.activeBorder": "#4ade80"
+  },
+  "window.title": "ZOOM · ${rootName}${separator}${activeEditorShort}"
+}

@@ -7,6 +7,14 @@ import {
   TIME_ENTRY_WITH_WORK_ORDER_SELECT,
 } from './work-order-time.select';
 
+/** Usuarios activos cuyo rol usa el temporizador. */
+const OPERATOR_WHERE = {
+  isActive: true,
+  role: {
+    permissions: { some: { permission: { name: 'track_work_order_time' } } },
+  },
+} satisfies Prisma.UserWhereInput;
+
 @Injectable()
 export class WorkOrderTimeRepository {
   constructor(private readonly prisma: PrismaService) {}
@@ -98,14 +106,50 @@ export class WorkOrderTimeRepository {
   /** Usuarios que pueden usar el temporizador (para el registro olvidado). */
   findOperators() {
     return this.prisma.user.findMany({
-      where: {
-        isActive: true,
-        role: {
-          permissions: { some: { permission: { name: 'track_work_order_time' } } },
-        },
-      },
+      where: OPERATOR_WHERE,
       select: { id: true, firstName: true, lastName: true, email: true },
       orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }],
+    });
+  }
+
+  /** Operarios de la vista «Planta hoy», con su cargo para la etiqueta de la fila. */
+  findPlantOperators() {
+    return this.prisma.user.findMany({
+      where: OPERATOR_WHERE,
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        cargo: { select: { name: true } },
+      },
+      orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }],
+    });
+  }
+
+  /** Marcas de asistencia cuya entrada cae dentro del día. */
+  findAttendanceForDay(userIds: string[], dayStart: Date, dayEnd: Date) {
+    return this.prisma.attendanceRecord.findMany({
+      where: { userId: { in: userIds }, clockIn: { gte: dayStart, lte: dayEnd } },
+      select: { id: true, userId: true, clockIn: true, clockOut: true },
+      orderBy: { clockIn: 'asc' },
+    });
+  }
+
+  /**
+   * Registros con hora que tocan el día, en todas las OT. Los anulados no
+   * cuentan y los heredados por cantidad de horas no se pueden ubicar.
+   */
+  findEntriesForDay(userIds: string[], dayStart: Date, dayEnd: Date) {
+    return this.prisma.workOrderTimeEntry.findMany({
+      where: {
+        userId: { in: userIds },
+        voidedAt: null,
+        startAt: { not: null, lte: dayEnd },
+        OR: [{ endAt: null }, { endAt: { gte: dayStart } }],
+      },
+      select: TIME_ENTRY_WITH_WORK_ORDER_SELECT,
+      orderBy: { startAt: 'asc' },
     });
   }
 

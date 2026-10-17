@@ -20,6 +20,11 @@ import {
   type TimelineAxis,
 } from '../../utils/timeline';
 
+export interface TimelineSpan {
+  left: number;
+  width: number;
+}
+
 export interface TimelineRow {
   /** `null` = fila «General de la OT». */
   id: string | null;
@@ -30,8 +35,8 @@ export interface TimelineRow {
   action?: React.ReactNode;
   /** Pie de la etiqueta (total del día, ocupación…). */
   footer?: React.ReactNode;
-  /** Fondo opcional (p. ej. franja de asistencia) en % del eje. */
-  background?: { left: number; width: number } | null;
+  /** Fondo opcional (p. ej. franjas de asistencia) en % del eje. */
+  background?: TimelineSpan | TimelineSpan[] | null;
 }
 
 interface TimelineGridProps {
@@ -232,21 +237,22 @@ export const TimelineGrid: React.FC<TimelineGridProps> = ({
                 {row.footer}
               </Box>
               <Box sx={{ ...trackSx, minHeight: height }}>
-                {row.background && (
+                {[row.background ?? []].flat().map((span) => (
                   <Box
+                    key={span.left}
                     aria-hidden
                     sx={{
                       position: 'absolute',
                       top: 6,
                       bottom: 6,
-                      left: `${row.background.left}%`,
-                      width: `${row.background.width}%`,
+                      left: `${span.left}%`,
+                      width: `${span.width}%`,
                       borderRadius: 1.5,
                       bgcolor: alpha(theme.palette.primary.main, 0.08),
                       border: `1px dashed ${alpha(theme.palette.primary.main, 0.45)}`,
                     }}
                   />
-                )}
+                ))}
                 {laned.map(({ entry, lane }) => {
                   const geometry = barGeometry(entry, axis, now);
                   if (!geometry) return null;

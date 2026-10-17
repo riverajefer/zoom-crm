@@ -10,6 +10,7 @@ import { Prisma, WorkOrderStatus, WorkOrderTimeEntryType } from '../../generated
 import { PrismaService } from '../../database/prisma.service';
 import { isForbiddenSelfReview } from '../../common/utils/self-review.util';
 import { isUniqueViolationOn } from '../../common/utils/unique-violation.util';
+import { businessToday, endOfDay, startOfDay } from '../../common/utils/date-range.util';
 import {
   AdjustTimeEntryDto,
   CreateManualTimeEntryDto,
@@ -169,6 +170,40 @@ export class WorkOrderTimeService {
 
   findOperators() {
     return this.repository.findOperators();
+  }
+
+  /**
+   * «Planta hoy»: por cada operario, su asistencia del día y lo que registró en
+   * todas las OT. El día es el del calendario de Colombia.
+   */
+  async findPlant(date?: string) {
+    const day = date ?? businessToday();
+    const dayStart = startOfDay(day);
+    const dayEnd = endOfDay(day);
+    if (!dayStart || !dayEnd) {
+      throw new BadRequestException('La fecha no es válida.');
+    }
+
+    const operators = await this.repository.findPlantOperators();
+    const userIds = operators.map((o) => o.id);
+    const [attendance, entries] = userIds.length
+      ? await Promise.all([
+          this.repository.findAttendanceForDay(userIds, dayStart, dayEnd),
+          this.repository.findEntriesForDay(userIds, dayStart, dayEnd),
+        ])
+      : [[], []];
+
+    return {
+      date: day,
+      schedule: this.getSchedule(),
+      operators: operators.map((operator) => ({
+        user: operator,
+        attendance: attendance
+          .filter((a) => a.userId === operator.id)
+          .map(({ id, clockIn, clockOut }) => ({ id, clockIn, clockOut })),
+        entries: entries.filter((e) => e.user.id === operator.id),
+      })),
+    };
   }
 
   /**

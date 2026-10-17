@@ -130,6 +130,7 @@ export const PERMISSIONS = {
   DELETE_WORK_ORDERS: 'delete_work_orders',
   TRACK_WORK_ORDER_TIME: 'track_work_order_time',
   ADJUST_WORK_ORDER_TIME: 'adjust_work_order_time',
+  READ_PRODUCTION_PLANT: 'read_production_plant',
   // Expense Types
   CREATE_EXPENSE_TYPES: 'create_expense_types',
   READ_EXPENSE_TYPES: 'read_expense_types',
@@ -262,6 +263,7 @@ export const ROUTES = {
   PRODUCTION_AREAS_EDIT: '/production-areas/:id/edit',
   PRODUCTION_AREAS_VIEW: '/production-areas/:id',
   MACHINES: '/machines',
+  PRODUCTION_PLANT: '/production-plant',
   AUDIT_LOGS: '/audit-logs',
   SESSION_LOGS: '/session-logs',
   SETTINGS: '/settings',

@@ -24,6 +24,7 @@ const ProductionAreasListPage = lazyWithRetry(() => import('../features/producti
 const ProductionAreaFormPage = lazyWithRetry(() => import('../features/production-areas/pages/ProductionAreaFormPage'));
 const ProductionAreaDetailPage = lazyWithRetry(() => import('../features/production-areas/pages/ProductionAreaDetailPage'));
 const MachinesListPage = lazyWithRetry(() => import('../features/machines/pages/MachinesListPage'));
+const ProductionPlantPage = lazyWithRetry(() => import('../features/work-orders/pages/ProductionPlantPage'));
 const CargosListPage = lazyWithRetry(() => import('../features/cargos/pages/CargosListPage'));
 const SedesAdminPage = lazyWithRetry(() => import('../features/sedes/pages/SedesAdminPage'));
 const LocationSupportsPage = lazyWithRetry(() => import('../features/sedes/pages/LocationSupportsPage'));
@@ -325,6 +326,19 @@ const RoutesConfig: FC = () => {
               <MainLayout>
                 <PermissionGuard permission={PERMISSIONS.UPDATE_PERMISSIONS}>
                   <PermissionFormPage />
+                </PermissionGuard>
+              </MainLayout>
+            </AuthGuard>
+          }
+        />
+
+        <Route
+          path={PATHS.PRODUCTION_PLANT}
+          element={
+            <AuthGuard>
+              <MainLayout>
+                <PermissionGuard permission={PERMISSIONS.READ_PRODUCTION_PLANT}>
+                  <ProductionPlantPage />
                 </PermissionGuard>
               </MainLayout>
             </AuthGuard>

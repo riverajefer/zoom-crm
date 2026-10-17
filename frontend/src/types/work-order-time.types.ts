@@ -48,3 +48,26 @@ export interface CreateManualTimeEntryDto {
   notes?: string;
   reason: string;
 }
+
+/** Marca de asistencia del día (entrada y salida). */
+export interface PlantAttendance {
+  id: string;
+  clockIn: string;
+  /** Nula mientras sigue en planta. */
+  clockOut: string | null;
+}
+
+export interface PlantOperator {
+  user: TimeEntryUser & { cargo?: { name: string } | null };
+  attendance: PlantAttendance[];
+  /** Registros del día en todas las OT (sin anulados). */
+  entries: WorkOrderTimeEntry[];
+}
+
+/** «Planta hoy»: lo que hizo cada operario en un día. */
+export interface PlantDayResponse {
+  /** `YYYY-MM-DD`, calendario de Colombia. */
+  date: string;
+  schedule: ProductionSchedule;
+  operators: PlantOperator[];
+}

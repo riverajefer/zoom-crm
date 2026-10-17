@@ -7,12 +7,14 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiOperation,
   ApiParam,
+  ApiQuery,
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
@@ -24,6 +26,7 @@ import { AuthenticatedUser } from '../../common/interfaces/auth.interface';
 import {
   AdjustTimeEntryDto,
   CreateManualTimeEntryDto,
+  PlantDayQueryDto,
   StartTimeEntryDto,
   VoidTimeEntryDto,
 } from './dto';
@@ -35,6 +38,7 @@ import { WorkOrderTimeService } from './work-order-time.service';
  * - `track_work_order_time`: el operario inicia, finaliza y extiende sus tareas.
  * - `adjust_work_order_time`: el supervisor corrige, anula, revisa y agrega
  *   registros olvidados. No puede tocar sus propias horas (salvo el admin).
+ * - `read_production_plant`: vista «Planta hoy», qué hace cada operario en el día.
  */
 @ApiTags('work-order-time')
 @ApiBearerAuth('JWT-auth')
@@ -98,6 +102,14 @@ export class WorkOrderTimeController {
   @ApiOperation({ summary: 'Usuarios que usan el temporizador (para registros olvidados)' })
   findOperators() {
     return this.service.findOperators();
+  }
+
+  @Get('plant')
+  @RequirePermissions('read_production_plant')
+  @ApiOperation({ summary: '«Planta hoy»: asistencia y tareas de cada operario en un día' })
+  @ApiQuery({ name: 'date', required: false, description: 'YYYY-MM-DD, calendario de Colombia; por defecto hoy' })
+  findPlant(@Query() query: PlantDayQueryDto) {
+    return this.service.findPlant(query.date);
   }
 
   @Post('manual')

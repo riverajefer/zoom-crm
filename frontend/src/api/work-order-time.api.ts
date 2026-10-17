@@ -6,6 +6,7 @@ import type {
   MachineOption,
   MyRunningTasksResponse,
   OperatorOption,
+  PlantDayResponse,
   StartTimeEntryDto,
 } from '../types/work-order-time.types';
 
@@ -45,6 +46,14 @@ export const workOrderTimeApi = {
 
   getOperators: async (): Promise<OperatorOption[]> => {
     const { data } = await axiosInstance.get<OperatorOption[]>(`${BASE}/operators`);
+    return data;
+  },
+
+  /** `date` en `YYYY-MM-DD`; sin fecha, hoy. */
+  getPlant: async (date?: string): Promise<PlantDayResponse> => {
+    const { data } = await axiosInstance.get<PlantDayResponse>(`${BASE}/plant`, {
+      params: date ? { date } : undefined,
+    });
     return data;
   },
 

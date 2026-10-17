@@ -94,6 +94,7 @@ export const PERMISSION_LABELS: Record<string, string> = {
   delete_machines: 'Desactivar Máquinas',
   track_work_order_time: 'Usar el temporizador de la OT (sus propias tareas)',
   adjust_work_order_time: 'Supervisar tiempos: ajustar, anular y agregar registros olvidados',
+  read_production_plant: 'Ver «Planta hoy»: qué hace cada operario y su ocupación',
   
   // Canales Comerciales
   create_commercial_channels: 'Crear Canales Comerciales',

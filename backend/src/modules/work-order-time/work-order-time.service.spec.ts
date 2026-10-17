@@ -62,6 +62,9 @@ const mockRepository = {
   findRunningToClose: jest.fn(),
   findPendingReview: jest.fn(),
   findOperators: jest.fn(),
+  findPlantOperators: jest.fn(),
+  findAttendanceForDay: jest.fn(),
+  findEntriesForDay: jest.fn(),
   findActiveMachines: jest.fn(),
   create: jest.fn(),
   update: jest.fn(),
@@ -466,6 +469,72 @@ describe('WorkOrderTimeService', () => {
       ]);
       mockRepository.closeIfRunning.mockRejectedValueOnce(new Error('db')).mockResolvedValueOnce(1);
       await expect(service.closeRunningTasks(false)).resolves.toBe(1);
+    });
+  });
+
+  // ─────────────────────────────────────────
+  // findPlant («Planta hoy»)
+  // ─────────────────────────────────────────
+  describe('findPlant', () => {
+    const carlos = { id: 'u-carlos', firstName: 'Carlos', lastName: 'Mejía', email: null, cargo: null };
+    const paola = { id: 'u-paola', firstName: 'Paola', lastName: 'Díaz', email: null, cargo: { name: 'DTF' } };
+
+    beforeEach(() => {
+      mockRepository.findPlantOperators.mockResolvedValue([carlos, paola]);
+      mockRepository.findAttendanceForDay.mockResolvedValue([]);
+      mockRepository.findEntriesForDay.mockResolvedValue([]);
+    });
+
+    it('el día es el calendario de Colombia (00:00 a 23:59:59.999, -05:00)', async () => {
+      await service.findPlant('2026-10-17');
+
+      const [userIds, start, end] = mockRepository.findAttendanceForDay.mock.calls[0];
+      expect(userIds).toEqual(['u-carlos', 'u-paola']);
+      expect(start.toISOString()).toBe('2026-10-17T05:00:00.000Z');
+      expect(end.toISOString()).toBe('2026-10-18T04:59:59.999Z');
+      expect(mockRepository.findEntriesForDay).toHaveBeenCalledWith(userIds, start, end);
+    });
+
+    it('agrupa asistencia y tareas por operario', async () => {
+      const clockIn = new Date('2026-10-17T12:55:00.000Z');
+      mockRepository.findAttendanceForDay.mockResolvedValue([
+        { id: 'att-1', userId: 'u-carlos', clockIn, clockOut: null },
+      ]);
+      mockRepository.findEntriesForDay.mockResolvedValue([
+        { ...makeEntry({ id: 'e-1' }), user: { id: 'u-carlos' } },
+        { ...makeEntry({ id: 'e-2' }), user: { id: 'u-carlos' } },
+      ]);
+
+      const result = await service.findPlant('2026-10-17');
+
+      expect(result.date).toBe('2026-10-17');
+      const [c, p] = result.operators;
+      expect(c.user).toBe(carlos);
+      expect(c.attendance).toEqual([{ id: 'att-1', clockIn, clockOut: null }]);
+      expect(c.entries.map((e) => e.id)).toEqual(['e-1', 'e-2']);
+      // Paola sin entrada ni tareas: igual sale en la lista.
+      expect(p.user).toBe(paola);
+      expect(p.attendance).toEqual([]);
+      expect(p.entries).toEqual([]);
+    });
+
+    it('sin fecha usa el día de hoy', async () => {
+      const result = await service.findPlant();
+      expect(result.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    });
+
+    it('rechaza una fecha imposible', async () => {
+      await expect(service.findPlant('2026-13-45')).rejects.toThrow(BadRequestException);
+    });
+
+    it('sin operarios no consulta asistencia ni tareas', async () => {
+      mockRepository.findPlantOperators.mockResolvedValue([]);
+
+      const result = await service.findPlant('2026-10-17');
+
+      expect(result.operators).toEqual([]);
+      expect(mockRepository.findAttendanceForDay).not.toHaveBeenCalled();
+      expect(mockRepository.findEntriesForDay).not.toHaveBeenCalled();
     });
   });
 });

@@ -44,6 +44,8 @@ interface TimeEntryDrawerProps {
   onClose: () => void;
   onAdjust: (entry: WorkOrderTimeEntry) => void;
   onVoid: (entry: WorkOrderTimeEntry) => void;
+  /** Acción extra al pie (p. ej. «Ver la OT» desde la vista de planta). */
+  extraAction?: React.ReactNode;
 }
 
 const Fact: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => (
@@ -68,6 +70,7 @@ export const TimeEntryDrawer: React.FC<TimeEntryDrawerProps> = ({
   onClose,
   onAdjust,
   onVoid,
+  extraAction,
 }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -224,6 +227,8 @@ export const TimeEntryDrawer: React.FC<TimeEntryDrawerProps> = ({
                 Si ves un error en las horas, pídele a un supervisor que lo ajuste.
               </Typography>
             )}
+
+            {extraAction}
           </Stack>
         </>
       )}

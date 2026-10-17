@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSnackbar } from 'notistack';
 import { workOrderTimeApi } from '../../../api/work-order-time.api';
 import type { WorkOrderTimeEntry } from '../../../types/work-order.types';
@@ -16,6 +16,8 @@ export const workOrderTimeKeys = {
   machines: () => [...workOrderTimeKeys.all, 'machines'] as const,
   pendingReview: () => [...workOrderTimeKeys.all, 'pending-review'] as const,
   operators: () => [...workOrderTimeKeys.all, 'operators'] as const,
+  plantAll: () => [...workOrderTimeKeys.all, 'plant'] as const,
+  plant: (date: string) => [...workOrderTimeKeys.plantAll(), date] as const,
 };
 
 /** Tareas en curso del usuario y el horario de la jornada. */
@@ -53,6 +55,15 @@ export const useTimeOperators = (enabled = true) =>
     staleTime: 5 * 60_000,
   });
 
+/** «Planta hoy»: asistencia y tareas del día; el de hoy se refresca solo. */
+export const usePlantDay = (date: string, isToday: boolean) =>
+  useQuery({
+    queryKey: workOrderTimeKeys.plant(date),
+    queryFn: () => workOrderTimeApi.getPlant(date),
+    refetchInterval: isToday ? 60_000 : false,
+    placeholderData: keepPreviousData,
+  });
+
 /** Mensaje del backend; class-validator lo manda como arreglo. */
 const apiErrorMessage = (error: unknown): string => {
   const message = (error as { response?: { data?: { message?: string | string[] } } })?.response
@@ -72,6 +83,7 @@ export const useWorkOrderTimeMutations = () => {
   const refresh = (entry?: WorkOrderTimeEntry) => {
     queryClient.invalidateQueries({ queryKey: workOrderTimeKeys.myRunning() });
     queryClient.invalidateQueries({ queryKey: workOrderTimeKeys.pendingReview() });
+    queryClient.invalidateQueries({ queryKey: workOrderTimeKeys.plantAll() });
     if (entry?.workOrderId) {
       queryClient.invalidateQueries({ queryKey: workOrdersKeys.detail(entry.workOrderId) });
     }

@@ -15,6 +15,7 @@ const mockService = {
   extend: jest.fn(),
   findPendingReview: jest.fn(),
   findOperators: jest.fn(),
+  findPlant: jest.fn(),
   createManual: jest.fn(),
   adjust: jest.fn(),
   void: jest.fn(),
@@ -73,5 +74,15 @@ describe('WorkOrderTimeController', () => {
     ] as const) {
       expect(permissionsOf(method)).toEqual(['adjust_work_order_time']);
     }
+  });
+
+  it('«Planta hoy» pide read_production_plant y pasa la fecha', async () => {
+    expect(permissionsOf('findPlant')).toEqual(['read_production_plant']);
+
+    await controller.findPlant({ date: '2026-10-17' });
+    await controller.findPlant({});
+
+    expect(mockService.findPlant).toHaveBeenNthCalledWith(1, '2026-10-17');
+    expect(mockService.findPlant).toHaveBeenNthCalledWith(2, undefined);
   });
 });

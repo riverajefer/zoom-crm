@@ -22,6 +22,7 @@ export const PATHS = {
   SEDES_ADMIN: '/sistema/sedes',
   // Apoyos en otra sede (solo Zoom): docs/PLAN_SEDES.md §16
   LOCATION_SUPPORTS: '/apoyos-sedes',
+  MACHINES: '/machines',
   CARGOS: '/cargos',
   CARGOS_CREATE: '/cargos/new',
   CARGOS_EDIT: '/cargos/:id/edit',

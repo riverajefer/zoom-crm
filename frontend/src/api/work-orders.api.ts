@@ -8,11 +8,8 @@ import {
   UpdateWorkOrderDto,
   UpdateWorkOrderStatusDto,
   AddSupplyToItemDto,
-  CreateWorkOrderTimeEntryDto,
   FilterWorkOrdersDto,
-  UpdateWorkOrderTimeEntryDto,
   WorkOrderItemSupply,
-  WorkOrderTimeEntry,
 } from '../types/work-order.types';
 
 export const workOrdersApi = {
@@ -103,34 +100,5 @@ export const workOrdersApi = {
     supplyId: string,
   ): Promise<void> => {
     await axiosInstance.delete(`/work-orders/${workOrderId}/items/${itemId}/supplies/${supplyId}`);
-  },
-
-  /**
-   * Register worked hours for a work order
-   */
-  createTimeEntry: async (
-    workOrderId: string,
-    dto: CreateWorkOrderTimeEntryDto,
-  ): Promise<WorkOrderTimeEntry> => {
-    const response = await axiosInstance.post<WorkOrderTimeEntry>(
-      `/work-orders/${workOrderId}/time-entries`,
-      dto,
-    );
-    return response.data;
-  },
-
-  /**
-   * Update an existing worked hours entry
-   */
-  updateTimeEntry: async (
-    workOrderId: string,
-    timeEntryId: string,
-    dto: UpdateWorkOrderTimeEntryDto,
-  ): Promise<WorkOrderTimeEntry> => {
-    const response = await axiosInstance.patch<WorkOrderTimeEntry>(
-      `/work-orders/${workOrderId}/time-entries/${timeEntryId}`,
-      dto,
-    );
-    return response.data;
   },
 };

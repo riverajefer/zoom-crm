@@ -18,8 +18,6 @@ vi.mock('../../../api/work-orders.api', () => ({
     delete: vi.fn(),
     addSupplyToItem: vi.fn(),
     removeSupplyFromItem: vi.fn(),
-    createTimeEntry: vi.fn(),
-    updateTimeEntry: vi.fn(),
   },
 }));
 
@@ -78,8 +76,6 @@ describe('useWorkOrder (detalle)', () => {
     (workOrdersApi.updateStatus as any).mockResolvedValue({ id: 'wo1' });
     (workOrdersApi.addSupplyToItem as any).mockResolvedValue({});
     (workOrdersApi.removeSupplyFromItem as any).mockResolvedValue({});
-    (workOrdersApi.createTimeEntry as any).mockResolvedValue({});
-    (workOrdersApi.updateTimeEntry as any).mockResolvedValue({});
   });
   afterEach(() => vi.clearAllMocks());
 
@@ -130,27 +126,5 @@ describe('useWorkOrder (detalle)', () => {
     });
     expect(workOrdersApi.addSupplyToItem).toHaveBeenCalledWith('wo1', 'it1', { supplyId: 's1' });
     expect(workOrdersApi.removeSupplyFromItem).toHaveBeenCalledWith('wo1', 'it1', 's1');
-  });
-
-  it('registrar y actualizar horas trabajadas', async () => {
-    const { result } = renderHook(() => useWorkOrder('wo1'), { wrapper: createWrapper() });
-    await act(async () => {
-      await result.current.createTimeEntryMutation.mutateAsync({
-        workOrderId: 'wo1',
-        dto: { minutes: 60 } as any,
-      });
-    });
-    await act(async () => {
-      await result.current.updateTimeEntryMutation.mutateAsync({
-        workOrderId: 'wo1',
-        timeEntryId: 'te1',
-        dto: { minutes: 90 } as any,
-      });
-    });
-    expect(workOrdersApi.createTimeEntry).toHaveBeenCalledWith('wo1', { minutes: 60 });
-    expect(workOrdersApi.updateTimeEntry).toHaveBeenCalledWith('wo1', 'te1', { minutes: 90 });
-    expect(enqueueMock).toHaveBeenCalledWith('Horas registradas correctamente', {
-      variant: 'success',
-    });
   });
 });

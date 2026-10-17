@@ -3,7 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma, WorkOrderStatus, WorkOrderTimeEntryType } from '../../generated/prisma';
+import { Prisma, WorkOrderStatus } from '../../generated/prisma';
 import { PrismaService } from '../../database/prisma.service';
 import {
   findForView,
@@ -19,11 +19,9 @@ import { startOfDay, endOfDay } from '../../common/utils/date-range.util';
 import {
   AddSupplyToItemDto,
   CreateWorkOrderDto,
-  CreateWorkOrderTimeEntryDto,
   FilterWorkOrdersDto,
   UpdateWorkOrderDto,
   UpdateWorkOrderStatusDto,
-  UpdateWorkOrderTimeEntryDto,
 } from './dto';
 
 const ALLOWED_TRANSITIONS: Record<WorkOrderStatus, WorkOrderStatus[]> = {
@@ -406,144 +404,6 @@ export class WorkOrdersService {
     }
 
     return this.workOrdersRepository.removeSupplyFromItem(itemId, supplyId);
-  }
-
-  private normalizeTimeEntryPayload(
-    dto: CreateWorkOrderTimeEntryDto | UpdateWorkOrderTimeEntryDto,
-    fallback?: {
-      entryType: WorkOrderTimeEntryType;
-      workedDate: Date;
-      workOrderItemId: string | null;
-      hoursWorked?: Prisma.Decimal | null;
-      startAt?: Date | null;
-      endAt?: Date | null;
-    },
-  ) {
-    const entryType = dto.entryType ?? fallback?.entryType;
-    if (!entryType) {
-      throw new BadRequestException('El tipo de registro es requerido');
-    }
-
-    const workedDate = dto.workedDate ? new Date(dto.workedDate) : fallback?.workedDate;
-    if (!workedDate) {
-      throw new BadRequestException('La fecha de trabajo es requerida');
-    }
-
-    if (entryType === WorkOrderTimeEntryType.HOURS) {
-      const hoursWorked = dto.hoursWorked ?? Number(fallback?.hoursWorked ?? 0);
-      if (!hoursWorked || Number(hoursWorked) <= 0) {
-        throw new BadRequestException('Las horas trabajadas deben ser mayores a 0');
-      }
-
-      return {
-        entryType,
-        workedDate,
-        hoursWorked: new Prisma.Decimal(hoursWorked),
-        startAt: undefined,
-        endAt: undefined,
-        workOrderItemId: dto.workOrderItemId ?? fallback?.workOrderItemId ?? undefined,
-      };
-    }
-
-    const startAtRaw = dto.startAt ?? fallback?.startAt?.toISOString();
-    const endAtRaw = dto.endAt ?? fallback?.endAt?.toISOString();
-
-    if (!startAtRaw || !endAtRaw) {
-      throw new BadRequestException('Para registros por rango, inicio y fin son requeridos');
-    }
-
-    const startAt = new Date(startAtRaw);
-    const endAt = new Date(endAtRaw);
-
-    if (Number.isNaN(startAt.getTime()) || Number.isNaN(endAt.getTime())) {
-      throw new BadRequestException('Las fechas de inicio/fin son inválidas');
-    }
-
-    let normalizedEndAt = endAt;
-    if (normalizedEndAt.getTime() <= startAt.getTime()) {
-      normalizedEndAt = new Date(normalizedEndAt.getTime() + 24 * 60 * 60 * 1000);
-    }
-
-    const hours = (normalizedEndAt.getTime() - startAt.getTime()) / (1000 * 60 * 60);
-    if (hours <= 0) {
-      throw new BadRequestException('El rango de horas debe ser mayor a 0');
-    }
-
-    return {
-      entryType,
-      workedDate,
-      hoursWorked: new Prisma.Decimal(Number(hours.toFixed(2))),
-      startAt,
-      endAt: normalizedEndAt,
-      workOrderItemId: dto.workOrderItemId ?? fallback?.workOrderItemId ?? undefined,
-    };
-  }
-
-  async createTimeEntry(workOrderId: string, dto: CreateWorkOrderTimeEntryDto, userId: string) {
-    const workOrder = await this.workOrdersRepository.findById(workOrderId);
-    if (!workOrder) {
-      throw new NotFoundException(`OT con id ${workOrderId} no encontrada`);
-    }
-
-    if (dto.workOrderItemId) {
-      const item = await this.workOrdersRepository.findItemById(workOrderId, dto.workOrderItemId);
-      if (!item) {
-        throw new NotFoundException(
-          `Item con id ${dto.workOrderItemId} no encontrado en la OT ${workOrderId}`,
-        );
-      }
-    }
-
-    const normalized = this.normalizeTimeEntryPayload(dto);
-
-    return this.workOrdersRepository.createTimeEntry({
-      workOrderId,
-      userId,
-      ...normalized,
-      notes: dto.notes,
-    });
-  }
-
-  async updateTimeEntry(
-    workOrderId: string,
-    timeEntryId: string,
-    dto: UpdateWorkOrderTimeEntryDto,
-  ) {
-    const workOrder = await this.workOrdersRepository.findById(workOrderId);
-    if (!workOrder) {
-      throw new NotFoundException(`OT con id ${workOrderId} no encontrada`);
-    }
-
-    const existingEntry = await this.workOrdersRepository.findTimeEntryById(workOrderId, timeEntryId);
-    if (!existingEntry) {
-      throw new NotFoundException(
-        `Registro de horas con id ${timeEntryId} no encontrado en la OT ${workOrderId}`,
-      );
-    }
-
-    const workOrderItemId = dto.workOrderItemId ?? existingEntry.workOrderItemId;
-    if (workOrderItemId) {
-      const item = await this.workOrdersRepository.findItemById(workOrderId, workOrderItemId);
-      if (!item) {
-        throw new NotFoundException(
-          `Item con id ${workOrderItemId} no encontrado en la OT ${workOrderId}`,
-        );
-      }
-    }
-
-    const normalized = this.normalizeTimeEntryPayload(dto, {
-      entryType: existingEntry.entryType as WorkOrderTimeEntryType,
-      workedDate: existingEntry.workedDate,
-      workOrderItemId: existingEntry.workOrderItemId,
-      hoursWorked: existingEntry.hoursWorked,
-      startAt: existingEntry.startAt,
-      endAt: existingEntry.endAt,
-    });
-
-    return this.workOrdersRepository.updateTimeEntry(timeEntryId, {
-      ...normalized,
-      notes: dto.notes ?? existingEntry.notes,
-    });
   }
 
   async remove(id: string) {

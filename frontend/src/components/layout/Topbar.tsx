@@ -33,6 +33,10 @@ import { NotificationBell } from './NotificationBell';
 import { PendingApprovalsBell } from './PendingApprovalsBell';
 import { AttendanceButton } from './AttendanceButton';
 import { LocationSelector } from './LocationSelector';
+import {
+  PendingTimeReviewChip,
+  RunningTasksChip,
+} from '../../features/work-orders/components/production-time';
 import { gradients, neonColors, neonAccents, darkSurfaces, darkModeColors } from '../../theme';
 import { PERMISSIONS } from '../../utils/constants';
 
@@ -256,6 +260,10 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuClick }) => {
 
           {/* Attendance Button — visible solo para usuarios con permiso use_attendance */}
           {hasPermission(PERMISSIONS.USE_ATTENDANCE) && <AttendanceButton />}
+
+          {/* Temporizador de producción: tareas en curso (operario) y por revisar (supervisor) */}
+          {hasPermission(PERMISSIONS.TRACK_WORK_ORDER_TIME) && <RunningTasksChip />}
+          {hasPermission(PERMISSIONS.ADJUST_WORK_ORDER_TIME) && <PendingTimeReviewChip />}
 
           {/* Pending Approvals Bell */}
           <PendingApprovalsBell />

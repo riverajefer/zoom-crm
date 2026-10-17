@@ -88,6 +88,12 @@ export const PERMISSION_LABELS: Record<string, string> = {
   read_production_areas: 'Ver Áreas de Producción',
   update_production_areas: 'Actualizar Áreas de Producción',
   delete_production_areas: 'Eliminar Áreas de Producción',
+  create_machines: 'Crear Máquinas',
+  read_machines: 'Ver Máquinas',
+  update_machines: 'Editar Máquinas',
+  delete_machines: 'Desactivar Máquinas',
+  track_work_order_time: 'Usar el temporizador de la OT (sus propias tareas)',
+  adjust_work_order_time: 'Supervisar tiempos: ajustar, anular y agregar registros olvidados',
   
   // Canales Comerciales
   create_commercial_channels: 'Crear Canales Comerciales',

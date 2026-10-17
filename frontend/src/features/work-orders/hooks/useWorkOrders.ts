@@ -12,8 +12,6 @@ import type {
   UpdateWorkOrderDto,
   UpdateWorkOrderStatusDto,
   AddSupplyToItemDto,
-  CreateWorkOrderTimeEntryDto,
-  UpdateWorkOrderTimeEntryDto,
 } from '../../../types/work-order.types';
 
 // ============================================================
@@ -158,51 +156,11 @@ export const useWorkOrder = (id?: string) => {
     },
   });
 
-  const createTimeEntryMutation = useMutation({
-    mutationFn: ({
-      workOrderId,
-      dto,
-    }: {
-      workOrderId: string;
-      dto: CreateWorkOrderTimeEntryDto;
-    }) => workOrdersApi.createTimeEntry(workOrderId, dto),
-    onSuccess: () => {
-      if (id) queryClient.invalidateQueries({ queryKey: workOrdersKeys.detail(id) });
-      enqueueSnackbar('Horas registradas correctamente', { variant: 'success' });
-    },
-    onError: (error: any) => {
-      const message = error?.response?.data?.message || 'Error al registrar horas trabajadas';
-      enqueueSnackbar(message, { variant: 'error' });
-    },
-  });
-
-  const updateTimeEntryMutation = useMutation({
-    mutationFn: ({
-      workOrderId,
-      timeEntryId,
-      dto,
-    }: {
-      workOrderId: string;
-      timeEntryId: string;
-      dto: UpdateWorkOrderTimeEntryDto;
-    }) => workOrdersApi.updateTimeEntry(workOrderId, timeEntryId, dto),
-    onSuccess: () => {
-      if (id) queryClient.invalidateQueries({ queryKey: workOrdersKeys.detail(id) });
-      enqueueSnackbar('Registro de horas actualizado correctamente', { variant: 'success' });
-    },
-    onError: (error: any) => {
-      const message = error?.response?.data?.message || 'Error al actualizar registro de horas';
-      enqueueSnackbar(message, { variant: 'error' });
-    },
-  });
-
   return {
     workOrderQuery,
     updateWorkOrderMutation,
     updateStatusMutation,
     addSupplyMutation,
     removeSupplyMutation,
-    createTimeEntryMutation,
-    updateTimeEntryMutation,
   };
 };

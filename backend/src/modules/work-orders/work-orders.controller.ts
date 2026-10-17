@@ -23,11 +23,9 @@ import { WorkOrdersService } from './work-orders.service';
 import {
   AddSupplyToItemDto,
   CreateWorkOrderDto,
-  CreateWorkOrderTimeEntryDto,
   FilterWorkOrdersDto,
   UpdateWorkOrderDto,
   UpdateWorkOrderStatusDto,
-  UpdateWorkOrderTimeEntryDto,
 } from './dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../../common/guards/permissions.guard';
@@ -155,34 +153,5 @@ export class WorkOrdersController {
     @Param('supplyId') supplyId: string,
   ) {
     return this.workOrdersService.removeSupplyFromItem(id, itemId, supplyId);
-  }
-
-  @Post(':id/time-entries')
-  @RequirePermissions('read_work_orders')
-  @ApiOperation({ summary: 'Registrar horas trabajadas en una OT' })
-  @ApiParam({ name: 'id', description: 'ID de la OT' })
-  @ApiResponse({ status: 201, description: 'Horas registradas correctamente' })
-  @ApiResponse({ status: 404, description: 'OT o item no encontrado' })
-  createTimeEntry(
-    @Param('id') id: string,
-    @Body() dto: CreateWorkOrderTimeEntryDto,
-    @CurrentUser() user: AuthenticatedUser,
-  ) {
-    return this.workOrdersService.createTimeEntry(id, dto, user.id);
-  }
-
-  @Patch(':id/time-entries/:timeEntryId')
-  @RequirePermissions('read_work_orders')
-  @ApiOperation({ summary: 'Editar registro de horas en una OT' })
-  @ApiParam({ name: 'id', description: 'ID de la OT' })
-  @ApiParam({ name: 'timeEntryId', description: 'ID del registro de horas' })
-  @ApiResponse({ status: 200, description: 'Registro de horas actualizado correctamente' })
-  @ApiResponse({ status: 404, description: 'OT o registro no encontrado' })
-  updateTimeEntry(
-    @Param('id') id: string,
-    @Param('timeEntryId') timeEntryId: string,
-    @Body() dto: UpdateWorkOrderTimeEntryDto,
-  ) {
-    return this.workOrdersService.updateTimeEntry(id, timeEntryId, dto);
   }
 }

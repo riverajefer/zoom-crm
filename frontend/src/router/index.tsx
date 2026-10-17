@@ -23,6 +23,7 @@ const AuditLogsListPage = lazyWithRetry(() => import('../features/audit-logs/pag
 const ProductionAreasListPage = lazyWithRetry(() => import('../features/production-areas/pages/ProductionAreasListPage'));
 const ProductionAreaFormPage = lazyWithRetry(() => import('../features/production-areas/pages/ProductionAreaFormPage'));
 const ProductionAreaDetailPage = lazyWithRetry(() => import('../features/production-areas/pages/ProductionAreaDetailPage'));
+const MachinesListPage = lazyWithRetry(() => import('../features/machines/pages/MachinesListPage'));
 const CargosListPage = lazyWithRetry(() => import('../features/cargos/pages/CargosListPage'));
 const SedesAdminPage = lazyWithRetry(() => import('../features/sedes/pages/SedesAdminPage'));
 const LocationSupportsPage = lazyWithRetry(() => import('../features/sedes/pages/LocationSupportsPage'));
@@ -331,6 +332,18 @@ const RoutesConfig: FC = () => {
         />
 
         {/* Production Areas Routes */}
+        <Route
+          path={PATHS.MACHINES}
+          element={
+            <AuthGuard>
+              <MainLayout>
+                <PermissionGuard permission={PERMISSIONS.READ_MACHINES}>
+                  <MachinesListPage />
+                </PermissionGuard>
+              </MainLayout>
+            </AuthGuard>
+          }
+        />
         <Route
           path={PATHS.PRODUCTION_AREAS}
           element={

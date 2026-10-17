@@ -25,7 +25,6 @@ import {
   SwapHoriz as SwapHorizIcon,
   AccountTree as AccountTreeIcon,
   ReceiptLong as ReceiptLongIcon,
-  AccessTime as AccessTimeIcon,
   PrecisionManufacturing as PrecisionManufacturingIcon,
   Download as DownloadIcon,
 } from '@mui/icons-material';
@@ -43,9 +42,8 @@ import { PERMISSIONS, ROUTES } from '../../../utils/constants';
 import {
   WorkOrderStatus,
   WORK_ORDER_STATUS_CONFIG,
-  WorkOrderTimeEntry,
-  WorkOrderTimeEntryType,
 } from '../../../types/work-order.types';
+import { ProductionTimelinePanel } from '../components/production-time';
 import { EXPENSE_ORDER_STATUS_CONFIG } from '../../../types/expense-order.types';
 import { CommentSection } from '../../comments';
 import { storageApi } from '../../../api/storage.api';
@@ -72,33 +70,6 @@ const formatCurrency = (value?: string | null): string => {
   }).format(isNaN(num) ? 0 : num);
 };
 
-const formatHours = (value?: string | null): string => {
-  if (!value) return '-';
-  const num = parseFloat(value);
-  if (Number.isNaN(num)) return '-';
-  return `${num.toFixed(2)} h`;
-};
-
-const getUserDisplayName = (entry: WorkOrderTimeEntry): string => {
-  const fullName = `${entry.user.firstName ?? ''} ${entry.user.lastName ?? ''}`.trim();
-  return fullName || entry.user.email;
-};
-
-const toDateTimeLocalValue = (iso?: string | null): string => {
-  if (!iso) return '';
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return '';
-  const offset = date.getTimezoneOffset() * 60000;
-  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
-};
-
-const toIsoOrUndefined = (value: string): string | undefined => {
-  if (!value) return undefined;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return undefined;
-  return date.toISOString();
-};
-
 const STATUS_TRANSITIONS: Record<WorkOrderStatus, WorkOrderStatus[]> = {
   [WorkOrderStatus.DRAFT]: [WorkOrderStatus.CONFIRMED, WorkOrderStatus.CANCELLED],
   [WorkOrderStatus.CONFIRMED]: [WorkOrderStatus.IN_PRODUCTION, WorkOrderStatus.CANCELLED],
@@ -118,23 +89,9 @@ export const WorkOrderDetailPage = () => {
   const theme = useTheme();
   const { hasPermission } = useAuthStore();
 
-  const {
-    workOrderQuery,
-    updateStatusMutation,
-    createTimeEntryMutation,
-    updateTimeEntryMutation,
-  } = useWorkOrder(id);
+  const { workOrderQuery, updateStatusMutation } = useWorkOrder(id);
   const [statusDialogOpen, setStatusDialogOpen] = useState(false);
   const [newStatus, setNewStatus] = useState<WorkOrderStatus | ''>('');
-  const [timeDialogOpen, setTimeDialogOpen] = useState(false);
-  const [editingTimeEntry, setEditingTimeEntry] = useState<WorkOrderTimeEntry | null>(null);
-  const [timeEntryType, setTimeEntryType] = useState<WorkOrderTimeEntryType>(WorkOrderTimeEntryType.HOURS);
-  const [selectedWorkOrderItemId, setSelectedWorkOrderItemId] = useState<string>('');
-  const [workedDate, setWorkedDate] = useState<string>(new Date().toISOString().slice(0, 10));
-  const [hoursWorked, setHoursWorked] = useState<string>('');
-  const [startAt, setStartAt] = useState<string>('');
-  const [endAt, setEndAt] = useState<string>('');
-  const [timeEntryNotes, setTimeEntryNotes] = useState<string>('');
 
   const canUpdate = hasPermission(PERMISSIONS.UPDATE_WORK_ORDERS);
   const canCreateExpenseOrder = hasPermission(PERMISSIONS.CREATE_EXPENSE_ORDERS);
@@ -147,68 +104,6 @@ export const WorkOrderDetailPage = () => {
     await updateStatusMutation.mutateAsync({ id, dto: { status: newStatus as WorkOrderStatus } });
     setStatusDialogOpen(false);
     setNewStatus('');
-  };
-
-  const resetTimeForm = () => {
-    setEditingTimeEntry(null);
-    setTimeEntryType(WorkOrderTimeEntryType.HOURS);
-    setSelectedWorkOrderItemId('');
-    setWorkedDate(new Date().toISOString().slice(0, 10));
-    setHoursWorked('');
-    setStartAt('');
-    setEndAt('');
-    setTimeEntryNotes('');
-  };
-
-  const openCreateTimeDialog = (itemId?: string) => {
-    resetTimeForm();
-    setSelectedWorkOrderItemId(itemId ?? '');
-    setTimeDialogOpen(true);
-  };
-
-  const openEditTimeDialog = (entry: WorkOrderTimeEntry) => {
-    setEditingTimeEntry(entry);
-    setTimeEntryType(entry.entryType);
-    setSelectedWorkOrderItemId(entry.workOrderItem?.id ?? '');
-    setWorkedDate(entry.workedDate.slice(0, 10));
-    setHoursWorked(entry.entryType === WorkOrderTimeEntryType.HOURS ? String(entry.hoursWorked) : '');
-    setStartAt(entry.entryType === WorkOrderTimeEntryType.RANGE ? toDateTimeLocalValue(entry.startAt) : '');
-    setEndAt(entry.entryType === WorkOrderTimeEntryType.RANGE ? toDateTimeLocalValue(entry.endAt) : '');
-    setTimeEntryNotes(entry.notes ?? '');
-    setTimeDialogOpen(true);
-  };
-
-  const handleSaveTimeEntry = async () => {
-    if (!id || !workedDate) return;
-
-    const payload = {
-      entryType: timeEntryType,
-      workOrderItemId: selectedWorkOrderItemId || undefined,
-      workedDate,
-      hoursWorked:
-        timeEntryType === WorkOrderTimeEntryType.HOURS && hoursWorked
-          ? Number(hoursWorked)
-          : undefined,
-      startAt: timeEntryType === WorkOrderTimeEntryType.RANGE ? toIsoOrUndefined(startAt) : undefined,
-      endAt: timeEntryType === WorkOrderTimeEntryType.RANGE ? toIsoOrUndefined(endAt) : undefined,
-      notes: timeEntryNotes || undefined,
-    };
-
-    if (editingTimeEntry) {
-      await updateTimeEntryMutation.mutateAsync({
-        workOrderId: id,
-        timeEntryId: editingTimeEntry.id,
-        dto: payload,
-      });
-    } else {
-      await createTimeEntryMutation.mutateAsync({
-        workOrderId: id,
-        dto: payload,
-      });
-    }
-
-    setTimeDialogOpen(false);
-    resetTimeForm();
   };
 
   if (workOrderQuery.isLoading) {
@@ -233,9 +128,6 @@ export const WorkOrderDetailPage = () => {
     ? `${workOrder.designer.firstName ?? ''} ${workOrder.designer.lastName ?? ''}`.trim() || workOrder.designer.email
     : '-';
   const expenseOrders = workOrder.expenseOrders ?? [];
-  const timeEntries = [...(workOrder.timeEntries ?? [])].sort(
-    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-  );
   const pendingOrderItems = workOrder.pendingOrderItems ?? [];
   const canEditItems =
     canUpdate && ['DRAFT', 'CONFIRMED', 'IN_PRODUCTION'].includes(currentStatus);
@@ -333,17 +225,6 @@ export const WorkOrderDetailPage = () => {
             onClick={() => navigate(`/orders/flow/work-order/${id}`)}
             tooltip="Ver Trazabilidad"
           />
-
-          {!isParentOrderAnulado && (
-            <ToolbarButton
-              icon={<AccessTimeIcon />}
-              label="Horas"
-              secondaryLabel="Registrar"
-              onClick={() => openCreateTimeDialog()}
-              color={theme.palette.success.main}
-              tooltip="Registrar Horas Trabajadas"
-            />
-          )}
 
           {!isParentOrderAnulado && canCreateExpenseOrder && (
             <ToolbarButton
@@ -515,13 +396,6 @@ export const WorkOrderDetailPage = () => {
                             />
                           )}
                         </Stack>
-                        <Button
-                          size="small"
-                          startIcon={<AccessTimeIcon fontSize="small" />}
-                          onClick={() => openCreateTimeDialog(item.id)}
-                        >
-                          Registrar horas
-                        </Button>
                       </Stack>
                       <Typography variant="body2" color="text.secondary" gutterBottom>
                         Item original: {item.orderItem.description} · Cant: {item.orderItem.quantity} · Precio: {formatCurrency(item.orderItem.unitPrice)}
@@ -563,93 +437,6 @@ export const WorkOrderDetailPage = () => {
                     );
                   })}
                 </Stack>
-              </CardContent>
-            </Card>
-
-            {/* Observaciones */}
-            <Card>
-              <CardContent>
-                <Stack
-                  direction={{ xs: 'column', sm: 'row' }}
-                  justifyContent="space-between"
-                  alignItems={{ xs: 'flex-start', sm: 'center' }}
-                  mb={2}
-                  gap={1}
-                >
-                  <Typography variant="h6">Timeline de Horas Trabajadas</Typography>
-                  <Button
-                    size="small"
-                    startIcon={<AccessTimeIcon fontSize="small" />}
-                    onClick={() => openCreateTimeDialog()}
-                  >
-                    Registrar
-                  </Button>
-                </Stack>
-
-                {timeEntries.length === 0 ? (
-                  <Typography variant="body2" color="text.secondary">
-                    Aún no hay horas registradas para esta OT.
-                  </Typography>
-                ) : (
-                  <Stack spacing={2}>
-                    {timeEntries.map((entry) => (
-                      <Box
-                        key={entry.id}
-                        sx={{
-                          pl: 2,
-                          borderLeft: (theme) => `2px solid ${theme.palette.divider}`,
-                        }}
-                      >
-                        <Stack direction="row" justifyContent="space-between" alignItems="flex-start" gap={1}>
-                          <Box>
-                            <Typography variant="subtitle2">{getUserDisplayName(entry)}</Typography>
-                            <Typography variant="caption" color="text.secondary">
-                              Registrado: {formatDate(entry.createdAt)}
-                            </Typography>
-                          </Box>
-                          <Button size="small" onClick={() => openEditTimeDialog(entry)}>
-                            Editar
-                          </Button>
-                        </Stack>
-
-                        <Stack direction="row" spacing={1} mt={1} flexWrap="wrap">
-                          <Chip
-                            size="small"
-                            label={
-                              entry.entryType === WorkOrderTimeEntryType.HOURS
-                                ? 'Cantidad'
-                                : 'Rango'
-                            }
-                            color={entry.entryType === WorkOrderTimeEntryType.HOURS ? 'info' : 'warning'}
-                            variant="outlined"
-                          />
-                          <Chip size="small" label={formatHours(entry.hoursWorked)} color="success" />
-                          <Chip
-                            size="small"
-                            variant="outlined"
-                            label={entry.workOrderItem ? `Item: ${entry.workOrderItem.productDescription}` : 'Nivel OT'}
-                          />
-                        </Stack>
-
-                        <Typography variant="body2" mt={1}>
-                          Fecha de trabajo: {formatDate(entry.workedDate)}
-                        </Typography>
-
-                        {entry.entryType === WorkOrderTimeEntryType.RANGE && entry.startAt && entry.endAt && (
-                          <Typography variant="body2" color="text.secondary">
-                            Rango: {formatDate(entry.startAt)} → {formatDate(entry.endAt)}
-                          </Typography>
-                        )}
-
-                        {entry.notes && (
-                          <Typography variant="body2" color="text.secondary" mt={0.5}>
-                            Nota: {entry.notes}
-                          </Typography>
-                        )}
-                      </Box>
-                    ))}
-                  </Stack>
-                )}
               </CardContent>
             </Card>
 
@@ -766,123 +553,11 @@ export const WorkOrderDetailPage = () => {
         </Grid>
       </Grid>
 
+      {/* Producción: temporizador y línea de tiempo, encima de los comentarios */}
+      <ProductionTimelinePanel workOrder={workOrder} />
+
       {/* Comentarios */}
       <CommentSection entityType="WORK_ORDER" entityId={workOrder.id} />
-
-      {/* Dialog: Registrar/Editar Horas */}
-      <Dialog
-        open={timeDialogOpen}
-        onClose={() => {
-          setTimeDialogOpen(false);
-          resetTimeForm();
-        }}
-        maxWidth="sm"
-        fullWidth
-      >
-        <DialogTitle>
-          {editingTimeEntry ? 'Editar Registro de Horas' : 'Registrar Horas Trabajadas'}
-        </DialogTitle>
-        <DialogContent>
-          <Stack spacing={2} mt={0.5}>
-            <TextField
-              select
-              label="Tipo de registro"
-              value={timeEntryType}
-              onChange={(e) => setTimeEntryType(e.target.value as WorkOrderTimeEntryType)}
-              fullWidth
-            >
-              <MenuItem value={WorkOrderTimeEntryType.HOURS}>Cantidad de horas</MenuItem>
-              <MenuItem value={WorkOrderTimeEntryType.RANGE}>Rango (inicio y fin)</MenuItem>
-            </TextField>
-
-            <TextField
-              select
-              label="Alcance"
-              value={selectedWorkOrderItemId}
-              onChange={(e) => setSelectedWorkOrderItemId(e.target.value)}
-              fullWidth
-            >
-              <MenuItem value="">Nivel OT (general)</MenuItem>
-              {workOrder.items.map((item, index) => (
-                <MenuItem key={item.id} value={item.id}>
-                  Producto {index + 1}: {item.productDescription}
-                </MenuItem>
-              ))}
-            </TextField>
-
-            <TextField
-              label="Fecha de trabajo"
-              type="date"
-              value={workedDate}
-              onChange={(e) => setWorkedDate(e.target.value)}
-              fullWidth
-              InputLabelProps={{ shrink: true }}
-            />
-
-            {timeEntryType === WorkOrderTimeEntryType.HOURS ? (
-              <TextField
-                label="Horas trabajadas"
-                type="number"
-                value={hoursWorked}
-                onChange={(e) => setHoursWorked(e.target.value)}
-                fullWidth
-                inputProps={{ min: 0.01, step: 0.25 }}
-              />
-            ) : (
-              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-                <TextField
-                  label="Inicio"
-                  type="datetime-local"
-                  value={startAt}
-                  onChange={(e) => setStartAt(e.target.value)}
-                  fullWidth
-                  InputLabelProps={{ shrink: true }}
-                />
-                <TextField
-                  label="Fin"
-                  type="datetime-local"
-                  value={endAt}
-                  onChange={(e) => setEndAt(e.target.value)}
-                  fullWidth
-                  InputLabelProps={{ shrink: true }}
-                />
-              </Stack>
-            )}
-
-            <TextField
-              label="Nota (opcional)"
-              value={timeEntryNotes}
-              onChange={(e) => setTimeEntryNotes(e.target.value)}
-              fullWidth
-              multiline
-              minRows={2}
-            />
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button
-            onClick={() => {
-              setTimeDialogOpen(false);
-              resetTimeForm();
-            }}
-          >
-            Cancelar
-          </Button>
-          <Button
-            variant="contained"
-            onClick={handleSaveTimeEntry}
-            disabled={createTimeEntryMutation.isPending || updateTimeEntryMutation.isPending}
-          >
-            {createTimeEntryMutation.isPending || updateTimeEntryMutation.isPending ? (
-              <CircularProgress size={20} />
-            ) : editingTimeEntry ? (
-              'Guardar cambios'
-            ) : (
-              'Registrar'
-            )}
-          </Button>
-        </DialogActions>
-      </Dialog>
 
       {/* Dialog: Cambiar Estado */}
       <Dialog open={statusDialogOpen} onClose={() => setStatusDialogOpen(false)} maxWidth="xs" fullWidth>

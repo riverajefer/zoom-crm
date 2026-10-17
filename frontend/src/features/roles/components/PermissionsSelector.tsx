@@ -79,6 +79,8 @@ const PERMISSION_GROUPS: Record<string, string[]> = {
   // Producción
   'Áreas de Producción': ['create_production_areas', 'read_production_areas', 'update_production_areas', 'delete_production_areas'],
   'Órdenes de Trabajo': ['create_work_orders', 'read_work_orders', 'update_work_orders', 'delete_work_orders', 'export_work_orders'],
+  'Tiempos de Producción': ['track_work_order_time', 'adjust_work_order_time'],
+  Máquinas: ['create_machines', 'read_machines', 'update_machines', 'delete_machines'],
   'Plantillas de Producto': ['read_product_templates', 'create_product_templates', 'update_product_templates', 'delete_product_templates'],
   'Etapas de Producción': ['read_step_definitions', 'create_step_definitions', 'update_step_definitions'],
   'Órdenes de Producción': ['read_production_orders', 'create_production_orders', 'update_production_orders'],
@@ -175,7 +177,7 @@ const TABS = [
   },
   {
     label: 'Producción',
-    groups: ['Áreas de Producción', 'Órdenes de Trabajo', 'Plantillas de Producto', 'Etapas de Producción', 'Órdenes de Producción'],
+    groups: ['Áreas de Producción', 'Órdenes de Trabajo', 'Tiempos de Producción', 'Máquinas', 'Plantillas de Producto', 'Etapas de Producción', 'Órdenes de Producción'],
   },
   {
     label: 'Caja',

@@ -233,6 +233,30 @@ export const permissionGroups: PermissionGroup[] = [
     ],
   },
   {
+    label: '⏱️ Tiempos de producción',
+    permissions: [
+      {
+        name: 'track_work_order_time',
+        description:
+          'Usar el temporizador de la OT: iniciar, finalizar y extender sus propias tareas',
+      },
+      {
+        name: 'adjust_work_order_time',
+        description:
+          'Supervisar tiempos: ajustar, anular, revisar y agregar registros olvidados (no los propios)',
+      },
+    ],
+  },
+  {
+    label: '🛠️ Máquinas',
+    permissions: [
+      { name: 'create_machines', description: 'Crear máquinas de la planta' },
+      { name: 'read_machines', description: 'Ver el catálogo de máquinas' },
+      { name: 'update_machines', description: 'Editar máquinas de la planta' },
+      { name: 'delete_machines', description: 'Desactivar máquinas de la planta' },
+    ],
+  },
+  {
     label: '🎯 Ventas por Asesor',
     permissions: [
       {

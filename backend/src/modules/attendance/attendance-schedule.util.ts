@@ -19,15 +19,18 @@ export interface WorkdayEnd {
 
 /**
  * Lee la hora de cierre de la jornada (`ATTENDANCE_WORKDAY_END`, `HH:mm` en hora
- * Colombia). Sin valor usa las 19:00; con un valor mal escrito también, pero lo
- * marca como no válido para que el arranque lo avise.
+ * Colombia). Sin valor usa `fallback` (19:00 por defecto); con un valor mal
+ * escrito también, pero lo marca como no válido para que el arranque lo avise.
  */
-export function parseWorkdayEnd(value: string | null | undefined): WorkdayEnd {
+export function parseWorkdayEnd(
+  value: string | null | undefined,
+  fallback: string = DEFAULT_WORKDAY_END,
+): WorkdayEnd {
   const raw = value?.trim() ?? '';
-  const match = /^([01]?\d|2[0-3]):([0-5]\d)$/.exec(raw || DEFAULT_WORKDAY_END);
+  const match = /^([01]?\d|2[0-3]):([0-5]\d)$/.exec(raw || fallback);
 
   if (!match) {
-    return { ...parseWorkdayEnd(DEFAULT_WORKDAY_END), valid: false };
+    return { ...parseWorkdayEnd(fallback), valid: false };
   }
 
   const hour = Number(match[1]);

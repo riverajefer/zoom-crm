@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../../database/prisma.service';
 import { Prisma } from '../../../generated/prisma';
+import { withoutLocationScope } from '../../../common/utils/location-context';
 import {
   computeItemBalance,
   computeItemPaidAmount,
@@ -179,13 +180,19 @@ export class PayrollPeriodsRepository {
    * Anticipos (cuentas por pagar Personal/Anticipos) vinculados a un periodo,
    * con su beneficiario, estado de pago y trazabilidad de aprobación y
    * desembolso (ver `advanceSelect`). Excluye los anulados.
+   *
+   * La nómina es común a todas las sedes, pero la CP de cada anticipo es de la
+   * sede donde se pidió: se leen todas, sin importar la sede activa, para que
+   * el periodo no muestre ni descuente solo los de la sede del Topbar.
    */
   async findAdvancesByPeriod(periodId: string) {
-    return this.prisma.accountPayable.findMany({
-      where: { payrollPeriodId: periodId, status: { not: 'CANCELLED' } },
-      select: advanceSelect,
-      orderBy: { createdAt: 'desc' },
-    });
+    return withoutLocationScope(() =>
+      this.prisma.accountPayable.findMany({
+        where: { payrollPeriodId: periodId, status: { not: 'CANCELLED' } },
+        select: advanceSelect,
+        orderBy: { createdAt: 'desc' },
+      }),
+    );
   }
 
   async create(data: Prisma.PayrollPeriodCreateInput) {

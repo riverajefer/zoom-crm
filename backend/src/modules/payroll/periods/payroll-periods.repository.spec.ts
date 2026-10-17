@@ -1,6 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { PayrollPeriodsRepository } from './payroll-periods.repository';
 import { PrismaService } from '../../../database/prisma.service';
+import { runWithAuditContext } from '../../../common/utils/audit-context';
+import { getLocationScope } from '../../../common/utils/location-context';
 
 describe('PayrollPeriodsRepository', () => {
   let repository: PayrollPeriodsRepository;
@@ -15,6 +17,9 @@ describe('PayrollPeriodsRepository', () => {
       delete: jest.fn(),
     },
     payrollItem: {
+      findMany: jest.fn(),
+    },
+    accountPayable: {
       findMany: jest.fn(),
     },
   };
@@ -229,6 +234,30 @@ describe('PayrollPeriodsRepository', () => {
       expect(result.totalPaidTransfer).toBe(349000);
       expect(result.totalPending).toBe(1000000 + 970000);
       expect(result.paymentStatusCount).toEqual({ PENDING: 1, PARTIAL: 1, PAID: 1 });
+    });
+  });
+  describe('findAdvancesByPeriod', () => {
+    it('lee los anticipos de todas las sedes, no solo los de la sede activa', async () => {
+      // La nómina es común: un anticipo pedido en el 119 se descuenta igual
+      // aunque quien mira el periodo tenga el 104 en el Topbar.
+      let scopeAtQuery: unknown = 'sin consultar';
+      prisma.accountPayable.findMany.mockImplementation(() => {
+        scopeAtQuery = getLocationScope();
+        return Promise.resolve([{ id: 'ap-119' }]);
+      });
+
+      const result = await runWithAuditContext(
+        { location: { locationId: 'l-104', all: false, permittedIds: ['l-104'] } },
+        () => repository.findAdvancesByPeriod('p1'),
+      );
+
+      expect(result).toEqual([{ id: 'ap-119' }]);
+      expect(scopeAtQuery).toBeNull();
+      expect(prisma.accountPayable.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { payrollPeriodId: 'p1', status: { not: 'CANCELLED' } },
+        }),
+      );
     });
   });
 });

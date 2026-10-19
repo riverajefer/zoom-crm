@@ -60,7 +60,9 @@ import {
 } from '../../../utils/withholdings';
 import { useExpenseOrders, useExpenseOrder, useExpenseTypes } from '../hooks';
 import { useUsers } from '../../users/hooks/useUsers';
-import { useWorkOrders } from '../../work-orders/hooks';
+import { useWorkOrder } from '../../work-orders/hooks';
+import type { WorkOrder } from '../../../types/work-order.types';
+import { WorkOrderSearchAutocomplete } from '../components/WorkOrderSearchAutocomplete';
 import { useProductionAreas } from '../../production-areas/hooks/useProductionAreas';
 import { useSuppliers } from '../../suppliers/hooks/useSuppliers';
 import { CreateSupplierModal } from '../../suppliers/components/CreateSupplierModal';
@@ -308,8 +310,19 @@ export const ExpenseOrderFormPage = () => {
 
   // ─── Data queries ───────────────────────────────────────────────────────────
   const { data: expenseTypes = [], isLoading: loadingTypes } = useExpenseTypes();
-  const { workOrdersQuery } = useWorkOrders({ limit: 100 });
-  const workOrders = workOrdersQuery.data?.data ?? [];
+  // La OT elegida en el buscador ya trae sus datos; si solo conocemos el ID
+  // (precarga desde el detalle de la OT, o edición) se resuelve por ID.
+  const [pickedWorkOrder, setPickedWorkOrder] = useState<WorkOrder | null>(null);
+  const needsWorkOrderLookup = !!workOrderId && pickedWorkOrder?.id !== workOrderId;
+  const { workOrderQuery: resolvedWorkOrderQuery } = useWorkOrder(
+    needsWorkOrderLookup ? workOrderId : undefined,
+  );
+  const selectedWorkOrder = !workOrderId
+    ? null
+    : pickedWorkOrder?.id === workOrderId
+      ? pickedWorkOrder
+      : (resolvedWorkOrderQuery.data ?? null);
+  const resolvingWorkOrder = needsWorkOrderLookup && resolvedWorkOrderQuery.isLoading;
   const { usersQuery } = useUsers();
   const users = usersQuery.data ?? [];
   const { productionAreasQuery } = useProductionAreas();
@@ -728,20 +741,13 @@ export const ExpenseOrderFormPage = () => {
       />
 
       {isProduccionType && (
-        <Autocomplete
-          options={workOrders.filter((wo) => wo.status !== 'CANCELLED')}
-          getOptionLabel={(wo) =>
-            `${wo.workOrderNumber} — ${wo.order?.client?.name ?? ''}`
-          }
-          value={workOrders.find((wo) => wo.id === workOrderId) ?? null}
-          onChange={(_, val) => setWorkOrderId(val?.id ?? '')}
-          renderInput={(params) => (
-            <TextField
-              {...params}
-              label="Orden de Trabajo (OT)"
-              placeholder="Asociar a una OT (opcional)..."
-            />
-          )}
+        <WorkOrderSearchAutocomplete
+          value={selectedWorkOrder}
+          loadingValue={resolvingWorkOrder}
+          onChange={(wo) => {
+            setPickedWorkOrder(wo);
+            setWorkOrderId(wo?.id ?? '');
+          }}
         />
       )}
 
@@ -1193,7 +1199,7 @@ export const ExpenseOrderFormPage = () => {
               <Stack direction="row" justifyContent="space-between">
                 <Typography color="text.secondary">OT asociada:</Typography>
                 <Typography fontWeight={500}>
-                  {workOrders.find((wo) => wo.id === workOrderId)?.workOrderNumber ?? workOrderId}
+                  {selectedWorkOrder?.workOrderNumber ?? workOrderId}
                 </Typography>
               </Stack>
             )}

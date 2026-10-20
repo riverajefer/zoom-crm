@@ -128,7 +128,10 @@ export class WorkOrderTimeRepository {
     });
   }
 
-  /** Operarios de la vista «Planta hoy», con su cargo para la etiqueta de la fila. */
+  /**
+   * Operarios de la vista «Planta hoy», con su cargo para la etiqueta de la fila
+   * y el área del cargo para filtrar por área.
+   */
   findPlantOperators() {
     return this.prisma.user.findMany({
       where: OPERATOR_WHERE,
@@ -137,7 +140,12 @@ export class WorkOrderTimeRepository {
         firstName: true,
         lastName: true,
         email: true,
-        cargo: { select: { name: true } },
+        cargo: {
+          select: {
+            name: true,
+            productionArea: { select: { id: true, name: true } },
+          },
+        },
       },
       orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }],
     });

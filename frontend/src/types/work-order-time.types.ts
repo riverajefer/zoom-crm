@@ -58,7 +58,9 @@ export interface PlantAttendance {
 }
 
 export interface PlantOperator {
-  user: TimeEntryUser & { cargo?: { name: string } | null };
+  user: TimeEntryUser & {
+    cargo?: { name: string; productionArea?: { id: string; name: string } | null } | null;
+  };
   attendance: PlantAttendance[];
   /** Registros del día en todas las OT (sin anulados). */
   entries: WorkOrderTimeEntry[];

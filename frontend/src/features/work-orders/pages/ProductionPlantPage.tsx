@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Alert,
   Box,
@@ -29,6 +29,7 @@ import {
   type TimelineSpan,
 } from '../components/production-time/TimelineGrid';
 import { TimeEntryDrawer } from '../components/production-time/TimeEntryDrawer';
+import { PlantFilterBar } from '../components/production-time/PlantFilterBar';
 import {
   AdjustTimeEntryDialog,
   VoidTimeEntryDialog,
@@ -38,6 +39,7 @@ import { useNow } from '../hooks/useNow';
 import {
   buildAxis,
   dayKey,
+  entryDurationSeconds,
   formatClock,
   formatDuration,
   isRunning,
@@ -55,6 +57,16 @@ import {
   type Occupancy,
   type OperatorStatus,
 } from '../utils/plant';
+import {
+  EMPTY_FILTERS,
+  TODAY_ONLY_STATUSES,
+  applyPlantFilters,
+  buildFilterOptions,
+  filtersFromParams,
+  filtersToParams,
+  hasTaskFilters,
+  type PlantFilters,
+} from '../utils/plantFilters';
 
 interface OperatorRow {
   operator: PlantOperator;
@@ -90,6 +102,25 @@ const ProductionPlantPage: React.FC = () => {
   const anyRunning = operators.some((o) => o.entries.some(isRunning));
   const now = useNow(anyRunning ? 1000 : 30_000);
 
+  // Los filtros viven en la URL: una vista filtrada se puede compartir o recargar.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const filters = filtersFromParams(searchParams);
+  const setFilters = (next: PlantFilters) =>
+    setSearchParams(filtersToParams(next, searchParams), { replace: true });
+  const filterOptions = useMemo(() => buildFilterOptions(operators), [operators]);
+  // Al cambiar de día puede quedar en la URL una OT o máquina que ese día no
+  // aparece: no se ve en el filtro, así que tampoco debe filtrar. Queda en la
+  // URL por si se vuelve al día anterior. Lo mismo con los estados que solo
+  // aplican a hoy.
+  const known = (ids: string[], list: { id: string }[]) => ids.filter((id) => list.some((o) => o.id === id));
+  const effectiveFilters: PlantFilters = {
+    operatorIds: known(filters.operatorIds, filterOptions.operators),
+    areaIds: known(filters.areaIds, filterOptions.areas),
+    workOrderIds: known(filters.workOrderIds, filterOptions.workOrders),
+    machineIds: known(filters.machineIds, filterOptions.machines),
+    status: !isToday && TODAY_ONLY_STATUSES.includes(filters.status) ? 'all' : filters.status,
+  };
+
   const [openEntryId, setOpenEntryId] = useState<string | null>(null);
   const [adjusting, setAdjusting] = useState<WorkOrderTimeEntry | null>(null);
   const [voiding, setVoiding] = useState<WorkOrderTimeEntry | null>(null);
@@ -120,10 +151,22 @@ const ProductionPlantPage: React.FC = () => {
     }
   }
 
-  const present = rows.filter((r) => (isToday ? isInPlant(r.operator.attendance) : r.operator.attendance.length));
-  const busy = rows.filter((r) => r.status.kind === 'busy').length;
-  const idleAlert = rows.filter((r) => r.status.kind === 'idle' && r.status.alert).length;
-  const average = averageOccupancy(rows.map((r) => r.occupancy.ratio));
+  const visibleRows = applyPlantFilters(rows, effectiveFilters);
+  const filtering = JSON.stringify(effectiveFilters) !== JSON.stringify(EMPTY_FILTERS);
+  const taskFilter = hasTaskFilters(effectiveFilters);
+
+  // Los indicadores se calculan sobre lo que se ve.
+  const present = visibleRows.filter((r) =>
+    isToday ? isInPlant(r.operator.attendance) : r.operator.attendance.length,
+  );
+  const busy = visibleRows.filter((r) => r.status.kind === 'busy').length;
+  const idleAlert = visibleRows.filter((r) => r.status.kind === 'idle' && r.status.alert).length;
+  const average = averageOccupancy(visibleRows.map((r) => r.occupancy.ratio));
+
+  // Con filtro de OT o máquina: cuánto tiempo se le dedicó a eso ese día.
+  const selectedEntries = visibleRows.flatMap((r) => r.visibleEntries);
+  const selectedSeconds = selectedEntries.reduce((acc, e) => acc + entryDurationSeconds(e, now), 0);
+  const selectedPeople = new Set(selectedEntries.map((e) => e.user.id)).size;
 
   // Una franja por marca de asistencia: si salió a almorzar, el hueco se ve.
   const background = (r: OperatorRow): TimelineSpan[] =>
@@ -134,11 +177,13 @@ const ProductionPlantPage: React.FC = () => {
       return [{ left, width: Math.max(0, right - left) }];
     });
 
-  const timelineRows: TimelineRow[] = rows.map((r) => ({
+  const timelineRows: TimelineRow[] = visibleRows.map((r) => ({
     id: r.operator.user.id,
     name: userName(r.operator.user),
-    subtitle: r.operator.user.cargo?.name,
-    entries: r.operator.entries.filter((e) => e.startAt && dayKey(e.startAt) === day),
+    subtitle: [r.operator.user.cargo?.name, r.operator.user.cargo?.productionArea?.name]
+      .filter(Boolean)
+      .join(' · '),
+    entries: r.visibleEntries.filter((e) => e.startAt && dayKey(e.startAt) === day),
     background: background(r),
     action: <StatusChip status={r.status} />,
     footer: <OccupancyBar occupancy={r.occupancy} />,
@@ -165,6 +210,15 @@ const ProductionPlantPage: React.FC = () => {
         }
       />
 
+      <Card sx={{ p: 2, mb: 2 }}>
+        <PlantFilterBar
+          filters={effectiveFilters}
+          options={filterOptions}
+          isToday={isToday}
+          onChange={setFilters}
+        />
+      </Card>
+
       <Box
         sx={{
           display: 'grid',
@@ -173,7 +227,11 @@ const ProductionPlantPage: React.FC = () => {
           mb: 2,
         }}
       >
-        <Kpi label={isToday ? 'En planta' : 'Marcaron entrada'} value={present.length} suffix={` de ${rows.length}`} />
+        <Kpi
+          label={isToday ? 'En planta' : 'Marcaron entrada'}
+          value={present.length}
+          suffix={` de ${visibleRows.length}`}
+        />
         <Kpi label="Con tarea ahora" value={isToday ? busy : '—'} />
         <Kpi label={`Sin tarea hace más de ${IDLE_ALERT_MINUTES} min`} value={isToday ? idleAlert : '—'} warn={idleAlert > 0} />
         <Kpi
@@ -191,8 +249,18 @@ const ProductionPlantPage: React.FC = () => {
               {dateTitle}
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              {rows.length} operario{rows.length === 1 ? '' : 's'} · haz clic en una barra para ver el detalle
+              {filtering
+                ? `Mostrando ${visibleRows.length} de ${rows.length} operarios`
+                : `${rows.length} operario${rows.length === 1 ? '' : 's'}`}{' '}
+              · haz clic en una barra para ver el detalle
             </Typography>
+            {taskFilter && visibleRows.length > 0 && (
+              <Typography variant="body2" sx={{ mt: 0.5 }}>
+                En la selección: <strong>{formatDuration(selectedSeconds)}</strong> registradas por{' '}
+                <strong>{selectedPeople}</strong> persona{selectedPeople === 1 ? '' : 's'}. La ocupación de cada
+                operario sigue contando todas sus tareas del día.
+              </Typography>
+            )}
           </Box>
           {isFetching && !isLoading && <CircularProgress size={18} aria-label="Actualizando" />}
         </Stack>
@@ -214,6 +282,13 @@ const ProductionPlantPage: React.FC = () => {
           <Typography color="text.secondary" sx={{ px: 2.5, pb: 3 }}>
             Ningún usuario activo tiene un rol con permiso para usar el temporizador de la OT.
           </Typography>
+        ) : visibleRows.length === 0 ? (
+          <Stack spacing={1} alignItems="flex-start" sx={{ px: 2.5, pb: 3 }}>
+            <Typography color="text.secondary">Ningún operario coincide con los filtros de este día.</Typography>
+            <Button size="small" onClick={() => setFilters(EMPTY_FILTERS)}>
+              Limpiar filtros
+            </Button>
+          </Stack>
         ) : (
           <TimelineGrid
             rows={timelineRows}

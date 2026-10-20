@@ -136,6 +136,19 @@ describe('AttendanceRepository', () => {
       const res = await repository.findOpenRecordsInactiveFor(30);
       expect(res).toHaveLength(1);
     });
+
+    it('no considera a quien tiene una tarea del temporizador en curso', async () => {
+      prisma.attendanceRecord.findMany.mockResolvedValue([] as any[]);
+      await repository.findOpenRecordsInactiveFor(60);
+      expect(prisma.attendanceRecord.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            clockOut: null,
+            user: { workOrderTimeEntries: { none: { entryType: 'TIMER', endAt: null, voidedAt: null } } },
+          },
+        }),
+      );
+    });
   });
 
   describe('findAllOpenRecords', () => {

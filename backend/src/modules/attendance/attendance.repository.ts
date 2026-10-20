@@ -216,9 +216,18 @@ export class AttendanceRepository {
   async findOpenRecordsInactiveFor(minutesAgo: number) {
     const threshold = new Date(Date.now() - minutesAgo * 60000);
 
-    // Obtener registros sin clockOut
+    // Registros sin clockOut. Quien tiene una tarea del temporizador en curso
+    // no se cierra por inactividad: un operario frente a la máquina puede pasar
+    // más de una hora sin tocar el computador (o la tablet se suspende), y eso
+    // no significa que se fue. Su asistencia la cierran el fin de jornada, el
+    // logout o él mismo; la tarea la cierra el temporizador a las 18:00 o 23:59.
     const openRecords = await this.prisma.attendanceRecord.findMany({
-      where: { clockOut: null },
+      where: {
+        clockOut: null,
+        user: {
+          workOrderTimeEntries: { none: { entryType: 'TIMER', endAt: null, voidedAt: null } },
+        },
+      },
       select: { id: true, userId: true, clockIn: true },
     });
 

@@ -20,6 +20,7 @@ const mockService = {
   adjust: jest.fn(),
   void: jest.fn(),
   markReviewed: jest.fn(),
+  closeOnBehalf: jest.fn(),
 };
 
 const permissionsOf = (method: keyof WorkOrderTimeController) =>
@@ -71,6 +72,7 @@ describe('WorkOrderTimeController', () => {
       'adjust',
       'void',
       'markReviewed',
+      'closeOnBehalf',
     ] as const) {
       expect(permissionsOf(method)).toEqual(['adjust_work_order_time']);
     }

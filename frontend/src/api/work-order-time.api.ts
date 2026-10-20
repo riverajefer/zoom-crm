@@ -72,6 +72,12 @@ export const workOrderTimeApi = {
     return data;
   },
 
+  /** El supervisor finaliza ahora la tarea en curso de otro operario. */
+  closeOnBehalf: async (entryId: string, reason: string): Promise<WorkOrderTimeEntry> => {
+    const { data } = await axiosInstance.post<WorkOrderTimeEntry>(`${BASE}/${entryId}/close`, { reason });
+    return data;
+  },
+
   markReviewed: async (entryId: string): Promise<WorkOrderTimeEntry> => {
     const { data } = await axiosInstance.post<WorkOrderTimeEntry>(`${BASE}/${entryId}/review`);
     return data;

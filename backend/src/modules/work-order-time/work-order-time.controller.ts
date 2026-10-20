@@ -25,6 +25,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { AuthenticatedUser } from '../../common/interfaces/auth.interface';
 import {
   AdjustTimeEntryDto,
+  CloseTimeEntryDto,
   CreateManualTimeEntryDto,
   PlantDayQueryDto,
   StartTimeEntryDto,
@@ -143,6 +144,21 @@ export class WorkOrderTimeController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.service.void(entryId, dto, user.id);
+  }
+
+  @Post(':entryId/close')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions('adjust_work_order_time')
+  @ApiOperation({ summary: 'Finalizar ahora la tarea en curso de otro operario (con motivo)' })
+  @ApiParam({ name: 'entryId', description: 'ID del registro' })
+  @ApiResponse({ status: 400, description: 'La tarea ya no está en curso' })
+  @ApiResponse({ status: 403, description: 'Es una tarea propia: se finaliza con stop' })
+  closeOnBehalf(
+    @Param('entryId') entryId: string,
+    @Body() dto: CloseTimeEntryDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.closeOnBehalf(entryId, dto, user.id);
   }
 
   @Post(':entryId/review')

@@ -6,6 +6,7 @@ import { es } from 'date-fns/locale';
 import type { WorkOrderTimeEntry } from '../../../../types/work-order.types';
 import {
   assignLanes,
+  closedBySupervisor,
   barGeometry,
   entryDurationSeconds,
   formatClock,
@@ -394,7 +395,7 @@ const TimelineBar: React.FC<TimelineBarProps> = ({ entry, left, width, top, now,
               whiteSpace: 'nowrap',
             }}
           >
-            {entry.createdBy ? 'Agregado' : 'Ajustado'}
+            {entry.createdBy ? 'Agregado' : closedBySupervisor(entry) ? 'Cerrada por supervisor' : 'Ajustado'}
           </Box>
         )}
         <Box

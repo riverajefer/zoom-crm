@@ -211,7 +211,17 @@ export class WorkOrderTimeRepository {
    */
   async closeIfRunning(
     id: string,
-    data: Pick<Prisma.WorkOrderTimeEntryUncheckedUpdateInput, 'endAt' | 'hoursWorked' | 'closedBySystem'>,
+    data: Pick<
+      Prisma.WorkOrderTimeEntryUncheckedUpdateManyInput,
+      | 'endAt'
+      | 'hoursWorked'
+      | 'closedBySystem'
+      | 'adjustedAt'
+      | 'adjustedById'
+      | 'adjustReason'
+      | 'originalStartAt'
+      | 'originalEndAt'
+    >,
   ) {
     const result = await this.prisma.workOrderTimeEntry.updateMany({
       where: { id, ...RUNNING_WHERE },

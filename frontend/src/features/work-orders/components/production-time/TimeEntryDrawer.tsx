@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Alert,
   Avatar,
@@ -20,11 +20,13 @@ import { LoadingButton } from '../../../../components/common/LoadingButton';
 import { useSingleFlight } from '../../../../hooks/useSingleFlight';
 import type { WorkOrderTimeEntry } from '../../../../types/work-order.types';
 import { useWorkOrderTimeMutations } from '../../hooks/useWorkOrderTime';
+import { CloseOnBehalfDialog } from './TimeEntryFormDialogs';
 import {
   entryDurationSeconds,
   formatClock,
   formatDuration,
   formatTimer,
+  closedBySupervisor,
   isRunning,
   needsReview,
   operatorColor,
@@ -84,6 +86,8 @@ export const TimeEntryDrawer: React.FC<TimeEntryDrawerProps> = ({
     if (entry) await reviewMutation.mutateAsync(entry.id);
     onClose();
   });
+
+  const [closingFor, setClosingFor] = useState<WorkOrderTimeEntry | null>(null);
 
   const running = entry ? isRunning(entry) : false;
   const isOwn = entry?.user.id === currentUserId;
@@ -163,7 +167,17 @@ export const TimeEntryDrawer: React.FC<TimeEntryDrawerProps> = ({
                 La cerró el sistema y {entry.reviewedBy ? userName(entry.reviewedBy) : 'un supervisor'} ya la revisó.
               </Alert>
             )}
-            {entry.adjustedAt && (
+            {entry.adjustedAt && closedBySupervisor(entry) && (
+              <Alert severity="warning">
+                <strong>
+                  La finalizó {userName(entry.adjustedBy) || 'un supervisor'} a las {formatClock(entry.endAt!)}
+                </strong>
+                , porque el operario no le dio Finalizar.
+                <br />
+                Motivo: {entry.adjustReason}
+              </Alert>
+            )}
+            {entry.adjustedAt && !closedBySupervisor(entry) && (
               <Alert severity="warning">
                 <strong>
                   {entry.createdBy ? 'Agregado' : 'Ajustado'} por {userName(entry.adjustedBy) || 'un supervisor'}
@@ -207,7 +221,17 @@ export const TimeEntryDrawer: React.FC<TimeEntryDrawerProps> = ({
                 </Typography>
               ) : (
                 <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                  <Button variant="contained" onClick={() => onAdjust(entry)}>
+                  {running && !isOwn && (
+                    <Button
+                      variant="contained"
+                      color="error"
+                      startIcon={<StopIcon />}
+                      onClick={() => setClosingFor(entry)}
+                    >
+                      Finalizar ahora
+                    </Button>
+                  )}
+                  <Button variant={running && !isOwn ? 'outlined' : 'contained'} onClick={() => onAdjust(entry)}>
                     Ajustar horas
                   </Button>
                   {needsReview(entry) && (
@@ -232,6 +256,7 @@ export const TimeEntryDrawer: React.FC<TimeEntryDrawerProps> = ({
           </Stack>
         </>
       )}
+      <CloseOnBehalfDialog entry={closingFor} onClose={() => setClosingFor(null)} onDone={onClose} />
     </Drawer>
   );
 };

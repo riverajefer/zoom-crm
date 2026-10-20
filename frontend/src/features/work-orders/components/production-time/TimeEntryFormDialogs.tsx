@@ -22,7 +22,13 @@ import {
   useTimeOperators,
   useWorkOrderTimeMutations,
 } from '../../hooks/useWorkOrderTime';
-import { formatClock, isRunning, userName } from '../../utils/timeline';
+import {
+  entryDurationSeconds,
+  formatClock,
+  formatDuration,
+  isRunning,
+  userName,
+} from '../../utils/timeline';
 
 export interface ItemOption {
   id: string;
@@ -301,6 +307,84 @@ export const VoidTimeEntryDialog: React.FC<VoidTimeEntryDialogProps> = ({ entry,
           <Button onClick={onClose}>Cancelar</Button>
           <LoadingButton type="submit" variant="contained" color="error" loading={voidMutation.isPending}>
             Anular registro
+          </LoadingButton>
+        </DialogActions>
+      </form>
+    </Dialog>
+  );
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Finalizar la tarea de otro operario
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface CloseOnBehalfDialogProps {
+  entry: WorkOrderTimeEntry | null;
+  onClose: () => void;
+  /** Se llama después de cerrar la tarea con éxito. */
+  onDone?: () => void;
+}
+
+/**
+ * El supervisor finaliza ahora la tarea de un operario que se fue sin darle
+ * Finalizar. La hora es la del momento; si terminó antes, lo correcto es
+ * «Ajustar horas».
+ */
+export const CloseOnBehalfDialog: React.FC<CloseOnBehalfDialogProps> = ({ entry, onClose, onDone }) => {
+  const { closeOnBehalfMutation } = useWorkOrderTimeMutations();
+  const { control, handleSubmit, reset } = useForm<{ reason: string }>({
+    resolver: zodResolver(voidSchema),
+    defaultValues: { reason: '' },
+  });
+
+  useEffect(() => {
+    if (entry) reset({ reason: '' });
+  }, [entry, reset]);
+
+  const submit = useSingleFlight(async ({ reason }: { reason: string }) => {
+    if (!entry) return;
+    await closeOnBehalfMutation.mutateAsync({ entryId: entry.id, reason });
+    onClose();
+    onDone?.();
+  });
+
+  const now = new Date();
+  return (
+    <Dialog open={Boolean(entry)} onClose={onClose} maxWidth="xs" fullWidth>
+      <DialogTitle>Finalizar tarea de {entry ? userName(entry.user) : ''}</DialogTitle>
+      <form onSubmit={handleSubmit(submit)} noValidate>
+        <DialogContent>
+          <Stack spacing={2} mt={0.5}>
+            {entry && (
+              <Alert severity="info">
+                «{entry.notes || entry.workOrderItem?.productDescription || 'Tarea general'}» se cierra ahora, a las{' '}
+                {formatClock(now)}, con {formatDuration(entryDurationSeconds(entry, now.getTime()))}. Si terminó
+                antes, usa «Ajustar horas» y pon la hora real.
+              </Alert>
+            )}
+            <Controller
+              name="reason"
+              control={control}
+              render={({ field, fieldState }) => (
+                <TextField
+                  {...field}
+                  label="Motivo"
+                  placeholder="Ej.: salió sin finalizar; la máquina sigue imprimiendo sola."
+                  multiline
+                  minRows={2}
+                  required
+                  autoFocus
+                  error={Boolean(fieldState.error)}
+                  helperText={fieldState.error?.message ?? 'Queda registrado con tu nombre.'}
+                />
+              )}
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={onClose}>Cancelar</Button>
+          <LoadingButton type="submit" variant="contained" color="error" loading={closeOnBehalfMutation.isPending}>
+            Finalizar ahora
           </LoadingButton>
         </DialogActions>
       </form>

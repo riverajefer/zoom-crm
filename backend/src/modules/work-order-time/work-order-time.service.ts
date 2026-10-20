@@ -13,6 +13,7 @@ import { isUniqueViolationOn } from '../../common/utils/unique-violation.util';
 import { businessToday, endOfDay, startOfDay } from '../../common/utils/date-range.util';
 import {
   AdjustTimeEntryDto,
+  CloseTimeEntryDto,
   CreateManualTimeEntryDto,
   StartTimeEntryDto,
   VoidTimeEntryDto,
@@ -305,6 +306,34 @@ export class WorkOrderTimeService {
       voidedById: supervisorId,
       voidReason: dto.reason.trim(),
     });
+  }
+
+  /**
+   * El supervisor finaliza ahora la tarea de otro operario (se fue sin darle
+   * Finalizar). Queda como un ajuste: con motivo, con su nombre y con el valor
+   * original («en curso»). El fin es la hora del servidor, no una que se escriba.
+   */
+  async closeOnBehalf(entryId: string, dto: CloseTimeEntryDto, supervisorId: string) {
+    const entry = await this.findEntryOrFail(entryId);
+    if (entry.entryType !== WorkOrderTimeEntryType.TIMER || entry.endAt || entry.voidedAt) {
+      throw new BadRequestException('La tarea ya no está en curso.');
+    }
+    await this.assertNotOwnEntry(entry.user.id, supervisorId);
+
+    const now = new Date();
+    const closed = await this.repository.closeIfRunning(entryId, {
+      endAt: now,
+      hoursWorked: new Prisma.Decimal(hoursBetween(entry.startAt!, now)),
+      adjustedAt: now,
+      adjustedById: supervisorId,
+      adjustReason: dto.reason.trim(),
+      ...(!entry.adjustedAt && { originalStartAt: entry.startAt, originalEndAt: null }),
+    });
+    if (closed === 0) {
+      // El operario (o el cierre automático) la finalizó un instante antes.
+      throw new BadRequestException('La tarea ya no está en curso.');
+    }
+    return this.repository.findById(entryId);
   }
 
   /** Da por buena la hora con la que el sistema cerró una tarea olvidada. */

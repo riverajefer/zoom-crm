@@ -4,6 +4,7 @@ import {
   assignLanes,
   barGeometry,
   buildAxis,
+  closedBySupervisor,
   entryDurationSeconds,
   formatDuration,
   formatTimer,
@@ -91,5 +92,20 @@ describe('timeline utils', () => {
   it('calcula los minutos que faltan para el cierre', () => {
     expect(minutesUntil('18:00', new Date(2026, 9, 17, 17, 40))).toBe(20);
     expect(minutesUntil('18:00', new Date(2026, 9, 17, 18, 10))).toBe(-10);
+  });
+
+  it('reconoce una tarea que finalizó un supervisor', () => {
+    const closed = entry({
+      startAt: at(17, 8),
+      endAt: at(17, 12),
+      adjustedAt: at(17, 12),
+      originalStartAt: at(17, 8),
+      originalEndAt: null,
+    });
+    expect(closedBySupervisor(closed)).toBe(true);
+    // Un ajuste que movió el inicio no es «cerrada por supervisor».
+    expect(closedBySupervisor({ ...closed, startAt: at(17, 9) })).toBe(false);
+    // Un registro agregado a mano tampoco.
+    expect(closedBySupervisor({ ...closed, createdBy: { id: 'sup' } })).toBe(false);
   });
 });

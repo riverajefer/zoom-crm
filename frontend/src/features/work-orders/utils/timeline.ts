@@ -17,6 +17,21 @@ export const DEFAULT_TO_HOUR = 20;
 export const isRunning = (entry: WorkOrderTimeEntry) =>
   entry.entryType === WorkOrderTimeEntryType.TIMER && !entry.endAt && !entry.voidedAt;
 
+/**
+ * La finalizó un supervisor porque el operario no lo hizo: el primer ajuste se
+ * hizo con la tarea en curso y solo le puso fin.
+ */
+export const closedBySupervisor = (entry: WorkOrderTimeEntry) =>
+  Boolean(
+    entry.adjustedAt &&
+      !entry.createdBy &&
+      entry.endAt &&
+      entry.originalStartAt &&
+      !entry.originalEndAt &&
+      entry.startAt &&
+      new Date(entry.originalStartAt).getTime() === new Date(entry.startAt).getTime(),
+  );
+
 /** Necesita revisión: la cerró el sistema y nadie la ha mirado. */
 export const needsReview = (entry: WorkOrderTimeEntry) =>
   entry.closedBySystem && !entry.reviewedAt && !entry.voidedAt;

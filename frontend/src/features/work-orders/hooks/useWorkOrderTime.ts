@@ -143,6 +143,16 @@ export const useWorkOrderTimeMutations = () => {
     onError,
   });
 
+  const closeOnBehalfMutation = useMutation({
+    mutationFn: ({ entryId, reason }: { entryId: string; reason: string }) =>
+      workOrderTimeApi.closeOnBehalf(entryId, reason),
+    onSuccess: (entry) => {
+      refresh(entry);
+      enqueueSnackbar(`Finalizaste la tarea de ${entry.user.firstName ?? 'el operario'}`, { variant: 'success' });
+    },
+    onError,
+  });
+
   const reviewMutation = useMutation({
     mutationFn: (entryId: string) => workOrderTimeApi.markReviewed(entryId),
     onSuccess: (entry) => {
@@ -168,6 +178,7 @@ export const useWorkOrderTimeMutations = () => {
     adjustMutation,
     voidMutation,
     reviewMutation,
+    closeOnBehalfMutation,
     createManualMutation,
   };
 };

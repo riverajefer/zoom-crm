@@ -375,6 +375,52 @@ describe('WorkOrderTimeService', () => {
     });
   });
 
+  describe('closeOnBehalf', () => {
+    const reason = { reason: 'Salió sin finalizar la tarea' };
+
+    it('cierra la tarea ajena con la hora del servidor y la deja como ajuste', async () => {
+      const entry = makeEntry({ startAt: hoursAgo(2) });
+      mockRepository.findById.mockResolvedValue(entry);
+
+      await service.closeOnBehalf('entry-1', reason, SUPERVISOR);
+
+      const [id, data] = mockRepository.closeIfRunning.mock.calls[0];
+      expect(id).toBe('entry-1');
+      expect(data.endAt).toBeInstanceOf(Date);
+      expect(Number(data.hoursWorked.toString())).toBeCloseTo(2, 1);
+      expect(data).toMatchObject({
+        adjustedById: SUPERVISOR,
+        adjustReason: 'Salió sin finalizar la tarea',
+        originalStartAt: entry.startAt,
+        originalEndAt: null,
+      });
+      expect(data.closedBySystem).toBeUndefined();
+    });
+
+    it('no pisa el valor original si ya se había ajustado', async () => {
+      mockRepository.findById.mockResolvedValue(makeEntry({ adjustedAt: new Date() }));
+      await service.closeOnBehalf('entry-1', reason, SUPERVISOR);
+      expect(mockRepository.closeIfRunning.mock.calls[0][1]).not.toHaveProperty('originalStartAt');
+    });
+
+    it('rechaza una tarea que ya no está en curso', async () => {
+      mockRepository.findById.mockResolvedValue(makeEntry({ endAt: new Date() }));
+      await expect(service.closeOnBehalf('entry-1', reason, SUPERVISOR)).rejects.toThrow('ya no está en curso');
+      expect(mockRepository.closeIfRunning).not.toHaveBeenCalled();
+    });
+
+    it('si el operario la finalizó un instante antes, avisa en vez de pisarla', async () => {
+      mockRepository.findById.mockResolvedValue(makeEntry());
+      mockRepository.closeIfRunning.mockResolvedValue(0);
+      await expect(service.closeOnBehalf('entry-1', reason, SUPERVISOR)).rejects.toThrow('ya no está en curso');
+    });
+
+    it('un supervisor no finaliza así sus propias tareas', async () => {
+      mockRepository.findById.mockResolvedValue(makeEntry({ user: { id: SUPERVISOR } }));
+      await expect(service.closeOnBehalf('entry-1', reason, SUPERVISOR)).rejects.toThrow(ForbiddenException);
+    });
+  });
+
   describe('markReviewed', () => {
     it('solo aplica a tareas que cerró el sistema', async () => {
       mockRepository.findById.mockResolvedValue(makeEntry({ endAt: new Date() }));

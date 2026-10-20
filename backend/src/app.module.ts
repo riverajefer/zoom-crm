@@ -35,6 +35,7 @@ import { OrderStatusChangeRequestsModule } from './modules/order-status-change-r
 import { AdvisorChangeRequestsModule } from './modules/advisor-change-requests/advisor-change-requests.module';
 import { QuoteRestoreRequestsModule } from './modules/quote-restore-requests/quote-restore-requests.module';
 import { ExpenseOrderAuthRequestsModule } from './modules/expense-order-auth-requests/expense-order-auth-requests.module';
+import { ExpenseOrderEditRequestsModule } from './modules/expense-order-edit-requests/expense-order-edit-requests.module';
 import { AdvancePaymentApprovalsModule } from './modules/advance-payment-approvals/advance-payment-approvals.module';
 import { PaymentVerificationsModule } from './modules/payment-verifications/payment-verifications.module';
 import { GeneralClosingsModule } from './modules/general-closings/general-closings.module';
@@ -157,6 +158,7 @@ import { ClientErrorsModule } from './modules/client-errors/client-errors.module
     ExpenseOrdersModule,
     // Módulo de Solicitudes de Autorización de Órdenes de Gasto
     ExpenseOrderAuthRequestsModule,
+    ExpenseOrderEditRequestsModule,
     // Módulo de Aprobación de Anticipos
     AdvancePaymentApprovalsModule,
     PaymentVerificationsModule,

@@ -58,7 +58,7 @@ import {
   withholdingsFromRates,
   type WithholdingsValue,
 } from '../../../utils/withholdings';
-import { useExpenseOrders, useExpenseOrder, useExpenseTypes } from '../hooks';
+import { useExpenseOrders, useExpenseOrder, useExpenseTypes, usePaidExpenseOrderEdit } from '../hooks';
 import { useUsers } from '../../users/hooks/useUsers';
 import { useWorkOrder } from '../../work-orders/hooks';
 import type { WorkOrder } from '../../../types/work-order.types';
@@ -333,6 +333,13 @@ export const ExpenseOrderFormPage = () => {
   // ─── Edit: load existing OG ──────────────────────────────────────────────────
   const { expenseOrderQuery } = useExpenseOrder(id);
   const existingOG = expenseOrderQuery.data;
+
+  // Una OG pagada se corrige con autorización del admin. Sus ítems ya salieron
+  // de caja: no se quitan ni se les cambia método de pago, banco o comprobante
+  // (el backend lo vuelve a validar). Se pueden agregar ítems y corregir montos.
+  const paidEdit = usePaidExpenseOrderEdit(isEditing ? existingOG : undefined);
+  const lockedItemCount = isEditing && paidEdit.isPaid ? existingOG?.items.length ?? 0 : 0;
+  const isItemLocked = (index: number) => index < lockedItemCount;
 
   useEffect(() => {
     if (existingOG) {
@@ -687,17 +694,28 @@ export const ExpenseOrderFormPage = () => {
     );
   }
 
+  if (isEditing && paidEdit.isPaid && paidEdit.isLoading) {
+    return (
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight="300px">
+        <CircularProgress />
+      </Box>
+    );
+  }
+
   if (
     isEditing &&
     existingOG &&
     existingOG.status !== ExpenseOrderStatus.DRAFT &&
-    existingOG.status !== ExpenseOrderStatus.CREATED
+    existingOG.status !== ExpenseOrderStatus.CREATED &&
+    !paidEdit.canEditPaidNow
   ) {
     return (
       <Box>
         <PageHeader title="Editar OG" />
         <Alert severity="warning">
-          Esta OG no se puede editar en su estado actual ({existingOG.status}).
+          {paidEdit.isPaid
+            ? 'Esta OG ya está pagada. Para corregirla, pide autorización al administrador desde el detalle de la OG (botón «Solicitar edición»).'
+            : `Esta OG no se puede editar en su estado actual (${existingOG.status}).`}
         </Alert>
       </Box>
     );
@@ -820,7 +838,7 @@ export const ExpenseOrderFormPage = () => {
                 <Typography variant="subtitle1" fontWeight={600}>
                   Ítem {index + 1}
                 </Typography>
-                {items.length > 1 && (
+                {items.length > 1 && !isItemLocked(index) && (
                   <IconButton size="small" color="error" onClick={() => removeItem(index)}>
                     <DeleteIcon fontSize="small" />
                   </IconButton>
@@ -894,6 +912,8 @@ export const ExpenseOrderFormPage = () => {
                   select
                   label="Método de pago"
                   value={item.paymentMethod}
+                  disabled={isItemLocked(index)}
+                  helperText={isItemLocked(index) ? 'Ya se pagó: no se puede cambiar' : undefined}
                   onChange={(e) => {
                     const method = e.target.value as PaymentMethod;
                     updateItem(index, 'paymentMethod', method);
@@ -915,6 +935,7 @@ export const ExpenseOrderFormPage = () => {
                     <BankSelector
                       value={item.bankEntity ?? null}
                       onChange={(val) => updateItem(index, 'bankEntity', val)}
+                      disabled={isItemLocked(index)}
                     />
                   </Box>
                 )}
@@ -1073,12 +1094,14 @@ export const ExpenseOrderFormPage = () => {
                           color="success"
                           variant="outlined"
                           size="small"
-                          onDelete={() => clearReceiptForItem(index)}
+                          onDelete={isItemLocked(index) ? undefined : () => clearReceiptForItem(index)}
                           deleteIcon={<CloseIcon />}
                         />
-                        <Button size="small" variant="text" startIcon={<AttachFileIcon />} onClick={() => fileInputRefs.current[index]?.click()} sx={{ textTransform: 'none' }}>
-                          Cambiar imagen
-                        </Button>
+                        {!isItemLocked(index) && (
+                          <Button size="small" variant="text" startIcon={<AttachFileIcon />} onClick={() => fileInputRefs.current[index]?.click()} sx={{ textTransform: 'none' }}>
+                            Cambiar imagen
+                          </Button>
+                        )}
                       </Stack>
                     )}
                   </Grid>
@@ -1414,6 +1437,16 @@ export const ExpenseOrderFormPage = () => {
         </Stack>
       </Box>
 
+      {isEditing && paidEdit.isPaid && (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          <strong>Estás corrigiendo una OG que ya fue pagada.</strong> Si el total sube, la
+          diferencia queda pendiente en su cuenta por pagar y Caja la paga desde ahí; el total no
+          puede quedar por debajo de lo ya pagado. Los ítems pagados no se pueden quitar ni
+          cambiar de método de pago, banco o comprobante.
+          {!paidEdit.isAdmin && ' La autorización sirve para una sola edición.'}
+        </Alert>
+      )}
+
       <Box sx={{ maxWidth: '100%' }}>
         {/* Content */}
         <Box flex={1}>
@@ -1457,15 +1490,18 @@ export const ExpenseOrderFormPage = () => {
               </Button>
             ) : (
               <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
-                <Button
-                  variant="outlined"
-                  startIcon={<SaveIcon />}
-                  onClick={handleSaveDraft}
-                  disabled={isSubmitting || !canSubmit}
-                  sx={{ width: { xs: '100%', sm: 'auto' } }}
-                >
-                  Guardar Borrador
-                </Button>
+                {/* Una OG pagada no vuelve a borrador: guardar es la corrección. */}
+                {!paidEdit.isPaid && (
+                  <Button
+                    variant="outlined"
+                    startIcon={<SaveIcon />}
+                    onClick={handleSaveDraft}
+                    disabled={isSubmitting || !canSubmit}
+                    sx={{ width: { xs: '100%', sm: 'auto' } }}
+                  >
+                    Guardar Borrador
+                  </Button>
+                )}
                 <Button
                   variant="contained"
                   startIcon={<CheckCircleIcon />}

@@ -107,6 +107,11 @@ export class ExpenseOrdersRepository {
       },
       orderBy: { sortOrder: 'asc' as const },
     },
+    // La CP espejo: tras editar una OG pagada, el detalle muestra cuánto quedó
+    // pendiente y enlaza a la cuenta donde Caja lo paga.
+    accountPayable: {
+      select: { id: true, apNumber: true, status: true, totalAmount: true, paidAmount: true, balance: true },
+    },
   };
 
   async findAll(

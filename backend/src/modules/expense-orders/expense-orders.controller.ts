@@ -100,16 +100,20 @@ export class ExpenseOrdersController {
 
   @Patch(':id')
   @RequirePermissions('update_expense_orders')
-  @ApiOperation({ summary: 'Actualizar una OG (solo en DRAFT o CREATED)' })
+  @ApiOperation({
+    summary: 'Actualizar una OG (en DRAFT o CREATED; una OG pagada, con autorización del admin)',
+  })
   @ApiParam({ name: 'id', description: 'ID de la OG' })
   @ApiResponse({ status: 200, description: 'OG actualizada correctamente' })
   @ApiResponse({ status: 400, description: 'No se puede modificar en el estado actual' })
+  @ApiResponse({ status: 403, description: 'OG pagada sin autorización de edición vigente' })
   @ApiResponse({ status: 404, description: 'OG no encontrada' })
   update(
     @Param('id') id: string,
     @Body() dto: UpdateExpenseOrderDto,
+    @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.service.update(id, dto);
+    return this.service.update(id, dto, user);
   }
 
   @Patch(':id/status')

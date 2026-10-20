@@ -92,6 +92,8 @@ export const useExpenseOrder = (id?: string) => {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: expenseOrdersKeys.lists() });
       queryClient.invalidateQueries({ queryKey: expenseOrdersKeys.detail(variables.id) });
+      // Si era una OG pagada, la autorización de edición ya se consumió.
+      queryClient.invalidateQueries({ queryKey: ['og-edit-request-my-status', variables.id] });
       enqueueSnackbar('Orden de gasto actualizada correctamente', { variant: 'success' });
     },
     onError: (error: any) => {

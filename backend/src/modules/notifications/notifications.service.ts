@@ -180,6 +180,8 @@ export class NotificationsService {
       // Solicitudes sobre una OG / CP / cliente
       case 'ExpenseOrderAuthRequest':
         return target('EXPENSE_ORDER', (await this.prisma.expenseOrderAuthRequest.findUnique({ where: { id }, select: { expenseOrderId: true } }))?.expenseOrderId);
+      case 'ExpenseOrderEditRequest':
+        return target('EXPENSE_ORDER', (await this.prisma.expenseOrderEditRequest.findUnique({ where: { id }, select: { expenseOrderId: true } }))?.expenseOrderId);
       case 'AccountPayableAuthRequest':
         return target('ACCOUNT_PAYABLE', (await this.prisma.accountPayableAuthRequest.findUnique({ where: { id }, select: { accountPayableId: true } }))?.accountPayableId);
       case 'AccountPayablePaymentAuthRequest':

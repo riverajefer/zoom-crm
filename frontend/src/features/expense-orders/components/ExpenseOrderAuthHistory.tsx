@@ -22,6 +22,7 @@ import {
   Block as BlockIcon,
 } from '@mui/icons-material';
 import { expenseOrderAuthRequestsApi } from '../../../api/expense-order-auth-requests.api';
+import { expenseOrderEditRequestsApi } from '../../../api/expense-order-edit-requests.api';
 import type { ExpenseOrder } from '../../../types/expense-order.types';
 
 // ─── Types ─────────────────────────────────────────────────────────────────
@@ -177,9 +178,49 @@ export const ExpenseOrderAuthHistory: React.FC<
     enabled: !!expenseOrder.id,
   });
 
+  // Solicitudes para editar la OG después de pagada. Solo existen en OG pagadas.
+  const { data: editRequests } = useQuery({
+    queryKey: ['og-edit-requests', expenseOrder.id],
+    queryFn: () => expenseOrderEditRequestsApi.findByExpenseOrder(expenseOrder.id),
+    enabled: !!expenseOrder.id && expenseOrder.status === 'PAID',
+  });
+
   const events = React.useMemo<TimelineEvent[]>(() => {
     const list: TimelineEvent[] = [];
     const requests = data ?? [];
+
+    // 0. Solicitudes de edición de la OG ya pagada
+    for (const req of editRequests ?? []) {
+      const kind: EventKind =
+        req.status === 'APPROVED'
+          ? 'REQUEST_APPROVED'
+          : req.status === 'REJECTED' || req.status === 'EXPIRED'
+            ? 'REQUEST_REJECTED'
+            : 'REQUEST_PENDING';
+
+      let reviewLine: string | null = null;
+      if (req.status === 'EXPIRED') {
+        reviewLine = 'Venció sin respuesta';
+      } else if (req.status !== 'PENDING') {
+        const verb = req.status === 'APPROVED' ? 'Aprobada por' : 'Rechazada por';
+        const used = req.status === 'APPROVED' && req.consumedAt
+          ? ` · editada el ${formatDateTime(req.consumedAt)}`
+          : '';
+        reviewLine = `${verb}: ${userName(req.reviewedBy)}${
+          req.reviewedAt ? ` · ${formatDateTime(req.reviewedAt)}` : ''
+        }${used}${req.reviewNotes ? ` · ${req.reviewNotes}` : ''}`;
+      }
+
+      list.push({
+        key: `edit-${req.id}`,
+        timestamp: req.createdAt,
+        kind,
+        user: req.requestedBy,
+        title: 'Solicitó editar la OG después de pagada.',
+        detail: `Motivo: ${req.reason}`,
+        reviewLine,
+      });
+    }
 
     // 1. Solicitudes de autorización (creadas por no-admins)
     for (const req of requests) {
@@ -253,7 +294,7 @@ export const ExpenseOrderAuthHistory: React.FC<
       (a, b) =>
         new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
     );
-  }, [data, expenseOrder]);
+  }, [data, editRequests, expenseOrder]);
 
   const HEADER = (
     <CardHeader

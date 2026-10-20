@@ -53,7 +53,7 @@ interface ExpirableRequestType {
   orderMirrorField?: OrderMirrorField;
 }
 
-/** Constancia estándar: la usan los 12 modelos que siguen EditRequestStatus. */
+/** Constancia estándar: la usan los 13 modelos que siguen EditRequestStatus. */
 const defaultCloseFields = (note: string) => ({
   reviewedAt: new Date(),
   reviewNotes: note,
@@ -74,6 +74,11 @@ const EXPIRABLE_REQUEST_TYPES: ExpirableRequestType[] = [
     model: 'expenseOrderAuthRequest',
     label: 'autorización de OG',
     delegate: (p) => p.expenseOrderAuthRequest as any,
+  },
+  {
+    model: 'expenseOrderEditRequest',
+    label: 'edición de OG pagada',
+    delegate: (p) => p.expenseOrderEditRequest as any,
   },
   {
     model: 'advancePaymentApproval',

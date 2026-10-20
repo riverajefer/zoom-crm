@@ -77,10 +77,11 @@ describe('ExpenseOrdersController', () => {
   });
 
   describe('update', () => {
-    it('should call service.update with id and dto', async () => {
+    it('should call service.update with id, dto and the current user', async () => {
       const dto: UpdateExpenseOrderDto = { observations: 'test' };
-      await controller.update('order-1', dto);
-      expect(service.update).toHaveBeenCalledWith('order-1', dto);
+      const user = { id: 'u1' } as AuthenticatedUser;
+      await controller.update('order-1', dto, user);
+      expect(service.update).toHaveBeenCalledWith('order-1', dto, user);
     });
   });
 

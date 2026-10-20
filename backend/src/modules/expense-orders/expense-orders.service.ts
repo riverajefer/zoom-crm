@@ -7,7 +7,7 @@ import {
   NotFoundException,
   forwardRef,
 } from '@nestjs/common';
-import { ExpenseOrderStatus } from '../../generated/prisma';
+import { ExpenseOrderStatus, Prisma } from '../../generated/prisma';
 import { PrismaService } from '../../database/prisma.service';
 import { ConsecutivesService } from '../consecutives/consecutives.service';
 import { ExpenseOrdersRepository } from './expense-orders.repository';
@@ -23,6 +23,7 @@ import { AuthenticatedUser } from '../../common/interfaces/auth.interface';
 import { startOfDay, endOfDay } from '../../common/utils/date-range.util';
 import { ExpenseOrderAuthRequestsService } from '../expense-order-auth-requests/expense-order-auth-requests.service';
 import { AccountsPayableService } from '../accounts-payable/accounts-payable.service';
+import { ExpenseOrderEditRequestsService } from '../expense-order-edit-requests/expense-order-edit-requests.service';
 import {
   allocateExpenseTotalToItems,
   computeExpenseTotals,
@@ -47,6 +48,14 @@ const EDITABLE_STATUSES: ExpenseOrderStatus[] = [
 // Mismos estados que los editables: mientras nadie haya firmado la OG, borrarla
 // no destruye ningún hecho contable. Antes solo se permitía en DRAFT, lo que
 // obligaba a devolver la orden a borrador para poder eliminarla.
+/** Formato de pesos para los mensajes de error que ve el usuario. */
+const formatMoney = (value: unknown) =>
+  Number(String(value)).toLocaleString('es-CO', {
+    style: 'currency',
+    currency: 'COP',
+    maximumFractionDigits: 0,
+  });
+
 const DELETABLE_STATUSES: ExpenseOrderStatus[] = [
   ExpenseOrderStatus.DRAFT,
   ExpenseOrderStatus.CREATED,
@@ -61,6 +70,7 @@ export class ExpenseOrdersService {
     @Inject(forwardRef(() => ExpenseOrderAuthRequestsService))
     private readonly authRequestsService: ExpenseOrderAuthRequestsService,
     private readonly accountsPayableService: AccountsPayableService,
+    private readonly editRequestsService: ExpenseOrderEditRequestsService,
   ) {}
 
   /**
@@ -260,17 +270,182 @@ export class ExpenseOrdersService {
     return expenseOrder;
   }
 
-  async update(id: string, dto: UpdateExpenseOrderDto) {
+  async update(id: string, dto: UpdateExpenseOrderDto, currentUser?: AuthenticatedUser) {
     const expenseOrder = await this.repository.findById(id);
     if (!expenseOrder) {
       throw new NotFoundException(`OG con id ${id} no encontrada`);
     }
 
-    if (!EDITABLE_STATUSES.includes(expenseOrder.status as ExpenseOrderStatus)) {
+    const isPaidEdit = expenseOrder.status === ExpenseOrderStatus.PAID;
+
+    if (!isPaidEdit && !EDITABLE_STATUSES.includes(expenseOrder.status as ExpenseOrderStatus)) {
       throw new BadRequestException(
-        `No se puede modificar una OG en estado ${expenseOrder.status}. Solo se permite editar en estados DRAFT o CREATED.`,
+        `No se puede modificar una OG en estado ${expenseOrder.status}. Solo se permite editar en estados DRAFT o CREATED, o una OG pagada con autorización del admin.`,
       );
     }
+
+    // Una OG pagada se edita sin reabrirse: los egresos de caja que ya salieron
+    // se quedan como están y, si el total sube, la diferencia queda como saldo
+    // de su CP para que Caja la pague por ahí.
+    let editApprovalId: string | null = null;
+    if (isPaidEdit) {
+      editApprovalId = await this.assertCanEditPaid(id, currentUser);
+      this.assertPaidItemsKeepPayment(expenseOrder.items, dto.items);
+      await this.assertTotalCoversPaid(expenseOrder, dto);
+
+      // Se consume antes de escribir: dos guardados simultáneos con la misma
+      // aprobación no salen los dos. Si la escritura falla, se devuelve.
+      if (editApprovalId) {
+        const consumed = await this.editRequestsService.consumeApproval(editApprovalId);
+        if (!consumed) {
+          throw new ConflictException(
+            'La autorización de edición ya se usó. Solicita una nueva si necesitas corregir otra cosa.',
+          );
+        }
+      }
+    }
+
+    try {
+      return await this.applyUpdate(id, expenseOrder, dto, isPaidEdit, currentUser?.id);
+    } catch (error) {
+      if (editApprovalId) {
+        await this.prisma.expenseOrderEditRequest.update({
+          where: { id: editApprovalId },
+          data: { consumedAt: null },
+        });
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * ¿Quién puede editar una OG pagada? El admin, directamente. Cualquier otro,
+   * solo con una solicitud de edición aprobada, vigente y sin usar. Devuelve el
+   * id de esa solicitud (o null para el admin).
+   */
+  private async assertCanEditPaid(id: string, currentUser?: AuthenticatedUser): Promise<string | null> {
+    if (!currentUser) {
+      throw new ForbiddenException('Editar una OG pagada requiere autorización del administrador.');
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: currentUser.id },
+      include: { role: true },
+    });
+    if (user?.role?.name === 'admin') return null;
+
+    const approval = await this.editRequestsService.findActiveApproval(id, currentUser.id);
+    if (!approval) {
+      throw new ForbiddenException(
+        'Esta OG ya está pagada. Para editarla, solicita autorización al administrador.',
+      );
+    }
+    return approval.id;
+  }
+
+  /**
+   * Los ítems de una OG pagada ya tienen su egreso de caja: no se pueden quitar
+   * ni cambiar su método de pago, banco o comprobante. Sí se pueden corregir
+   * cantidad, precio y descripción, agregar ítems nuevos y subir un comprobante
+   * que faltaba. Los ítems llegan en el mismo orden en que se guardaron.
+   */
+  private assertPaidItemsKeepPayment(
+    existing: Array<{
+      paymentMethod: string;
+      bankEntity: string | null;
+      receiptFileId: string | null;
+    }>,
+    incoming: UpdateExpenseOrderDto['items'],
+  ) {
+    if (!incoming || incoming.length === 0) return;
+
+    if (incoming.length < existing.length) {
+      throw new BadRequestException(
+        'En una OG pagada no se pueden quitar ítems: cada uno ya salió de caja.',
+      );
+    }
+
+    existing.forEach((item, index) => {
+      const next = incoming[index];
+      const samePayment =
+        (next.paymentMethod ?? 'CASH') === item.paymentMethod &&
+        (next.bankEntity ?? null) === (item.bankEntity ?? null);
+      const receiptKept =
+        !item.receiptFileId || (next.receiptFileId ?? null) === item.receiptFileId;
+
+      if (!samePayment || !receiptKept) {
+        throw new BadRequestException(
+          `El ítem ${index + 1} ya se pagó: no se puede cambiar su método de pago, banco ni comprobante.`,
+        );
+      }
+    });
+  }
+
+  /**
+   * El nuevo total no puede quedar por debajo de lo que ya se le pagó al
+   * proveedor: eso sería un cobro de más que hay que recuperar por fuera, no
+   * una corrección de la OG.
+   */
+  private async assertTotalCoversPaid(
+    expenseOrder: NonNullable<Awaited<ReturnType<ExpenseOrdersRepository['findById']>>>,
+    dto: UpdateExpenseOrderDto,
+  ) {
+    const subtotal =
+      dto.items && dto.items.length > 0
+        ? dto.items.reduce((sum, item) => sum + (item.quantity ?? 1) * (item.unitPrice ?? 0), 0)
+        : expenseOrder.items.reduce((sum: number, item: { total: unknown }) => sum + Number(item.total), 0);
+
+    const newTotal = this.totalToPay(subtotal, {
+      applyIva: dto.applyIva ?? expenseOrder.applyIva,
+      ivaRate: dto.ivaRate ?? expenseOrder.ivaRate,
+      retefuenteRate: dto.retefuenteRate ?? expenseOrder.retefuenteRate,
+      reteICARate: dto.reteICARate ?? expenseOrder.reteICARate,
+      reteIVARate: dto.reteIVARate ?? expenseOrder.reteIVARate,
+    });
+
+    const paid = await this.amountPaid(expenseOrder.id);
+
+    // Un peso de tolerancia: los totales con retenciones traen centavos y los
+    // egresos se repartieron por ítem desde ese mismo total.
+    if (new Prisma.Decimal(newTotal).add(1).lessThan(paid)) {
+      throw new BadRequestException(
+        `El nuevo total (${formatMoney(newTotal)}) queda por debajo de lo que ya se pagó (${formatMoney(paid)}). ` +
+          'Una OG pagada solo se puede corregir hacia arriba o al mismo valor.',
+      );
+    }
+  }
+
+  /**
+   * Lo que ya salió por esta OG: los abonos vivos de su CP más los egresos de
+   * la OG que la CP todavía no refleja. Sin CP, solo los egresos de la OG.
+   */
+  private async amountPaid(expenseOrderId: string): Promise<Prisma.Decimal> {
+    const ap = await this.accountsPayableService.findByExpenseOrderId(expenseOrderId);
+    if (ap) {
+      const notReflected = await this.accountsPayableService.paidThroughExpenseOrder(ap.id);
+      return new Prisma.Decimal(ap.paidAmount).add(notReflected);
+    }
+
+    const { _sum } = await this.prisma.cashMovement.aggregate({
+      where: {
+        referenceType: 'EXPENSE_ORDER',
+        referenceId: expenseOrderId,
+        movementType: 'EXPENSE',
+        isVoided: false,
+      },
+      _sum: { amount: true },
+    });
+    return new Prisma.Decimal(_sum.amount ?? 0);
+  }
+
+  private async applyUpdate(
+    id: string,
+    expenseOrder: NonNullable<Awaited<ReturnType<ExpenseOrdersRepository['findById']>>>,
+    dto: UpdateExpenseOrderDto,
+    isPaidEdit: boolean,
+    // Siempre presente cuando `isPaidEdit`: `assertCanEditPaid` exige usuario.
+    editedById?: string,
+  ) {
 
     // Validate new workOrderId if changed
     if (dto.workOrderId) {
@@ -323,7 +498,29 @@ export class ExpenseOrdersService {
     const updated = await this.repository.findById(id);
 
     const ap = await this.accountsPayableService.findByExpenseOrderId(id);
-    if (ap && !['PAID', 'CANCELLED'].includes(ap.status)) {
+
+    // OG pagada sin CP espejo (las más viejas): se crea ahora con el nuevo total
+    // y se salda contra los egresos de la OG, así la diferencia queda pagable.
+    if (!ap && isPaidEdit) {
+      const subtotal = (updated!.items as Array<{ total: unknown }>).reduce(
+        (sum, item) => sum + Number(item.total),
+        0,
+      );
+      const created = await this.accountsPayableService.createFromExpenseOrder(
+        id,
+        `Orden de Gasto ${updated!.ogNumber}`,
+        this.totalToPay(subtotal, updated as Parameters<typeof this.totalToPay>[1]),
+        editedById!,
+        subtotal,
+      );
+      await this.accountsPayableService.settleFromExpenseOrderMovements(id, editedById!);
+      await this.accountsPayableService.refreshFromLivePayments(created.id);
+      return this.repository.findById(id);
+    }
+
+    // Una CP saldada no se toca en la edición normal; en la de una OG pagada sí,
+    // porque es justo donde tiene que quedar la diferencia.
+    if (ap && ap.status !== 'CANCELLED' && (isPaidEdit || ap.status !== 'PAID')) {
       const subtotal = (updated!.items as Array<{ total: unknown }>).reduce(
         (sum, item) => sum + Number(item.total),
         0,
@@ -351,6 +548,14 @@ export class ExpenseOrdersService {
       if (dto.expenseTypeId) syncData.expenseTypeId = dto.expenseTypeId;
       if (dto.expenseSubcategoryId) syncData.expenseSubcategoryId = dto.expenseSubcategoryId;
       await this.accountsPayableService.syncFromExpenseOrder(ap.id, syncData);
+
+      if (isPaidEdit) {
+        // Refleja en la CP los egresos de la OG que todavía no estuvieran (CP
+        // históricas sin conciliar) y recalcula estado y saldo: si el total
+        // subió, la CP pasa de PAID a deber la diferencia.
+        await this.accountsPayableService.settleFromExpenseOrderMovements(id, editedById!);
+        await this.accountsPayableService.refreshFromLivePayments(ap.id);
+      }
     }
 
     return updated;

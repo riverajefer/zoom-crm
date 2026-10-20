@@ -402,6 +402,14 @@ export const createMockPrismaService = () => ({
     create: jest.fn(),
     update: jest.fn(),
   },
+  expenseOrderEditRequest: {
+    findUnique: jest.fn(),
+    findFirst: jest.fn(),
+    findMany: jest.fn(),
+    create: jest.fn(),
+    update: jest.fn(),
+    updateMany: jest.fn(),
+  },
   advancePaymentApproval: {
     findUnique: jest.fn(),
     findFirst: jest.fn(),

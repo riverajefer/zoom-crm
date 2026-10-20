@@ -75,7 +75,8 @@ import { ExpenseOrderAuthHistory } from '../components/ExpenseOrderAuthHistory';
 import { expenseOrderAuthRequestsApi } from '../../../api/expense-order-auth-requests.api';
 import { ExpenseOrderPdfButton } from '../components/ExpenseOrderPdfButton';
 import { CommentSection } from '../../comments';
-import { useExpenseOrder, expenseOrdersKeys } from '../hooks';
+import { useExpenseOrder, expenseOrdersKeys, usePaidExpenseOrderEdit } from '../hooks';
+import { ExpenseOrderEditRequestDialog } from '../components/ExpenseOrderEditRequestDialog';
 import { expenseOrdersApi } from '../../../api/expense-orders.api';
 import { useSuppliers } from '../../suppliers/hooks/useSuppliers';
 import { useProductionAreas } from '../../production-areas/hooks/useProductionAreas';
@@ -193,6 +194,7 @@ export const ExpenseOrderDetailPage = () => {
   const [statusDialogOpen, setStatusDialogOpen] = useState(false);
   const [newStatus, setNewStatus] = useState<ExpenseOrderStatus | ''>('');
   const [authRequestDialogOpen, setAuthRequestDialogOpen] = useState(false);
+  const [editRequestDialogOpen, setEditRequestDialogOpen] = useState(false);
 
   const { data: myOgAuthRequests } = useQuery({
     queryKey: ['og-auth-requests-mine', id],
@@ -243,6 +245,7 @@ export const ExpenseOrderDetailPage = () => {
   const canDelete = hasPermission(PERMISSIONS.DELETE_EXPENSE_ORDERS);
 
   const og = expenseOrderQuery.data;
+  const paidEdit = usePaidExpenseOrderEdit(og);
 
   // Mismos estados que acepta el backend: mientras nadie haya firmado la OG.
   // Debe coincidir con `DELETABLE_STATUSES` del servicio y de la lista.
@@ -734,6 +737,35 @@ export const ExpenseOrderDetailPage = () => {
         }
 
         if (og.status === ExpenseOrderStatus.PAID) {
+          // Una OG pagada que se editó y subió de valor: la diferencia quedó en
+          // su CP, que es por donde Caja la paga.
+          const ap = og.accountPayable;
+          const pendingDifference =
+            ap && ap.status !== 'CANCELLED' ? Number(ap.balance) : 0;
+          if (ap && pendingDifference > 0) {
+            return (
+              <Alert
+                severity="warning"
+                icon={<PaymentsIcon />}
+                sx={{ mt: 2 }}
+                action={
+                  <Button
+                    component={RouterLink}
+                    to={ROUTES.ACCOUNTS_PAYABLE_DETAIL.replace(':id', ap.id)}
+                    color="inherit"
+                    size="small"
+                  >
+                    Ver {ap.apNumber}
+                  </Button>
+                }
+              >
+                <AlertTitle>Pagada — con diferencia pendiente</AlertTitle>
+                Esta OG se corrigió después de pagarse y su total subió. Quedan{' '}
+                <strong>{formatCurrencyCOP(pendingDifference)}</strong> por pagar en la cuenta por
+                pagar <strong>{ap.apNumber}</strong>; Caja los paga desde ahí.
+              </Alert>
+            );
+          }
           return (
             <Alert severity="success" icon={<TaskAltIcon />} sx={{ mt: 2 }}>
               <AlertTitle>Pagada</AlertTitle>
@@ -746,14 +778,46 @@ export const ExpenseOrderDetailPage = () => {
         return null;
       })()}
 
+      {/* Edición de una OG pagada: estado de la solicitud del usuario */}
+      {paidEdit.isPaid && !paidEdit.isAdmin && paidEdit.pending && (
+        <Alert severity="info" icon={<MarkEmailReadIcon />} sx={{ mt: 2 }}>
+          <AlertTitle>Edición solicitada — esperando al administrador</AlertTitle>
+          Pediste editar esta OG: «{paidEdit.pending.reason}». Te avisaremos cuando la responda.
+        </Alert>
+      )}
+      {paidEdit.isPaid && !paidEdit.isAdmin && paidEdit.activeApproval && (
+        <Alert severity="success" icon={<EditIcon />} sx={{ mt: 2 }}>
+          <AlertTitle>Edición aprobada</AlertTitle>
+          Puedes editar esta OG una vez, hasta el{' '}
+          <strong>{formatDate(paidEdit.activeApproval.expiresAt)}</strong>. Usa el botón{' '}
+          <strong>Editar</strong>.
+        </Alert>
+      )}
+
       {/* Toolbar de Acciones */}
       <ActionToolbar sx={{ mt: 2, mb: 3 }}>
-          {canUpdate && isEditable && (
+          {canUpdate && (isEditable || (paidEdit.canEditPaidNow && !isParentOrderAnulado)) && (
             <ToolbarButton
               icon={<EditIcon />}
               label="Editar"
               onClick={() => navigate(ROUTES.EXPENSE_ORDERS_EDIT.replace(':id', og.id))}
-              tooltip="Editar Costo Directo"
+              tooltip={paidEdit.isPaid ? 'Corregir la OG pagada' : 'Editar Costo Directo'}
+            />
+          )}
+
+          {paidEdit.isPaid && canUpdate && !paidEdit.canEditPaidNow && !isParentOrderAnulado && (
+            <ToolbarButton
+              icon={<EditIcon />}
+              label={paidEdit.pending ? 'Edición' : 'Solicitar'}
+              secondaryLabel={paidEdit.pending ? 'Solicitada' : 'Edición'}
+              onClick={() => setEditRequestDialogOpen(true)}
+              color={theme.palette.warning.main}
+              tooltip={
+                paidEdit.pending
+                  ? 'Ya pediste editar esta OG; espera la respuesta del administrador'
+                  : 'Pedir al administrador autorización para corregir esta OG pagada'
+              }
+              disabled={!!paidEdit.pending || paidEdit.isLoading}
             />
           )}
 
@@ -1704,6 +1768,12 @@ export const ExpenseOrderDetailPage = () => {
       <ExpenseOrderAuthRequestDialog
         open={authRequestDialogOpen}
         onClose={() => setAuthRequestDialogOpen(false)}
+        expenseOrder={og}
+      />
+
+      <ExpenseOrderEditRequestDialog
+        open={editRequestDialogOpen}
+        onClose={() => setEditRequestDialogOpen(false)}
         expenseOrder={og}
       />
 

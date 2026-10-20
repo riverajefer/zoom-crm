@@ -28,6 +28,7 @@ import PendingActionsIcon from '@mui/icons-material/PendingActions';
 import EditNoteIcon from '@mui/icons-material/EditNote';
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
+import EditIcon from '@mui/icons-material/EditNote';
 import PaymentIcon from '@mui/icons-material/Payment';
 import BadgeIcon from '@mui/icons-material/Badge';
 import ManageAccountsIcon from '@mui/icons-material/ManageAccounts';
@@ -79,6 +80,8 @@ import type { AccountPayablePaymentReversalRequest } from '../../../types/accoun
 import { AP_REVERSAL_STATUS_CONFIG } from '../../../types/accounts-payable-payment-reversal.types';
 import UndoIcon from '@mui/icons-material/Undo';
 import { paymentMethodLabel } from '../../../utils/paymentMethods';
+import { ExpenseOrderEditRequestsPanel } from '../../expense-orders/components/ExpenseOrderEditRequestsPanel';
+import { useExpenseOrderEditRequestsInbox } from '../../expense-orders/hooks/useExpenseOrderEditRequestsInbox';
 
 // ============================================================
 // CONSTANTES
@@ -403,6 +406,7 @@ export const StatusChangeRequestsPage: React.FC = () => {
   const statusRequests = viewMode === 'history' ? statusRequestsData?.filter(r => r.status !== 'PENDING') : statusRequestsData;
   const editRequests = viewMode === 'history' ? editRequestsData?.filter(r => r.status !== 'PENDING') : editRequestsData;
   const ogAuthRequests = viewMode === 'history' ? ogAuthRequestsData?.filter(r => r.status !== 'PENDING') : ogAuthRequestsData;
+  const ogEditInbox = useExpenseOrderEditRequestsInbox(viewMode, canApproveExpenseOrders);
   const advancePaymentRequests = viewMode === 'history' ? advancePaymentRequestsData?.filter(r => r.status !== 'PENDING') : advancePaymentRequestsData;
   const discountRequests = viewMode === 'history' ? discountRequestsData?.filter(r => r.status !== 'PENDING') : discountRequestsData;
   const paymentEditRequests = viewMode === 'history' ? paymentEditRequestsData?.filter(r => r.status !== 'PENDING') : paymentEditRequestsData;
@@ -2921,6 +2925,7 @@ export const StatusChangeRequestsPage: React.FC = () => {
   const statusCount = statusRequests?.length || 0;
   const editCount = editRequests?.length || 0;
   const ogAuthCount = ogAuthRequests?.length || 0;
+  const ogEditCount = ogEditInbox.rows.length;
   const advanceCount = advancePaymentRequests?.length || 0;
   const discountCount = discountRequests?.length || 0;
   const paymentEditCount = paymentEditRequests?.length || 0;
@@ -3079,6 +3084,13 @@ export const StatusChangeRequestsPage: React.FC = () => {
                 {ogAuthCount > 0 && <Badge badgeContent={ogAuthCount} color="warning" sx={{ mr: 1 }} />}
               </ListItemButton>
             )}
+            {canApproveExpenseOrders && (
+              <ListItemButton selected={tabValue === 'og-edit'} onClick={() => setTabValue('og-edit')} sx={{ borderRadius: 1, mx: 1 }}>
+                <ListItemIcon sx={{ minWidth: 36 }}><EditIcon fontSize="small" /></ListItemIcon>
+                <ListItemText primary="Edición OG pagada" primaryTypographyProps={{ variant: 'body2' }} />
+                {ogEditCount > 0 && <Badge badgeContent={ogEditCount} color="warning" sx={{ mr: 1 }} />}
+              </ListItemButton>
+            )}
             {canApproveAccountsPayable && (
               <ListItemButton selected={tabValue === 'ap'} onClick={() => setTabValue('ap')} sx={{ borderRadius: 1, mx: 1 }}>
                 <ListItemIcon sx={{ minWidth: 36 }}><PaymentIcon fontSize="small" /></ListItemIcon>
@@ -3134,6 +3146,9 @@ export const StatusChangeRequestsPage: React.FC = () => {
           )}
           {tabValue === 'edit' && canApproveOrders && (
             <DataTable rows={editRequests || []} columns={editColumns} loading={editLoading} getRowId={(row) => row.id} density="compact" pageSize={20} pageSizeOptions={[20, 50, 100]} />
+          )}
+          {tabValue === 'og-edit' && canApproveExpenseOrders && (
+            <ExpenseOrderEditRequestsPanel viewMode={viewMode} canApprove={canApproveExpenseOrders} />
           )}
           {tabValue === 'og' && canApproveExpenseOrders && (
             <DataTable rows={ogAuthRequests || []} columns={ogAuthColumns} loading={ogAuthLoading} getRowId={(row) => row.id} density="compact" pageSize={20} pageSizeOptions={[20, 50, 100]} />

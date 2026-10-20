@@ -808,6 +808,50 @@ describe('AccountsPayableService', () => {
       });
     });
 
+    describe('refreshFromLivePayments', () => {
+      // CP de una OG pagada por $100.000 a la que se le agregó el IVA: el total
+      // subió a $119.000 y los abonos vivos siguen sumando $100.000.
+      const apPagada = { id: 'ap-1', totalAmount: new Prisma.Decimal(119000), status: 'PAID' };
+
+      it('una CP saldada cuyo total subió queda debiendo la diferencia', async () => {
+        prisma.accountPayable.findUnique.mockResolvedValue(apPagada as any);
+        prisma.accountPayablePayment.findMany.mockResolvedValue([
+          { amount: new Prisma.Decimal(100000) },
+        ] as any);
+
+        await service.refreshFromLivePayments('ap-1');
+
+        const { data } = prisma.accountPayable.update.mock.calls[0][0] as any;
+        expect(data.status).toBe('PARTIAL');
+        expect(data.paidAmount.toNumber()).toBe(100000);
+        expect(data.balance.toNumber()).toBe(19000);
+      });
+
+      it('si los abonos cubren el total, queda PAID', async () => {
+        prisma.accountPayable.findUnique.mockResolvedValue({
+          ...apPagada,
+          totalAmount: new Prisma.Decimal(100000),
+        } as any);
+        prisma.accountPayablePayment.findMany.mockResolvedValue([
+          { amount: new Prisma.Decimal(100000) },
+        ] as any);
+
+        await service.refreshFromLivePayments('ap-1');
+
+        const { data } = prisma.accountPayable.update.mock.calls[0][0] as any;
+        expect(data.status).toBe('PAID');
+        expect(data.balance.toNumber()).toBe(0);
+      });
+
+      it('no toca una CP anulada', async () => {
+        prisma.accountPayable.findUnique.mockResolvedValue({ ...apPagada, status: 'CANCELLED' } as any);
+
+        await service.refreshFromLivePayments('ap-1');
+
+        expect(prisma.accountPayable.update).not.toHaveBeenCalled();
+      });
+    });
+
     describe('settleFromExpenseOrderMovements', () => {
       const movStub = (extra: Record<string, unknown> = {}) => ({
         id: 'mov-1',

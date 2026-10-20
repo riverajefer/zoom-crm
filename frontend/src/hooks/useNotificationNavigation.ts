@@ -43,6 +43,7 @@ const RESOLVABLE_TYPES = new Set([
   'PayrollDeduction',
   'Payment',
   'ExpenseOrderAuthRequest',
+  'ExpenseOrderEditRequest',
   'AccountPayableAuthRequest',
   'AccountPayablePaymentAuthRequest',
   'AccountPayablePaymentReversalRequest',

@@ -499,6 +499,45 @@ export class AccountsPayableService {
     );
   }
 
+  /**
+   * Recalcula pagado, saldo y estado de la CP desde sus pagos vivos.
+   *
+   * Lo usa la edición de una OG ya pagada: si el total sube (el IVA que se
+   * olvidó, por ejemplo), la CP espejo deja de estar PAID y queda debiendo la
+   * diferencia, que Caja paga por el flujo normal de la CP. Una CP anulada no se
+   * toca.
+   */
+  async refreshFromLivePayments(id: string): Promise<void> {
+    const ap = await this.prisma.accountPayable.findUnique({
+      where: { id },
+      select: { id: true, totalAmount: true, status: true },
+    });
+    if (!ap || ap.status === AccountPayableStatus.CANCELLED) return;
+
+    const vivos = await this.prisma.accountPayablePayment.findMany({
+      where: { accountPayableId: id, isReversed: false },
+      select: { amount: true },
+    });
+    const paidAmount = vivos.reduce((sum, p) => sum.add(p.amount), new Prisma.Decimal(0));
+    const balance = new Prisma.Decimal(ap.totalAmount).sub(paidAmount);
+
+    let status: AccountPayableStatus;
+    if (balance.lessThanOrEqualTo(0)) {
+      status = AccountPayableStatus.PAID;
+    } else if (ap.status === AccountPayableStatus.PAID) {
+      // Venía saldada: lo que queda es una diferencia nueva, que se paga como
+      // un abono más. El barrido diario la marca vencida si ya pasó su fecha.
+      status = paidAmount.greaterThan(0) ? AccountPayableStatus.PARTIAL : AccountPayableStatus.PENDING;
+    } else {
+      status = ap.status;
+    }
+
+    await this.prisma.accountPayable.update({
+      where: { id },
+      data: { paidAmount, balance, status },
+    });
+  }
+
   async registerPayment(id: string, dto: RegisterPaymentDto, registeredById: string) {
     const ap = await this.findOne(id);
 

@@ -14,6 +14,7 @@ const ROUTE_MAP: Record<string, (entityId: string) => string> = {
   CLIENT_OWNERSHIP_AUTH: (id) => `/orders/${id}`,
   REFUND_REQUEST: (id) => `/orders/${id}`,
   EXPENSE_ORDER_AUTH: (id) => `/expense-orders/${id}`,
+  EXPENSE_ORDER_EDIT: (id) => `/expense-orders/${id}`,
   AP_AUTH: (id) => `/accounts-payable/${id}`,
   AP_PAYMENT_AUTH: (id) => `/accounts-payable/${id}`,
   CASH_MOVEMENT_VOID: (id) => `/cash-register/history/${id}`,

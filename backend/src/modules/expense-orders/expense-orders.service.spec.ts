@@ -5,9 +5,15 @@ import { ConsecutivesService } from '../consecutives/consecutives.service';
 import { PrismaService } from '../../database/prisma.service';
 import { ExpenseOrderAuthRequestsService } from '../expense-order-auth-requests/expense-order-auth-requests.service';
 import { ExpenseOrderStatus } from '../../generated/prisma';
-import { NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import {
+  NotFoundException,
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { CreateExpenseOrderDto, UpdateExpenseOrderDto } from './dto';
 import { AccountsPayableService } from '../accounts-payable/accounts-payable.service';
+import { ExpenseOrderEditRequestsService } from '../expense-order-edit-requests/expense-order-edit-requests.service';
 
 // Solo Zoom: los documentos nacen en la sede activa del request, que en un
 // test unitario no existe (docs/PLAN_SEDES.md §2).
@@ -24,6 +30,7 @@ describe('ExpenseOrdersService', () => {
   let prisma: jest.Mocked<PrismaService>;
   let authRequestsService: jest.Mocked<ExpenseOrderAuthRequestsService>;
   let accountsPayableService: jest.Mocked<AccountsPayableService>;
+  let editRequestsService: jest.Mocked<ExpenseOrderEditRequestsService>;
 
   beforeEach(async () => {
     repository = {
@@ -70,6 +77,10 @@ describe('ExpenseOrdersService', () => {
       },
       cashMovement: {
         create: jest.fn(),
+        aggregate: jest.fn().mockResolvedValue({ _sum: { amount: null } }),
+      },
+      expenseOrderEditRequest: {
+        update: jest.fn(),
       },
       // `remove` borra la CxP y la OG en una transacción; el mock ejecuta el
       // callback contra el mismo cliente simulado.
@@ -88,6 +99,13 @@ describe('ExpenseOrdersService', () => {
       findByExpenseOrderId: jest.fn(),
       syncFromExpenseOrder: jest.fn(),
       settleFromExpenseOrderMovements: jest.fn().mockResolvedValue(undefined),
+      paidThroughExpenseOrder: jest.fn().mockResolvedValue(0),
+      refreshFromLivePayments: jest.fn().mockResolvedValue(undefined),
+    } as any;
+
+    editRequestsService = {
+      findActiveApproval: jest.fn().mockResolvedValue(null),
+      consumeApproval: jest.fn().mockResolvedValue(true),
     } as any;
 
     const module: TestingModule = await Test.createTestingModule({
@@ -98,6 +116,7 @@ describe('ExpenseOrdersService', () => {
         { provide: PrismaService, useValue: prisma },
         { provide: ExpenseOrderAuthRequestsService, useValue: authRequestsService },
         { provide: AccountsPayableService, useValue: accountsPayableService },
+        { provide: ExpenseOrderEditRequestsService, useValue: editRequestsService },
       ],
     }).compile();
 
@@ -469,12 +488,184 @@ describe('ExpenseOrdersService', () => {
     it('should throw BadRequestException if expense order is not editable', async () => {
       (repository.findById as jest.Mock).mockResolvedValue({
         id: 'order-1',
-        status: ExpenseOrderStatus.PAID,
+        status: ExpenseOrderStatus.ADMIN_AUTHORIZED,
       } as any);
 
       await expect(service.update('order-1', updateDto)).rejects.toThrow(
         BadRequestException,
       );
+    });
+  });
+
+  describe('update de una OG pagada', () => {
+    // OG de $100.000 sin IVA, pagada completa por Caja: su CP quedó saldada.
+    const paidOg = () => ({
+      id: 'og-1',
+      ogNumber: 'OG-2026-0700',
+      status: ExpenseOrderStatus.PAID,
+      applyIva: false,
+      ivaRate: 0.19,
+      retefuenteRate: 0,
+      reteICARate: 0,
+      reteIVARate: 0,
+      createdBy: { id: 'creator-1' },
+      expenseType: { id: 'type-1' },
+      expenseSubcategory: { id: 'sub-1' },
+      items: [
+        {
+          total: 100000,
+          quantity: 1,
+          unitPrice: 100000,
+          paymentMethod: 'CASH',
+          bankEntity: null,
+          receiptFileId: 'receipt-1',
+        },
+      ],
+    });
+    const paidAp = { id: 'ap-1', status: 'PAID', paidAmount: 100000 };
+    const admin = { id: 'admin-1' } as any;
+    const advisor = { id: 'advisor-1' } as any;
+
+    const asRole = (roleName: string) =>
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue({ role: { name: roleName } });
+
+    beforeEach(() => {
+      (repository.findById as jest.Mock).mockImplementation(async () => paidOg());
+      (accountsPayableService.findByExpenseOrderId as jest.Mock).mockResolvedValue(paidAp);
+    });
+
+    it('sin usuario o sin aprobación responde 403 y no escribe nada', async () => {
+      await expect(service.update('og-1', { applyIva: true })).rejects.toThrow(ForbiddenException);
+
+      asRole('asesor');
+      await expect(service.update('og-1', { applyIva: true }, advisor)).rejects.toThrow(
+        ForbiddenException,
+      );
+      expect(repository.update).not.toHaveBeenCalled();
+    });
+
+    it('el admin agrega el IVA: la CP deja de estar saldada y debe la diferencia', async () => {
+      asRole('admin');
+
+      await service.update('og-1', { applyIva: true, ivaRate: 0.19 }, admin);
+
+      expect(repository.update).toHaveBeenCalledWith('og-1', { applyIva: true, ivaRate: 0.19 });
+      expect(accountsPayableService.syncFromExpenseOrder).toHaveBeenCalledWith(
+        'ap-1',
+        expect.objectContaining({ subtotalAmount: 100000 }),
+      );
+      expect(accountsPayableService.settleFromExpenseOrderMovements).toHaveBeenCalledWith(
+        'og-1',
+        'admin-1',
+      );
+      expect(accountsPayableService.refreshFromLivePayments).toHaveBeenCalledWith('ap-1');
+      expect(editRequestsService.consumeApproval).not.toHaveBeenCalled();
+    });
+
+    it('no deja bajar el total por debajo de lo ya pagado', async () => {
+      asRole('admin');
+
+      await expect(
+        service.update(
+          'og-1',
+          {
+            items: [
+              { quantity: 1, unitPrice: 80000, paymentMethod: 'CASH' as any, receiptFileId: 'receipt-1' },
+            ],
+          },
+          admin,
+        ),
+      ).rejects.toThrow(/por debajo de lo que ya se pagó/);
+      expect(repository.replaceItems).not.toHaveBeenCalled();
+    });
+
+    it('no deja cambiar el método de pago ni quitar ítems ya pagados', async () => {
+      asRole('admin');
+
+      await expect(
+        service.update(
+          'og-1',
+          {
+            items: [
+              { quantity: 1, unitPrice: 100000, paymentMethod: 'TRANSFER' as any, receiptFileId: 'receipt-1' },
+            ],
+          },
+          admin,
+        ),
+      ).rejects.toThrow(/ya se pagó/);
+
+      (repository.findById as jest.Mock).mockImplementation(async () => ({
+        ...paidOg(),
+        items: [...paidOg().items, { ...paidOg().items[0], receiptFileId: null }],
+      }));
+      await expect(
+        service.update(
+          'og-1',
+          {
+            items: [
+              { quantity: 2, unitPrice: 100000, paymentMethod: 'CASH' as any, receiptFileId: 'receipt-1' },
+            ],
+          },
+          admin,
+        ),
+      ).rejects.toThrow(/no se pueden quitar ítems/);
+    });
+
+    it('con aprobación vigente la consume y deja editar', async () => {
+      asRole('asesor');
+      (editRequestsService.findActiveApproval as jest.Mock).mockResolvedValue({ id: 'req-1' });
+
+      await service.update('og-1', { applyIva: true }, advisor);
+
+      expect(editRequestsService.consumeApproval).toHaveBeenCalledWith('req-1');
+      expect(repository.update).toHaveBeenCalled();
+    });
+
+    it('si la aprobación ya se usó en otro guardado, responde 409', async () => {
+      asRole('asesor');
+      (editRequestsService.findActiveApproval as jest.Mock).mockResolvedValue({ id: 'req-1' });
+      (editRequestsService.consumeApproval as jest.Mock).mockResolvedValue(false);
+
+      await expect(service.update('og-1', { applyIva: true }, advisor)).rejects.toThrow(
+        ConflictException,
+      );
+      expect(repository.update).not.toHaveBeenCalled();
+    });
+
+    it('si la escritura falla, devuelve la aprobación para que pueda reintentar', async () => {
+      asRole('asesor');
+      (editRequestsService.findActiveApproval as jest.Mock).mockResolvedValue({ id: 'req-1' });
+      (repository.update as jest.Mock).mockRejectedValue(new Error('db caída'));
+
+      await expect(service.update('og-1', { applyIva: true }, advisor)).rejects.toThrow('db caída');
+      expect((prisma as any).expenseOrderEditRequest.update).toHaveBeenCalledWith({
+        where: { id: 'req-1' },
+        data: { consumedAt: null },
+      });
+    });
+
+    it('OG pagada sin CP: la crea con el nuevo total y la salda contra los egresos', async () => {
+      asRole('admin');
+      (accountsPayableService.findByExpenseOrderId as jest.Mock).mockResolvedValue(null);
+      ((prisma as any).cashMovement.aggregate as jest.Mock).mockResolvedValue({
+        _sum: { amount: 100000 },
+      });
+      (accountsPayableService.createFromExpenseOrder as jest.Mock).mockResolvedValue({ id: 'ap-new' });
+
+      await service.update('og-1', { applyIva: true, ivaRate: 0.19 }, admin);
+
+      expect(accountsPayableService.createFromExpenseOrder).toHaveBeenCalledWith(
+        'og-1',
+        'Orden de Gasto OG-2026-0700',
+        expect.any(Number),
+        'admin-1',
+        100000,
+      );
+      expect(accountsPayableService.settleFromExpenseOrderMovements).toHaveBeenCalledWith(
+        'og-1',
+        'admin-1',
+      );
+      expect(accountsPayableService.refreshFromLivePayments).toHaveBeenCalledWith('ap-new');
     });
   });
 

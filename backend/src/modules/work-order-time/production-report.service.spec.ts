@@ -1,0 +1,175 @@
+import { BadRequestException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { ProductionReportService } from './production-report.service';
+import { WorkOrderTimeRepository } from './work-order-time.repository';
+import {
+  daysBetween,
+  intersectIntervals,
+  intervalsTotal,
+  mergeIntervals,
+  shiftDay,
+} from './production-report.util';
+
+const HOUR = 3_600_000;
+/** Hora de Bogotá (UTC−5) del día `d` de octubre de 2026. */
+const b = (d: number, hh: number, mm = 0) => new Date(Date.UTC(2026, 9, d, hh + 5, mm));
+
+const operator = {
+  id: 'u1',
+  firstName: 'Carlos',
+  lastName: 'Mejía',
+  email: null,
+  cargo: { name: 'Operario', productionArea: { id: 'a1', name: 'Plotter ecosolvente' } },
+};
+
+const entry = (id: string, start: Date, end: Date | null, extra: Record<string, unknown> = {}) => ({
+  id,
+  userId: 'u1',
+  workOrderId: extra.workOrderId ?? 'ot1',
+  startAt: start,
+  endAt: end,
+  closedBySystem: false,
+  adjustedAt: null,
+  createdById: null,
+  voidedAt: null,
+  workOrder: { workOrderNumber: extra.workOrderNumber ?? 'OT-2026-0001' },
+  machine: null,
+  ...extra,
+});
+
+describe('production-report.util', () => {
+  it('une, suma e intersecta intervalos', () => {
+    expect(mergeIntervals([[5, 8], [1, 3], [2, 4]])).toEqual([[1, 4], [5, 8]]);
+    expect(intervalsTotal([[0, 10], [5, 15]])).toBe(15);
+    expect(intersectIntervals([[0, 10]], [[5, 20]])).toEqual([[5, 10]]);
+  });
+
+  it('recorre y corre días', () => {
+    expect(daysBetween('2026-09-29', '2026-10-02')).toEqual(['2026-09-29', '2026-09-30', '2026-10-01', '2026-10-02']);
+    expect(shiftDay('2026-10-01', -1)).toBe('2026-09-30');
+  });
+});
+
+describe('ProductionReportService', () => {
+  let service: ProductionReportService;
+  let attendance: { userId: string; clockIn: Date; clockOut: Date | null }[];
+  let entries: ReturnType<typeof entry>[];
+  const repository = {
+    findReportOperators: jest.fn(),
+    findAttendanceInRange: jest.fn(),
+    findEntriesInRange: jest.fn(),
+  };
+  const now = b(20, 11, 0);
+
+  beforeEach(() => {
+    attendance = [];
+    entries = [];
+    repository.findReportOperators.mockResolvedValue([operator]);
+    // Solo lo que cae en el rango pedido, para que el periodo anterior salga vacío.
+    repository.findAttendanceInRange.mockImplementation(async (_ids, from: Date, to: Date) =>
+      attendance.filter((a) => a.clockIn >= from && a.clockIn <= to),
+    );
+    repository.findEntriesInRange.mockImplementation(async (_ids, from: Date, to: Date) =>
+      entries.filter((e) => e.startAt >= from && e.startAt <= to),
+    );
+    service = new ProductionReportService(
+      repository as unknown as WorkOrderTimeRepository,
+      { get: jest.fn().mockReturnValue(undefined) } as unknown as ConfigService,
+    );
+  });
+
+  afterEach(() => jest.clearAllMocks());
+
+  it('calcula planta, tareas, ocupación, paralelo y lo que quedó fuera de la asistencia', async () => {
+    attendance.push({ userId: 'u1', clockIn: b(14, 8), clockOut: b(14, 17) });
+    entries.push(
+      entry('a', b(14, 8, 30), b(14, 10, 30)),
+      entry('b', b(14, 9, 30), b(14, 11), { workOrderId: 'ot2', workOrderNumber: 'OT-2026-0002' }),
+      // Olvidada: la cerró el sistema a las 18:30; la asistencia termina a las 17:00.
+      entry('c', b(14, 14), b(14, 18, 30), { closedBySystem: true }),
+      entry('v', b(14, 12), b(14, 13), { voidedAt: b(14, 13) }),
+    );
+
+    const report = await service.getReport({ from: '2026-10-14', to: '2026-10-14' }, now);
+    const row = report.operators[0];
+
+    expect(row.plantMs).toBe(9 * HOUR);
+    expect(row.busyMs).toBe(5.5 * HOUR); // 8:30–11:00 + 14:00–17:00
+    expect(row.taskMs).toBe(6.5 * HOUR); // 2 + 1,5 + 3: el paralelo suma las dos
+    expect(row.occupancy).toBeCloseTo(5.5 / 9);
+    expect(row.parallel).toBeCloseTo(6.5 / 5.5);
+    expect(row.extraMs).toBe(0);
+    expect(row.daysWorked).toBe(1);
+    expect(row.quality).toEqual({
+      entries: 4,
+      closedBySystem: 1,
+      adjusted: 0,
+      added: 0,
+      voided: 1,
+      unregisteredMs: 3.5 * HOUR,
+      outsideAttendanceMs: 1.5 * HOUR,
+    });
+    expect(row.workOrders.map((o) => o.workOrderNumber)).toEqual(['OT-2026-0001', 'OT-2026-0002']);
+    expect(report.totals.workOrders).toBe(2);
+    expect(report.totals.closedBySystem).toBe(1);
+    expect(report.daily).toEqual([{ date: '2026-10-14', plantMs: 9 * HOUR, busyMs: 5.5 * HOUR }]);
+    expect(report.areas).toEqual([{ id: 'a1', name: 'Plotter ecosolvente', plantMs: 9 * HOUR, busyMs: 5.5 * HOUR }]);
+  });
+
+  it('las horas en tareas después de las 18:00 son horas extra', async () => {
+    attendance.push({ userId: 'u1', clockIn: b(14, 8), clockOut: b(14, 19, 30) });
+    entries.push(entry('a', b(14, 17), b(14, 19)));
+
+    const { operators } = await service.getReport({ from: '2026-10-14', to: '2026-10-14' }, now);
+
+    expect(operators[0].extraMs).toBe(1 * HOUR);
+  });
+
+  it('hoy, la asistencia abierta y la tarea en curso llegan hasta ahora', async () => {
+    attendance.push({ userId: 'u1', clockIn: b(20, 8), clockOut: null });
+    entries.push(entry('a', b(20, 9), null));
+
+    const { operators } = await service.getReport({ from: '2026-10-20', to: '2026-10-20' }, now);
+
+    expect(operators[0].plantMs).toBe(3 * HOUR); // 8:00 → 11:00
+    expect(operators[0].busyMs).toBe(2 * HOUR); // 9:00 → 11:00
+  });
+
+  it('un día pasado con la salida sin marcar llega hasta el cierre de la jornada', async () => {
+    attendance.push({ userId: 'u1', clockIn: b(14, 8), clockOut: null });
+
+    const { operators } = await service.getReport({ from: '2026-10-14', to: '2026-10-14' }, now);
+
+    expect(operators[0].plantMs).toBe(10 * HOUR); // 8:00 → 18:00
+  });
+
+  it('trae los totales del periodo anterior de la misma duración', async () => {
+    attendance.push(
+      { userId: 'u1', clockIn: b(14, 8), clockOut: b(14, 12) },
+      { userId: 'u1', clockIn: b(12, 8), clockOut: b(12, 10) },
+    );
+
+    const report = await service.getReport({ from: '2026-10-13', to: '2026-10-14' }, now);
+
+    expect(report.previous.from).toBe('2026-10-11');
+    expect(report.previous.to).toBe('2026-10-12');
+    expect(report.totals.plantMs).toBe(4 * HOUR);
+    expect(report.previous.totals.plantMs).toBe(2 * HOUR);
+  });
+
+  it('pasa los filtros a las consultas', async () => {
+    await service.getReport({ from: '2026-10-14', to: '2026-10-14', areaId: 'a1', userId: 'u1', machineId: 'm1' }, now);
+
+    expect(repository.findReportOperators).toHaveBeenCalledWith(
+      expect.objectContaining({ areaId: 'a1', userId: 'u1' }),
+    );
+    expect(repository.findEntriesInRange).toHaveBeenCalledWith(['u1'], expect.any(Date), expect.any(Date), 'm1');
+  });
+
+  it('rechaza un rango al revés o de más de 92 días', async () => {
+    await expect(service.getReport({ from: '2026-10-15', to: '2026-10-01' }, now)).rejects.toThrow(
+      BadRequestException,
+    );
+    await expect(service.getReport({ from: '2026-01-01', to: '2026-10-01' }, now)).rejects.toThrow('92 días');
+  });
+});

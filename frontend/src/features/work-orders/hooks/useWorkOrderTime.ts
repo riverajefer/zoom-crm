@@ -1,10 +1,12 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSnackbar } from 'notistack';
 import { workOrderTimeApi } from '../../../api/work-order-time.api';
+import { productionReportsApi } from '../../../api/production-reports.api';
 import type { WorkOrderTimeEntry } from '../../../types/work-order.types';
 import type {
   AdjustTimeEntryDto,
   CreateManualTimeEntryDto,
+  ProductivityReportQuery,
   StartTimeEntryDto,
 } from '../../../types/work-order-time.types';
 import { workOrdersKeys } from './useWorkOrders';
@@ -61,6 +63,14 @@ export const usePlantDay = (date: string, isToday: boolean) =>
     queryKey: workOrderTimeKeys.plant(date),
     queryFn: () => workOrderTimeApi.getPlant(date),
     refetchInterval: isToday ? 60_000 : false,
+    placeholderData: keepPreviousData,
+  });
+
+/** Reporte de productividad de un periodo. */
+export const useProductivityReport = (query: ProductivityReportQuery) =>
+  useQuery({
+    queryKey: [...workOrderTimeKeys.all, 'productivity', query] as const,
+    queryFn: () => productionReportsApi.getProductivity(query),
     placeholderData: keepPreviousData,
   });
 

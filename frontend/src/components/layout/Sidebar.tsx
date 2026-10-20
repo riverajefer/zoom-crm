@@ -385,6 +385,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose, collapsed = fal
           permission: PERMISSIONS.READ_PRODUCTION_PLANT,
         },
         {
+          label: 'Productividad',
+          icon: <InsightsIcon />,
+          path: ROUTES.PRODUCTION_REPORTS,
+          permission: PERMISSIONS.READ_PRODUCTION_REPORTS,
+        },
+        {
           label: 'Órdenes de Producción',
           icon: <BuildIcon />,
           path: ROUTES.PRODUCTION_ORDERS,
@@ -405,6 +411,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose, collapsed = fal
       ],
       permissions: [
         PERMISSIONS.READ_PRODUCTION_PLANT,
+        PERMISSIONS.READ_PRODUCTION_REPORTS,
         PERMISSIONS.READ_PRODUCTION_ORDERS,
         PERMISSIONS.READ_PRODUCT_TEMPLATES,
         PERMISSIONS.READ_STEP_DEFINITIONS,

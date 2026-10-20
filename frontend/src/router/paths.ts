@@ -24,6 +24,7 @@ export const PATHS = {
   LOCATION_SUPPORTS: '/apoyos-sedes',
   MACHINES: '/machines',
   PRODUCTION_PLANT: '/production-plant',
+  PRODUCTION_REPORTS: '/production-reports',
   CARGOS: '/cargos',
   CARGOS_CREATE: '/cargos/new',
   CARGOS_EDIT: '/cargos/:id/edit',

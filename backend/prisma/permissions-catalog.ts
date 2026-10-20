@@ -246,6 +246,11 @@ export const permissionGroups: PermissionGroup[] = [
           'Supervisar tiempos: ajustar, anular, revisar y agregar registros olvidados (no los propios)',
       },
       {
+        name: 'read_production_reports',
+        description:
+          'Ver el reporte de productividad de producción (ocupación, horas y calidad del registro por operario)',
+      },
+      {
         name: 'read_production_plant',
         description:
           'Ver «Planta hoy»: asistencia, tareas en curso y ocupación de cada operario',

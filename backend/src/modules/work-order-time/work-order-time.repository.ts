@@ -177,6 +177,63 @@ export class WorkOrderTimeRepository {
     });
   }
 
+  // ---------------------------------------------------------------------------
+  // Reporte de productividad
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Operarios del reporte: quienes usan el temporizador y, además, quien tenga
+   * registros en el periodo aunque hoy ya no tenga el permiso.
+   */
+  findReportOperators(filters: { from: Date; to: Date; areaId?: string; userId?: string }) {
+    return this.prisma.user.findMany({
+      where: {
+        OR: [OPERATOR_WHERE, { workOrderTimeEntries: { some: { startAt: { gte: filters.from, lte: filters.to } } } }],
+        ...(filters.userId && { id: filters.userId }),
+        ...(filters.areaId && { cargo: { productionAreaId: filters.areaId } }),
+      },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        cargo: { select: { name: true, productionArea: { select: { id: true, name: true } } } },
+      },
+      orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }],
+    });
+  }
+
+  findAttendanceInRange(userIds: string[], from: Date, to: Date) {
+    return this.prisma.attendanceRecord.findMany({
+      where: { userId: { in: userIds }, clockIn: { gte: from, lte: to } },
+      select: { userId: true, clockIn: true, clockOut: true },
+    });
+  }
+
+  /** Registros con hora del periodo, también los anulados (cuentan en la calidad del registro). */
+  findEntriesInRange(userIds: string[], from: Date, to: Date, machineId?: string) {
+    return this.prisma.workOrderTimeEntry.findMany({
+      where: {
+        userId: { in: userIds },
+        startAt: { not: null, gte: from, lte: to },
+        ...(machineId && { machineId }),
+      },
+      select: {
+        id: true,
+        userId: true,
+        workOrderId: true,
+        startAt: true,
+        endAt: true,
+        closedBySystem: true,
+        adjustedAt: true,
+        createdById: true,
+        voidedAt: true,
+        workOrder: { select: { workOrderNumber: true } },
+        machine: { select: { id: true, name: true } },
+      },
+    });
+  }
+
   findActiveMachines() {
     return this.prisma.machine.findMany({
       where: { isActive: true },

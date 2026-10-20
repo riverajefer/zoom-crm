@@ -73,3 +73,70 @@ export interface PlantDayResponse {
   schedule: ProductionSchedule;
   operators: PlantOperator[];
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Reporte de productividad
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Intervalo `[inicio, fin)` en milisegundos epoch. */
+export type ReportInterval = [number, number];
+
+export interface ProductivityTotals {
+  plantMs: number;
+  busyMs: number;
+  /** Suma de todas las tareas: con dos a la vez cuenta las dos. */
+  taskMs: number;
+  extraMs: number;
+  occupancy: number | null;
+  workOrders: number;
+  entries: number;
+  closedBySystem: number;
+}
+
+export interface ProductivityOperatorRow {
+  user: PlantOperator['user'];
+  daysWorked: number;
+  plantMs: number;
+  busyMs: number;
+  taskMs: number;
+  extraMs: number;
+  occupancy: number | null;
+  parallel: number | null;
+  workOrders: { id: string; workOrderNumber: string; ms: number }[];
+  machines: { id: string; name: string; ms: number }[];
+  quality: {
+    entries: number;
+    closedBySystem: number;
+    adjusted: number;
+    added: number;
+    voided: number;
+    unregisteredMs: number;
+    outsideAttendanceMs: number;
+  };
+  days: {
+    date: string;
+    plantMs: number;
+    busyMs: number;
+    attendance: ReportInterval[];
+    busy: ReportInterval[];
+  }[];
+}
+
+export interface ProductivityReport {
+  from: string;
+  to: string;
+  workdayEnd: string;
+  totals: ProductivityTotals;
+  daily: { date: string; plantMs: number; busyMs: number }[];
+  areas: { id: string | null; name: string; plantMs: number; busyMs: number }[];
+  operators: ProductivityOperatorRow[];
+  previous: { from: string; to: string; totals: ProductivityTotals };
+}
+
+export interface ProductivityReportQuery {
+  from: string;
+  to: string;
+  areaId?: string;
+  userId?: string;
+  machineId?: string;
+}

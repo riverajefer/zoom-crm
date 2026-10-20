@@ -32,6 +32,8 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  Tab,
+  Tabs,
   useTheme,
 } from '@mui/material';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
@@ -66,6 +68,8 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import InboxIcon from '@mui/icons-material/Inbox';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import ViewAgendaIcon from '@mui/icons-material/ViewAgenda';
+import TableRowsIcon from '@mui/icons-material/TableRows';
 import { PageHeader } from '../../../components/common/PageHeader';
 import { ToolbarButton } from '../../orders/components/ToolbarButton';
 import { ActionToolbar } from '../../orders/components/ActionToolbar';
@@ -80,6 +84,7 @@ import { countsInTotals, summarizeCashDrawer } from '../utils/cashBalance';
 import CreateMovementDialog from '../components/CreateMovementDialog';
 import VoidMovementDialog from '../components/VoidMovementDialog';
 import CalculatorDialog from '../components/CalculatorDialog';
+import SessionMovementsTable from '../components/SessionMovementsTable';
 import PendingApprovalsPanel from '../components/PendingApprovalsPanel';
 import PendingVoidRequestsPanel from '../components/PendingVoidRequestsPanel';
 import PendingOgAuthorizationsPanel from '../components/PendingOgAuthorizationsPanel';
@@ -138,6 +143,19 @@ const formatDate = (iso: string) =>
     minute: '2-digit',
   });
 
+type MovementsView = 'list' | 'table';
+
+/** La vista elegida se recuerda por navegador: quien usa la tabla no la busca cada vez. */
+const MOVEMENTS_VIEW_KEY = 'cash-session:movements-view';
+
+const readMovementsView = (): MovementsView => {
+  try {
+    return localStorage.getItem(MOVEMENTS_VIEW_KEY) === 'table' ? 'table' : 'list';
+  } catch {
+    return 'list';
+  }
+};
+
 const ActiveSessionPage: React.FC = () => {
   const { id = '' } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -155,6 +173,7 @@ const ActiveSessionPage: React.FC = () => {
   useApprovalSocket();
 
   const [pendingPanelsOpen, setPendingPanelsOpen] = useState(true);
+  const [movementsView, setMovementsView] = useState<MovementsView>(readMovementsView);
   const [dialogType, setDialogType] = useState<CashMovementType | null>(null);
   const [voidTarget, setVoidTarget] = useState<CashMovement | null>(null);
   const [isBalanceDialogOpen, setIsBalanceDialogOpen] = useState(false);
@@ -281,6 +300,15 @@ const ActiveSessionPage: React.FC = () => {
   // Antes sumaba también transferencias y solo veía los últimos 50 movimientos,
   // así que este número no coincidía con el «Saldo del Sistema» al cerrar.
   const runningBalance = session ? Number(session.openingAmount) + balanceBreakdown.net : 0;
+
+  const handleMovementsViewChange = (_e: React.SyntheticEvent, view: MovementsView) => {
+    setMovementsView(view);
+    try {
+      localStorage.setItem(MOVEMENTS_VIEW_KEY, view);
+    } catch {
+      // Sin almacenamiento (modo privado): la vista simplemente no se recuerda.
+    }
+  };
 
   const handleCreateMovement = async (data: Parameters<typeof createMovement.mutateAsync>[0]) => {
     await createMovement.mutateAsync(data);
@@ -504,6 +532,25 @@ const ActiveSessionPage: React.FC = () => {
         </CardContent>
       </Card>
 
+      {/* ── Vistas de movimientos ────────────────────────────────────── */}
+      <Tabs
+        value={movementsView}
+        onChange={handleMovementsViewChange}
+        sx={{ mb: 1.5, minHeight: 40, '& .MuiTab-root': { minHeight: 40, textTransform: 'none', fontWeight: 600 } }}
+      >
+        <Tab value="list" icon={<ViewAgendaIcon fontSize="small" />} iconPosition="start" label="Movimientos" />
+        <Tab value="table" icon={<TableRowsIcon fontSize="small" />} iconPosition="start" label="Tabla del día" />
+      </Tabs>
+
+      {movementsView === 'table' && (
+        <Card>
+          <CardContent>
+            <SessionMovementsTable movements={movements} isLoading={movementsQuery.isLoading} />
+          </CardContent>
+        </Card>
+      )}
+
+      {movementsView === 'list' && (<>
       {/* ── Movements List ───────────────────────────────────────────── */}
       <Card>
         <CardContent>
@@ -1053,6 +1100,7 @@ const ActiveSessionPage: React.FC = () => {
           </CardContent>
         </Card>
       )}
+      </>)}
 
       {/* ── Dialogs ──────────────────────────────────────────────────── */}
       {dialogType && (

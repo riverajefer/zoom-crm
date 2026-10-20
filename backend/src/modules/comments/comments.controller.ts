@@ -27,7 +27,7 @@ export class CommentsController {
 
   @Get()
   @RequirePermissions('read_comments')
-  @ApiOperation({ summary: 'Obtener comentarios de una entidad (COT / OP / OT)' })
+  @ApiOperation({ summary: 'Obtener comentarios de una entidad (COT / OP / OT / OG)' })
   @ApiResponse({ status: 200, description: 'Comentarios obtenidos exitosamente' })
   findByEntity(@Query() filters: FilterCommentsDto) {
     return this.commentsService.findByEntity(filters);

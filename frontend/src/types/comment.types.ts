@@ -1,4 +1,4 @@
-export type CommentEntityType = 'QUOTE' | 'ORDER' | 'WORK_ORDER';
+export type CommentEntityType = 'QUOTE' | 'ORDER' | 'WORK_ORDER' | 'EXPENSE_ORDER';
 
 export interface CommentAuthor {
   id: string;

@@ -61,3 +61,38 @@ export function computeExpenseTotals(
     total: roundToWholePeso(rawTotal),
   };
 }
+
+/**
+ * Reparte el total a pagar de una OG entre sus ítems, en proporción a la base
+ * de cada uno, y devuelve los montos en el mismo orden.
+ *
+ * Caja paga el total que muestra la OG (con IVA y menos retenciones), pero el
+ * egreso se registra por ítem porque cada ítem puede salir por un método de
+ * pago distinto. Antes cada egreso llevaba solo la base del ítem: el cajón
+ * quedaba corto por el IVA y la Cuenta por Pagar espejo, PARTIAL con ese IVA
+ * como deuda falsa.
+ *
+ * Cada parte va a peso entero y el residuo del redondeo se asigna por mayor
+ * resto, así la suma da exactamente `computeExpenseTotals(...).total`.
+ */
+export function allocateExpenseTotalToItems(
+  itemSubtotals: number[],
+  rates: ExpenseWithholdingRates,
+): number[] {
+  const subtotal = itemSubtotals.reduce((sum, value) => sum + value, 0);
+  const { total } = computeExpenseTotals(subtotal, rates);
+  if (subtotal === 0) return itemSubtotals.map(() => 0);
+
+  const raw = itemSubtotals.map((value) => (total * value) / subtotal);
+  const shares = raw.map((value) => Math.floor(value));
+  let remainder = total - shares.reduce((sum, value) => sum + value, 0);
+
+  const byRemainder = raw
+    .map((value, index) => ({ index, fraction: value - Math.floor(value) }))
+    .sort((a, b) => b.fraction - a.fraction || a.index - b.index);
+  for (let i = 0; remainder > 0; i = (i + 1) % byRemainder.length, remainder--) {
+    shares[byRemainder[i].index] += 1;
+  }
+
+  return shares;
+}

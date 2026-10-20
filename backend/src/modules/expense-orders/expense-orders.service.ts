@@ -23,7 +23,10 @@ import { AuthenticatedUser } from '../../common/interfaces/auth.interface';
 import { startOfDay, endOfDay } from '../../common/utils/date-range.util';
 import { ExpenseOrderAuthRequestsService } from '../expense-order-auth-requests/expense-order-auth-requests.service';
 import { AccountsPayableService } from '../accounts-payable/accounts-payable.service';
-import { computeExpenseTotals } from '../../common/utils/expense-totals.util';
+import {
+  allocateExpenseTotalToItems,
+  computeExpenseTotals,
+} from '../../common/utils/expense-totals.util';
 import { normalizeRate } from '../../common/utils/rounding.util';
 import { findActiveCashSessionForLocation } from '../cash-session/active-cash-session.util';
 import { requireActiveLocationId } from '../../common/utils/location-context';
@@ -503,16 +506,28 @@ export class ExpenseOrdersService {
       );
     }
 
-    // Crear movimientos de caja + auto-transición a PAID
+    // Crear movimientos de caja + auto-transición a PAID.
+    //
+    // Cada egreso lleva su parte del total a pagar (con IVA y menos
+    // retenciones), no solo la base del ítem: es lo que Caja entrega al ver la
+    // OG. Con la base, el cajón quedaba corto por el IVA en cada OG con IVA.
+    const subtotal = expenseOrder.items.reduce(
+      (sum: number, item: { total: unknown }) => sum + Number(item.total),
+      0,
+    );
+    const itemAmounts = allocateExpenseTotalToItems(
+      expenseOrder.items.map((item: { total: unknown }) => Number(item.total)),
+      expenseOrder,
+    );
 
-    for (const item of expenseOrder.items) {
+    for (const [index, item] of expenseOrder.items.entries()) {
       const receiptNumber = await this.consecutivesService.generateNumber(
         'CASH_RECEIPT',
         expenseOrder.locationId,
       );
       await this.prisma.cashMovement.create({
         data: {
-          amount: item.total,
+          amount: itemAmounts[index],
           movementType: 'EXPENSE',
           paymentMethod: item.paymentMethod || 'CASH',
           description: `Pago de ítem de Orden de Gasto ${expenseOrder.ogNumber}`,
@@ -527,16 +542,15 @@ export class ExpenseOrdersService {
 
     const paid = await this.repository.updateStatus(id, ExpenseOrderStatus.PAID);
 
-    // Crear Cuenta por Pagar automáticamente si no existe una asociada
-    const totalAmount = expenseOrder.items.reduce(
-      (sum: number, item: { total: unknown }) => sum + Number(item.total),
-      0,
-    );
+    // Crear Cuenta por Pagar automáticamente si no existe una asociada. Con el
+    // mismo total que los egresos de arriba; con la base, la CP nacía por debajo
+    // de lo girado.
     await this.accountsPayableService.createFromExpenseOrder(
       id,
       `Orden de Gasto ${expenseOrder.ogNumber}`,
-      totalAmount,
+      this.totalToPay(subtotal, expenseOrder),
       currentUser.id,
+      subtotal,
     );
 
     // La CP espejo se crea al nacer la OG y nadie la conciliaba después: el

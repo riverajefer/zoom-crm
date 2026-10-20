@@ -141,6 +141,34 @@ describe('ExpenseOrdersService', () => {
       );
     });
 
+    // Caja entrega el total que muestra la OG. Con la base del ítem, cada OG
+    // con IVA dejaba el cajón corto por el IVA (OG-2026-0782: $48.403 vs $57.600).
+    it('registra cada egreso con su parte del total con IVA', async () => {
+      (repository.findById as jest.Mock).mockResolvedValue({
+        ...adminAuthorized,
+        applyIva: true,
+        ivaRate: 0.19,
+        items: [
+          { total: 24201.5, paymentMethod: 'CASH' },
+          { total: 24201.5, paymentMethod: 'CASH' },
+        ],
+      });
+
+      await service.cajaAuthorize('og-1', currentUser);
+
+      const amounts = (prisma.cashMovement.create as jest.Mock).mock.calls.map(
+        ([args]) => args.data.amount,
+      );
+      expect(amounts).toEqual([28800, 28800]);
+      expect(accountsPayableService.createFromExpenseOrder).toHaveBeenCalledWith(
+        'og-1',
+        expect.any(String),
+        57600,
+        'caja-1',
+        48403,
+      );
+    });
+
     // Antes marcaba AUTHORIZED y después descubría que no había caja: la OG
     // quedaba fuera de ADMIN_AUTHORIZED, sin pago y sin forma de reintentar.
     it('sin caja abierta no toca el estado de la OG', async () => {

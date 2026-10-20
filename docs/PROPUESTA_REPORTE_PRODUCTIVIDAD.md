@@ -19,6 +19,15 @@
 >   - horas-persona prorrateadas, mano de obra y MO / venta, medida contra la **venta sin IVA** (subtotal menos descuentos), no contra el total;
 >   - marca «parcial» cuando a algún operario le falta el salario.
 > - **Falta para la fase 3:** la pestaña Máquinas y la exportación a Excel.
+>
+> **Fase 3, hecha el 2026-10-20:**
+> - **Pestaña Máquinas:**
+>   - uso real, que es la unión de sus tareas: dos operarios a la vez no la usan el doble;
+>   - utilización frente a `PRODUCTION_MACHINE_DAILY_HOURS` (10 h) por día hábil, de lunes a sábado;
+>   - OTs, operarios y uso por hora del día;
+>   - aviso de máquinas ociosas y de horas de tareas sin máquina.
+> - **Exportar a Excel:** una hoja por pestaña más la serie diaria, con las horas como número decimal y los porcentajes de 0 a 100. Las columnas de dinero salen solo con el permiso de costos.
+> - **Catálogo inicial:** las 17 máquinas que envió el cliente, en la migración `20261020120000_seed_machines_catalog`. Quedan sin área; el área se les asigna desde Organización → Máquinas.
 
 ## 1. Para qué sirve
 

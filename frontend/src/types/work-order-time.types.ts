@@ -127,6 +127,27 @@ export interface ProductivityWorkOrderRow {
   costIncomplete?: boolean;
 }
 
+export interface ProductivityMachineRow {
+  id: string;
+  name: string;
+  area: { id: string; name: string } | null;
+  /** Tiempo con al menos una tarea abierta en la máquina. */
+  useMs: number;
+  /** Uso ÷ (días hábiles × horas por día). */
+  utilization: number | null;
+  workOrders: number;
+  operators: number;
+  /** Uso por hora del día (0–23), en ms, sumado en todo el periodo. */
+  hourly: number[];
+}
+
+export interface ProductivityMachines {
+  dailyHours: number;
+  workingDays: number;
+  rows: ProductivityMachineRow[];
+  withoutMachineMs: number;
+}
+
 export interface ProductivityOperatorRow {
   user: PlantOperator['user'];
   daysWorked: number;
@@ -169,6 +190,7 @@ export interface ProductivityReport {
   areas: { id: string | null; name: string; plantMs: number; busyMs: number }[];
   operators: ProductivityOperatorRow[];
   workOrders: ProductivityWorkOrderRow[];
+  machines: ProductivityMachines;
   previous: { from: string; to: string; totals: ProductivityTotals };
 }
 

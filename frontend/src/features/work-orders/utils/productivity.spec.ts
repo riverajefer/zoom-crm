@@ -61,6 +61,7 @@ const report = (operators: ProductivityOperatorRow[], occ: number, prevOcc: numb
   areas: [],
   operators,
   workOrders: [],
+  machines: { dailyHours: 10, workingDays: 1, rows: [], withoutMachineMs: 0 },
   costs: null,
   previous: { from: '2026-09-16', to: '2026-09-30', totals: totals(prevOcc) },
 });

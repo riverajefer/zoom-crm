@@ -64,6 +64,7 @@ describe('ProductionReportService', () => {
     findAttendanceInRange: jest.fn(),
     findEntriesInRange: jest.fn(),
     roleHasPermission: jest.fn(),
+    findActiveMachines: jest.fn(),
   };
   const now = b(20, 11, 0);
 
@@ -72,6 +73,10 @@ describe('ProductionReportService', () => {
     entries = [];
     repository.findReportOperators.mockResolvedValue([operator]);
     repository.roleHasPermission.mockResolvedValue(false);
+    repository.findActiveMachines.mockResolvedValue([
+      { id: 'm1', name: 'PLOTTER ECOSOLVENTE', productionArea: { id: 'a1', name: 'Plotter ecosolvente' } },
+      { id: 'm2', name: 'CALANDRA', productionArea: { id: 'a2', name: 'Calandra' } },
+    ]);
     // Solo lo que cae en el rango pedido, para que el periodo anterior salga vacío.
     repository.findAttendanceInRange.mockImplementation(async (_ids, from: Date, to: Date) =>
       attendance.filter((a) => a.clockIn >= from && a.clockIn <= to),
@@ -276,5 +281,46 @@ describe('ProductionReportService', () => {
       BadRequestException,
     );
     await expect(service.getReport({ from: '2026-01-01', to: '2026-10-01' }, 'role', now)).rejects.toThrow('92 días');
+  });
+
+  describe('máquinas', () => {
+    const plotter = { id: 'm1', name: 'PLOTTER ECOSOLVENTE' };
+
+    it('el uso es la unión de sus tareas, y aparecen también las que nadie usó', async () => {
+      const other = { ...operator, id: 'u2' };
+      repository.findReportOperators.mockResolvedValue([operator, other]);
+      entries.push(
+        entry('a', b(14, 8), b(14, 10), { machine: plotter }),
+        // Otro operario en la misma máquina, solapado: no la usa el doble.
+        { ...entry('b', b(14, 9), b(14, 11), { machine: plotter }), userId: 'u2', workOrderId: 'ot2' },
+        entry('c', b(14, 14), b(14, 15)), // sin máquina
+      );
+
+      const { machines } = await service.getReport({ from: '2026-10-14', to: '2026-10-14' }, 'role', now);
+
+      expect(machines.workingDays).toBe(1);
+      expect(machines.dailyHours).toBe(10);
+      expect(machines.rows.map((m) => [m.name, m.useMs, m.operators, m.workOrders])).toEqual([
+        ['PLOTTER ECOSOLVENTE', 3 * HOUR, 2, 2],
+        ['CALANDRA', 0, 0, 0],
+      ]);
+      expect(machines.rows[0].utilization).toBeCloseTo(0.3); // 3 h de 10
+      expect(machines.rows[0].hourly.slice(8, 11)).toEqual([HOUR, HOUR, HOUR]);
+      expect(machines.withoutMachineMs).toBe(1 * HOUR);
+    });
+
+    it('los domingos no cuentan como día hábil de la máquina', async () => {
+      const { machines } = await service.getReport({ from: '2026-10-17', to: '2026-10-19' }, 'role', now);
+      expect(machines.workingDays).toBe(2); // sábado 17 y lunes 19
+    });
+
+    it('con filtro de área solo muestra las máquinas de esa área (y las que se usaron)', async () => {
+      const { machines } = await service.getReport(
+        { from: '2026-10-14', to: '2026-10-14', areaId: 'a1' },
+        'role',
+        now,
+      );
+      expect(machines.rows.map((m) => m.name)).toEqual(['PLOTTER ECOSOLVENTE']);
+    });
   });
 });

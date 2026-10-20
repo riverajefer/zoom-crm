@@ -249,3 +249,32 @@ export const HeatmapLegend: React.FC = () => {
   );
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Uso por hora del día (mini gráfico de una fila de la tabla de máquinas)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const HourlySparkline: React.FC<{ hourly: number[]; max: number; fromHour?: number; toHour?: number }> = ({
+  hourly,
+  max,
+  fromHour = 6,
+  toHour = 21,
+}) => {
+  const c = useChartColors();
+  const hours = Array.from({ length: toHour - fromHour }, (_, i) => fromHour + i);
+  const W = hours.length * 10;
+  const H = 22;
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} width={W} height={H} role="img" aria-label="Uso por hora del día">
+      {hours.map((h, i) => {
+        const v = hourly[h] ?? 0;
+        const bh = v > 0 ? Math.max(2, (v / Math.max(max, 1)) * H) : 1;
+        return (
+          <Tooltip key={h} disableInteractive title={`${h}:00–${h + 1}:00 · ${msLabel(v)} de uso en el periodo`}>
+            <rect x={i * 10} y={H - bh} width={8} height={bh} rx={1.5} fill={v > 0 ? c.data : c.track} />
+          </Tooltip>
+        );
+      })}
+    </svg>
+  );
+};
+

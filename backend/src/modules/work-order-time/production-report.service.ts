@@ -28,6 +28,9 @@ export const DEFAULT_HOURLY_DIVISOR = 210;
 /** Recargo de la hora extra diurna. */
 export const DEFAULT_OVERTIME_FACTOR = 1.25;
 
+/** Horas al día que una máquina podría trabajar, para la utilización (8:00–18:00). */
+export const DEFAULT_MACHINE_DAILY_HOURS = 10;
+
 /** Permiso que deja ver salarios y costos dentro del reporte. */
 export const COSTS_PERMISSION = 'read_production_costs';
 
@@ -179,6 +182,7 @@ export class ProductionReportService {
 
     const days = daysBetween(from, to);
     const ctx = { today: businessDate(now), now: now.getTime(), workdayEnd: this.workdayEndLabel() };
+    const catalog = await this.repository.findActiveMachines();
 
     const computed = operators.map((operator) =>
       this.operatorRow(
@@ -332,6 +336,92 @@ export class ProductionReportService {
       areas: [...areaMap.values()].filter((a) => a.plantMs > 0 || a.busyMs > 0),
       operators: rows,
       workOrders: workOrders.sort((a, b) => b.personMs - a.personMs),
+      machines: this.machineRows(catalog, valid, days, filters, ctx),
+    };
+  }
+
+  /**
+   * Uso de cada máquina: tiempo con al menos una tarea abierta en ella (dos
+   * operarios a la vez no la usan el doble), su utilización frente a la jornada
+   * de los días hábiles del periodo y en qué horas del día se usa.
+   *
+   * Aparecen también las activas que nadie usó: una máquina ociosa es un hallazgo.
+   */
+  private machineRows(
+    catalog: { id: string; name: string; productionArea: { id: string; name: string } | null }[],
+    valid: Entry[],
+    days: string[],
+    filters: Filters,
+    ctx: { today: string; now: number },
+  ) {
+    const dailyHours = positiveNumber(
+      this.configService.get<string>('PRODUCTION_MACHINE_DAILY_HOURS'),
+      DEFAULT_MACHINE_DAILY_HOURS,
+    );
+    // Días hábiles (lunes a sábado) que ya ocurrieron.
+    const workingDays = days.filter((d) => d <= ctx.today && new Date(`${d}T12:00:00Z`).getUTCDay() !== 0).length;
+    const capacityMs = workingDays * dailyHours * HOUR;
+
+    const used = new Map<string, { id: string; name: string }>();
+    valid.forEach((e) => e.machine && used.set(e.machine.id, e.machine));
+    const shown = new Map<string, { id: string; name: string; area: { id: string; name: string } | null }>();
+    for (const m of catalog) {
+      const inScope = filters.machineId
+        ? m.id === filters.machineId
+        : !filters.areaId || m.productionArea?.id === filters.areaId || used.has(m.id);
+      if (inScope) shown.set(m.id, { id: m.id, name: m.name, area: m.productionArea });
+    }
+    // Una máquina desactivada que sí se usó en el periodo también va.
+    for (const m of used.values()) if (!shown.has(m.id)) shown.set(m.id, { ...m, area: null });
+
+    const rows = [...shown.values()].map((m) => {
+      const tasks = valid.filter((e) => e.machine?.id === m.id);
+      let useMs = 0;
+      const hourly = new Array<number>(24).fill(0);
+      for (const date of days) {
+        const dayStart = startOfDay(date)!.getTime();
+        const dayEnd = endOfDay(date)!.getTime() + 1;
+        const cap = Math.min(dayEnd, date === ctx.today ? ctx.now : dayEnd);
+        const intervals = mergeIntervals(
+          tasks
+            .filter((e) => businessDate(e.startAt!) === date)
+            .map((e) => [e.startAt!.getTime(), Math.min(e.endAt ? e.endAt.getTime() : cap, cap)] as Interval),
+        );
+        for (const [s, e] of intervals) {
+          useMs += e - s;
+          for (let t = s; t < e; ) {
+            const hour = Math.floor((t - dayStart) / HOUR);
+            const next = Math.min(e, dayStart + (hour + 1) * HOUR);
+            if (hour >= 0 && hour < 24) hourly[hour] += next - t;
+            t = next;
+          }
+        }
+      }
+      return {
+        id: m.id,
+        name: m.name,
+        area: m.area,
+        useMs,
+        utilization: ratio(useMs, capacityMs),
+        workOrders: new Set(tasks.map((e) => e.workOrderId)).size,
+        operators: new Set(tasks.map((e) => e.userId)).size,
+        hourly,
+      };
+    });
+
+    return {
+      dailyHours,
+      workingDays,
+      rows: rows.sort((a, b) => b.useMs - a.useMs || a.name.localeCompare(b.name, 'es')),
+      // Tiempo de tareas que no dijeron en qué máquina se hicieron.
+      withoutMachineMs: valid
+        .filter((e) => !e.machine)
+        .reduce((t, e) => {
+          const date = businessDate(e.startAt!);
+          const dayEnd = endOfDay(date)!.getTime() + 1;
+          const end = e.endAt ? e.endAt.getTime() : Math.min(dayEnd, date === ctx.today ? ctx.now : dayEnd);
+          return t + Math.max(0, end - e.startAt!.getTime());
+        }, 0),
     };
   }
 

@@ -6,6 +6,7 @@ import {
   Alert,
   Avatar,
   Box,
+  Button,
   Card,
   Chip,
   CircularProgress,
@@ -27,6 +28,8 @@ import {
 import { DatePicker } from '@mui/x-date-pickers';
 import InsightsIcon from '@mui/icons-material/Insights';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import FileDownloadIcon from '@mui/icons-material/FileDownload';
+import { exportProductivityReport } from '../utils/exportProductivity';
 import { format, parseISO } from 'date-fns';
 import { PageHeader } from '../../../components/common/PageHeader';
 import type {
@@ -34,6 +37,7 @@ import type {
   ProductivityReport,
   ProductivityTotals,
   ProductivityWorkOrderRow,
+  ProductivityMachines,
 } from '../../../types/work-order-time.types';
 import { useProductivityReport, useTimeMachines } from '../hooks/useWorkOrderTime';
 import { operatorColor, userInitials, userName } from '../utils/timeline';
@@ -51,11 +55,16 @@ import {
   type ConfidenceLevel,
   type PeriodPreset,
 } from '../utils/productivity';
-import { ChartLegend, DailyHoursChart, HorizontalBars } from '../components/production-report/ReportCharts';
+import {
+  ChartLegend,
+  DailyHoursChart,
+  HorizontalBars,
+  HourlySparkline,
+} from '../components/production-report/ReportCharts';
 import { useChartColors } from '../components/production-report/useChartColors';
 import { OperatorReportDrawer } from '../components/production-report/OperatorReportDrawer';
 
-type TabKey = 'summary' | 'operators' | 'workOrders' | 'quality';
+type TabKey = 'summary' | 'operators' | 'workOrders' | 'machines' | 'quality';
 
 const dayLabel = (day: string) => format(parseISO(day), 'dd/MM/yyyy');
 
@@ -101,6 +110,16 @@ const ProductivityReportPage: React.FC = () => {
 
   const openRow = report?.operators.find((o) => o.user.id === openUserId) ?? null;
 
+  // Qué filtros tenía la vista, para dejarlo escrito en el Excel.
+  const filtersLabel =
+    [
+      areaId && `Área: ${areaOptions.find((a) => a.id === areaId)?.name ?? areaId}`,
+      userId && `Operario: ${userName(operatorOptions.find((u) => u.id === userId))}`,
+      machineId && `Máquina: ${machines.find((m) => m.id === machineId)?.name ?? machineId}`,
+    ]
+      .filter(Boolean)
+      .join(' · ') || 'Sin filtros';
+
   return (
     <Box>
       <PageHeader
@@ -108,6 +127,16 @@ const ProductivityReportPage: React.FC = () => {
         subtitle="Cuánto del tiempo en planta se convierte en trabajo sobre OT, por operario"
         icon={<InsightsIcon />}
         breadcrumbs={[{ label: 'Producción' }, { label: 'Productividad' }]}
+        action={
+          <Button
+            variant="outlined"
+            startIcon={<FileDownloadIcon />}
+            disabled={!report || isFetching}
+            onClick={() => report && exportProductivityReport(report, filtersLabel)}
+          >
+            Exportar a Excel
+          </Button>
+        }
       />
 
       <Card sx={{ p: 2, mb: 2 }}>
@@ -209,6 +238,7 @@ const ProductivityReportPage: React.FC = () => {
         <Tab value="summary" label="Resumen" />
         <Tab value="operators" label="Operarios" />
         <Tab value="workOrders" label="OTs" />
+        <Tab value="machines" label="Máquinas" />
         <Tab value="quality" label="Calidad del registro" />
       </Tabs>
 
@@ -226,6 +256,8 @@ const ProductivityReportPage: React.FC = () => {
         <OperatorsTab rows={report.operators} costs={report.costs} onOpen={setOpenUserId} />
       ) : tab === 'workOrders' ? (
         <WorkOrdersTab rows={report.workOrders} costs={report.costs} />
+      ) : tab === 'machines' ? (
+        <MachinesTab machines={report.machines} />
       ) : (
         <QualityTab rows={report.operators} />
       )}
@@ -712,6 +744,111 @@ const WorkOrdersTab: React.FC<{ rows: ProductivityWorkOrderRow[]; costs: CostSet
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Máquinas
+// ─────────────────────────────────────────────────────────────────────────────
+
+const MachinesTab: React.FC<{ machines: ProductivityMachines }> = ({ machines }) => {
+  const used = machines.rows.filter((m) => m.useMs > 0);
+  const idle = machines.rows.length - used.length;
+  const maxHour = Math.max(1, ...machines.rows.flatMap((m) => m.hourly));
+  return (
+    <>
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1fr 1fr' }, gap: 2, mb: 2 }}>
+        <Card sx={{ p: 2.5, minWidth: 0 }}>
+          <Typography variant="h6">Utilización</Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+            Horas en uso ÷ {machines.dailyHours} h por día hábil ({machines.workingDays} día
+            {machines.workingDays === 1 ? '' : 's'} en el periodo).
+          </Typography>
+          {used.length ? (
+            <HorizontalBars
+              ariaLabel="Utilización por máquina"
+              max={1}
+              data={used.map((m) => ({
+                id: m.id,
+                label: m.name,
+                value: m.utilization ?? 0,
+                valueLabel: percentLabel(m.utilization),
+                tooltip: `${m.name}: ${msLabel(m.useMs)} en uso · ${m.workOrders} OT · ${m.operators} operario(s)`,
+              }))}
+            />
+          ) : (
+            <Typography color="text.secondary">Ninguna tarea del periodo registró máquina.</Typography>
+          )}
+        </Card>
+        <Stack spacing={1.5}>
+          {idle > 0 && (
+            <Alert severity="warning" variant="outlined" sx={{ bgcolor: 'background.paper' }}>
+              {idle} máquina{idle === 1 ? '' : 's'} activa{idle === 1 ? '' : 's'} no se usaron en el periodo, o nadie las
+              registró al iniciar la tarea.
+            </Alert>
+          )}
+          {machines.withoutMachineMs > 0 && (
+            <Alert severity="info" variant="outlined" sx={{ bgcolor: 'background.paper' }}>
+              {msLabel(machines.withoutMachineMs)} de tareas no dijeron en qué máquina se hicieron. Elegir la máquina es
+              opcional al iniciar; mientras más la registren, más fiel es esta pestaña.
+            </Alert>
+          )}
+        </Stack>
+      </Box>
+
+      <Card>
+        <Box sx={{ px: 2.5, pt: 2 }}>
+          <Typography variant="h6">Máquinas</Typography>
+          <Typography variant="body2" color="text.secondary">
+            Uso real según las tareas que la registraron. Dos operarios a la vez en la misma máquina no la usan el doble.
+          </Typography>
+        </Box>
+        <TableContainer>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Máquina</TableCell>
+                <TableCell>Área</TableCell>
+                <TableCell align="right">Horas en uso</TableCell>
+                <TableCell>Utilización</TableCell>
+                <TableCell align="right">OTs</TableCell>
+                <TableCell align="right">Operarios</TableCell>
+                <TableCell>Uso por hora (6–20 h)</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {machines.rows.map((m) => (
+                <TableRow key={m.id} sx={{ '& td': { fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' } }}>
+                  <TableCell>
+                    <Typography variant="body2" fontWeight={600}>
+                      {m.name}
+                    </Typography>
+                  </TableCell>
+                  <TableCell>{m.area?.name ?? '—'}</TableCell>
+                  <TableCell align="right">{m.useMs ? msLabel(m.useMs) : '—'}</TableCell>
+                  <TableCell>
+                    <Stack direction="row" alignItems="center" spacing={1} sx={{ minWidth: 130 }}>
+                      <LinearProgress
+                        variant="determinate"
+                        value={Math.round(Math.min(1, m.utilization ?? 0) * 100)}
+                        sx={{ flex: 1, height: 6, borderRadius: 3 }}
+                        aria-hidden
+                      />
+                      <span>{percentLabel(m.utilization)}</span>
+                    </Stack>
+                  </TableCell>
+                  <TableCell align="right">{m.workOrders || '—'}</TableCell>
+                  <TableCell align="right">{m.operators || '—'}</TableCell>
+                  <TableCell>
+                    <HourlySparkline hourly={m.hourly} max={maxHour} />
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </Card>
+    </>
+  );
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Calidad del registro
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -819,6 +956,7 @@ const DEFINITIONS: [string, string][] = [
   ['Ocupación', 'Horas en tareas ÷ horas en planta. Mide cuánto del tiempo pagado se dedica a OT; no mide velocidad ni calidad.'],
   ['Paralelo', 'Suma de todas las tareas ÷ horas en tareas. 1,3× quiere decir que en promedio llevaba 1,3 tareas a la vez.'],
   ['Horas extra', 'Horas en tareas después del cierre de la jornada (18:00).'],
+  ['Utilización de máquina', 'Horas con al menos una tarea abierta en la máquina ÷ (días hábiles × 10 h). La máquina es opcional al iniciar: lo que no se registró no aparece.'],
   ['Confianza del registro', 'Baja si el sistema cerró más del 10 % de sus tareas o anuló más de 2; media desde el 5 %.'],
   ['Mostrador', 'El trabajo de mostrador (DTF) no tiene OT: quien trabaja ahí sale con baja ocupación aunque esté ocupado.'],
 ];

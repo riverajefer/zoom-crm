@@ -269,6 +269,9 @@ const SessionMovementsTable: React.FC<SessionMovementsTableProps> = ({ movements
         <TableContainer
           sx={{
             maxHeight: '65vh',
+            // El tema pone `overflow: hidden` a todo TableContainer (por las
+            // esquinas redondeadas); sin esto la tabla se corta y no desplaza.
+            overflow: 'auto',
             border: '1px solid',
             borderColor: 'divider',
             borderRadius: 1,

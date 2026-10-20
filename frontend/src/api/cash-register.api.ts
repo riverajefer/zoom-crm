@@ -1,4 +1,8 @@
 import axiosInstance from './axios';
+import { fetchAllPages } from '../utils/fetchAllPages';
+
+/** Tope de página del backend para movimientos (`MAX_CASH_PAGE_SIZE`). */
+const CASH_MOVEMENTS_PAGE_SIZE = 200;
 import type {
   PendingCashEntriesSummary,
   CashRegister,
@@ -122,5 +126,30 @@ export const cashRegisterApi = {
   getMovements: async (params?: FilterCashMovementsDto): Promise<CashMovementsListResponse> => {
     const { data } = await axiosInstance.get<CashMovementsListResponse>('/cash-movements', { params });
     return data;
+  },
+
+  /**
+   * Todos los movimientos de una sesión, recorriendo las páginas.
+   *
+   * El listado devuelve 50 por defecto y una sesión normal tiene entre 60 y 130:
+   * con una sola página, la sesión activa calculaba su saldo sobre los últimos 50
+   * y no mostraba los de la mañana.
+   */
+  getAllSessionMovements: async (
+    params: Omit<FilterCashMovementsDto, 'page' | 'limit'>,
+  ): Promise<CashMovement[]> => {
+    const rows = await fetchAllPages(
+      async (page, limit) => {
+        const { data } = await axiosInstance.get<CashMovementsListResponse>('/cash-movements', {
+          params: { ...params, page, limit },
+        });
+        return data.data;
+      },
+      CASH_MOVEMENTS_PAGE_SIZE,
+    );
+    // Un movimiento creado mientras se recorren las páginas corre el orden un
+    // puesto y repite la última fila de la página siguiente.
+    const seen = new Set<string>();
+    return rows.filter((m) => (seen.has(m.id) ? false : (seen.add(m.id), true)));
   },
 };

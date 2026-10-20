@@ -147,6 +147,9 @@ const ConciliationSummary: React.FC<Props> = ({ denominations, preview, readonly
         <Typography variant="subtitle2" gutterBottom>
           Conciliación
         </Typography>
+        <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
+          Solo efectivo. Las transferencias y otros métodos no pasan por el cajón.
+        </Typography>
         <Divider sx={{ mb: 1.5 }} />
 
         <Stack spacing={1.5}>

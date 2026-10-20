@@ -95,6 +95,8 @@ export interface CashMovement {
   voidedAt?: string;
   voidReason?: string;
   counterMovementId?: string;
+  /** Presente solo si este movimiento es la reversa «-ANUL» de otro. */
+  originalMovement?: { id: string; receiptNumber: string } | null;
   performedById: string;
   createdAt: string;
   updatedAt: string;

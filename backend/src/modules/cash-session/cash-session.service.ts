@@ -19,7 +19,7 @@ import {
   COLOMBIAN_BILLS,
   COLOMBIAN_COINS,
 } from './helpers/denomination.helpers';
-import { EXCLUDE_REVERSALS } from '../cash-movement/cash-movement.helpers';
+import { CASH_IN_DRAWER_WHERE } from '../cash-movement/cash-movement.helpers';
 
 @Injectable()
 export class CashSessionService {
@@ -190,9 +190,11 @@ export class CashSessionService {
     const systemBalance = openingAmount.add(movementsBalance);
     const movementCount = await this.repository.getMovementCount(id);
 
-    // Breakdown by payment type (for detailed preview)
+    // Desglose por tipo con el mismo filtro del saldo: solo efectivo. Antes
+    // sumaba todos los métodos, y la conciliación mostraba Fondo + Ingresos −
+    // Egresos dando una cifra distinta al «Saldo del Sistema» de debajo.
     const movements = await this.prisma.cashMovement.findMany({
-      where: { cashSessionId: id, isVoided: false, ...EXCLUDE_REVERSALS },
+      where: { cashSessionId: id, ...CASH_IN_DRAWER_WHERE },
       select: { movementType: true, amount: true },
     });
 

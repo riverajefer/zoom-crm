@@ -75,7 +75,8 @@ import { useAuthStore } from '../../../store/authStore';
 import { ALL_LOCATIONS, useLocationStore } from '../../../store/locationStore';
 import { PERMISSIONS } from '../../../utils/constants';
 import { PATHS } from '../../../router/paths';
-import { useCashSession, useCashMovements, useCashMutations } from '../hooks/useCashRegister';
+import { useCashSession, useSessionMovements, useCashMutations } from '../hooks/useCashRegister';
+import { countsInTotals, summarizeCashDrawer } from '../utils/cashBalance';
 import CreateMovementDialog from '../components/CreateMovementDialog';
 import VoidMovementDialog from '../components/VoidMovementDialog';
 import CalculatorDialog from '../components/CalculatorDialog';
@@ -146,7 +147,7 @@ const ActiveSessionPage: React.FC = () => {
   const isAdmin = user?.role?.name === 'admin';
 
   const sessionQuery = useCashSession(id);
-  const movementsQuery = useCashMovements({ cashSessionId: id, includeVoided: true });
+  const movementsQuery = useSessionMovements(id);
   const { createMovement, voidMovement } = useCashMutations();
   const createVoidRequest = useCreateVoidRequest();
 
@@ -169,7 +170,7 @@ const ActiveSessionPage: React.FC = () => {
   const session = sessionQuery.data;
   const activeLocationId = useLocationStore((s) => s.activeLocationId);
   const sessionLocationId = session?.cashRegister.location?.id;
-  const movements = movementsQuery.data?.data || [];
+  const movements = useMemo(() => movementsQuery.data ?? [], [movementsQuery.data]);
 
   const filteredMovements = useMemo(() => {
     let result = movements;
@@ -224,24 +225,13 @@ const ActiveSessionPage: React.FC = () => {
 
   const activeFilterCount = (typeFilter !== 'ALL' ? 1 : 0) + (paymentMethodFilter !== 'ALL' ? 1 : 0) + (movementSearch.trim() ? 1 : 0);
 
-  const balanceBreakdown = useMemo(() => {
-    const summary: Record<string, number> = {
-      INCOME: 0,
-      EXPENSE: 0,
-      WITHDRAWAL: 0,
-      DEPOSIT: 0,
-    };
-    movements
-      .filter((m) => !m.isVoided)
-      .forEach((m) => {
-        summary[m.movementType] += Number(m.amount);
-      });
-    return summary;
-  }, [movements]);
+  // Solo efectivo: es lo que cuadra contra el conteo del cierre. Las
+  // transferencias se ven aparte, en el desglose por método de pago.
+  const balanceBreakdown = useMemo(() => summarizeCashDrawer(movements), [movements]);
 
   const movementSummary = useMemo(() => {
     const types: CashMovementType[] = ['INCOME', 'DEPOSIT', 'EXPENSE', 'WITHDRAWAL'];
-    const active = movements.filter((m) => !m.isVoided);
+    const active = movements.filter(countsInTotals);
     const byType = types.map((t) => {
       const items = active.filter((m) => m.movementType === t);
       return { type: t, count: items.length, total: items.reduce((s, m) => s + Number(m.amount), 0) };
@@ -255,7 +245,7 @@ const ActiveSessionPage: React.FC = () => {
   const paymentMethodBreakdown = useMemo(() => {
     const summary: Record<string, { income: number; expense: number }> = {};
     movements
-      .filter((m) => !m.isVoided)
+      .filter(countsInTotals)
       .forEach((m) => {
         const method = m.paymentMethod || 'CASH';
         if (!summary[method]) summary[method] = { income: 0, expense: 0 };
@@ -287,19 +277,10 @@ const ActiveSessionPage: React.FC = () => {
     }
   }, [activeLocationId, sessionLocationId, navigate]);
 
-  // Compute running balance from movements (client-side)
-  const runningBalance = useMemo(() => {
-    if (!session) return 0;
-    const base = Number(session.openingAmount);
-    const delta = movements
-      .filter((m) => !m.isVoided)
-      .reduce((acc, m) => {
-        const amt = Number(m.amount);
-        if (m.movementType === 'INCOME' || m.movementType === 'DEPOSIT') return acc + amt;
-        return acc - amt;
-      }, 0);
-    return base + delta;
-  }, [session, movements]);
+  // Efectivo que debería haber en el cajón, con la misma regla del cierre.
+  // Antes sumaba también transferencias y solo veía los últimos 50 movimientos,
+  // así que este número no coincidía con el «Saldo del Sistema» al cerrar.
+  const runningBalance = session ? Number(session.openingAmount) + balanceBreakdown.net : 0;
 
   const handleCreateMovement = async (data: Parameters<typeof createMovement.mutateAsync>[0]) => {
     await createMovement.mutateAsync(data);
@@ -356,7 +337,7 @@ const ActiveSessionPage: React.FC = () => {
           }}>
             <Box>
               <Typography variant="overline" color="text.secondary" sx={{ lineHeight: 1.2, letterSpacing: 1 }}>
-                Saldo en Caja
+                Efectivo en Caja
               </Typography>
               <Typography
                 variant="h4"
@@ -964,7 +945,7 @@ const ActiveSessionPage: React.FC = () => {
         <Card sx={{ mt: 2 }}>
           <CardContent sx={{ py: 2, '&:last-child': { pb: 2 } }}>
             <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1.5 }}>
-              Resumen de movimientos
+              Resumen de movimientos (todos los métodos de pago)
             </Typography>
 
             <Box sx={{
@@ -1103,6 +1084,9 @@ const ActiveSessionPage: React.FC = () => {
       <Dialog open={isBalanceDialogOpen} onClose={() => setIsBalanceDialogOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle>Balance Detallado</DialogTitle>
         <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+            Solo efectivo: es lo que debe cuadrar con el conteo del cierre. Las transferencias y otros métodos están en el desglose por método de pago.
+          </Typography>
           <TableContainer>
             <Table size="small">
               <TableHead>
@@ -1146,7 +1130,7 @@ const ActiveSessionPage: React.FC = () => {
                   </TableCell>
                 </TableRow>
                 <TableRow>
-                  <TableCell><strong>Saldo Actual</strong></TableCell>
+                  <TableCell><strong>Efectivo en caja</strong></TableCell>
                   <TableCell align="right">
                     <strong>{formatCurrency(runningBalance)}</strong>
                   </TableCell>

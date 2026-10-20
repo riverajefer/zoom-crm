@@ -47,6 +47,7 @@ import PrintIcon from '@mui/icons-material/Print';
 import DescriptionIcon from '@mui/icons-material/Description';
 import { PageHeader } from '../../../components/common/PageHeader';
 import { useCashSession } from '../hooks/useCashRegister';
+import { countsInTotals, summarizeCashDrawer } from '../utils/cashBalance';
 import ConciliationSummary from '../components/ConciliationSummary';
 import { PATHS } from '../../../router/paths';
 import { exportMovementsPdf, exportMovementsExcel } from '../utils/exportMovements';
@@ -164,7 +165,7 @@ const SessionDetailPage: React.FC = () => {
 
   const movementSummary = useMemo(() => {
     const types: CashMovementType[] = ['INCOME', 'DEPOSIT', 'EXPENSE', 'WITHDRAWAL'];
-    const active = movements.filter((m) => !m.isVoided);
+    const active = movements.filter(countsInTotals);
     const byType = types.map((t) => {
       const items = active.filter((m) => m.movementType === t);
       return { type: t, count: items.length, total: items.reduce((s, m) => s + Number(m.amount), 0) };
@@ -174,18 +175,9 @@ const SessionDetailPage: React.FC = () => {
     return { byType, totalIncome, totalExpense, net: totalIncome - totalExpense, activeCount: active.length, voidedCount: movements.length - active.length };
   }, [movements]);
 
-  const runningBalance = useMemo(() => {
-    if (!session) return 0;
-    const base = Number(session.openingAmount);
-    const delta = movements
-      .filter((m) => !m.isVoided)
-      .reduce((acc, m) => {
-        const amt = Number(m.amount);
-        if (m.movementType === 'INCOME' || m.movementType === 'DEPOSIT') return acc + amt;
-        return acc - amt;
-      }, 0);
-    return base + delta;
-  }, [session, movements]);
+  // Solo efectivo, con la misma regla del cierre (ver utils/cashBalance).
+  const cashTotals = useMemo(() => summarizeCashDrawer(movements), [movements]);
+  const runningBalance = session ? Number(session.openingAmount) + cashTotals.net : 0;
 
   if (sessionQuery.isLoading) {
     return (
@@ -212,27 +204,13 @@ const SessionDetailPage: React.FC = () => {
         status: session.status as 'CLOSED',
         openingAmount: session.openingAmount,
         systemBalance: session.systemBalance,
-        totalIncome: String(
-          movements
-            .filter((m) => m.movementType === 'INCOME' && !m.isVoided)
-            .reduce((a, m) => a + Number(m.amount), 0),
-        ),
-        totalExpense: String(
-          movements
-            .filter((m) => m.movementType === 'EXPENSE' && !m.isVoided)
-            .reduce((a, m) => a + Number(m.amount), 0),
-        ),
-        totalWithdrawals: String(
-          movements
-            .filter((m) => m.movementType === 'WITHDRAWAL' && !m.isVoided)
-            .reduce((a, m) => a + Number(m.amount), 0),
-        ),
-        totalDeposits: String(
-          movements
-            .filter((m) => m.movementType === 'DEPOSIT' && !m.isVoided)
-            .reduce((a, m) => a + Number(m.amount), 0),
-        ),
-        movementCount: movements.filter((m) => !m.isVoided).length,
+        // Solo efectivo, como el `systemBalance` guardado al cerrar: si el
+        // desglose sumara transferencias, sus líneas no darían ese saldo.
+        totalIncome: String(cashTotals.INCOME),
+        totalExpense: String(cashTotals.EXPENSE),
+        totalWithdrawals: String(cashTotals.WITHDRAWAL),
+        totalDeposits: String(cashTotals.DEPOSIT),
+        movementCount: movements.filter(countsInTotals).length,
       }
     : null;
 

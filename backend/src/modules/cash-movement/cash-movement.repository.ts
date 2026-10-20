@@ -19,6 +19,11 @@ const MOVEMENT_SELECT = {
   voidedAt: true,
   voidReason: true,
   counterMovementId: true,
+  // Presente solo en un contramovimiento «-ANUL»: el frontend lo necesita para
+  // dejarlo fuera de los totales (ver EXCLUDE_REVERSALS). La reversa puede caer
+  // en otra sesión que la del original, así que no basta con cruzar
+  // `counterMovementId` dentro de la lista.
+  originalMovement: { select: { id: true, receiptNumber: true } },
   performedById: true,
   createdAt: true,
   updatedAt: true,

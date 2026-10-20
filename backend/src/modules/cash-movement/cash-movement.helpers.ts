@@ -33,3 +33,18 @@ export const EXCLUDE_REVERSALS: Prisma.CashMovementWhereInput = {
  * lo entrega. No es dinero nuevo: el consolidado lo cuenta en la base.
  */
 export const CASH_HANDOVER_REFERENCE = 'CASH_HANDOVER';
+
+/**
+ * Movimientos que mueven billetes dentro del cajón: los que cuadran contra el
+ * conteo físico del cierre.
+ *
+ * Las transferencias, tarjetas y demás quedan registradas en la sesión, pero
+ * nunca pasan por el cajón. El saldo del sistema y su desglose (Ingresos,
+ * Egresos…) tienen que usar este mismo filtro: si el desglose suma todos los
+ * métodos y el saldo solo efectivo, las cifras de la conciliación no suman.
+ */
+export const CASH_IN_DRAWER_WHERE: Prisma.CashMovementWhereInput = {
+  isVoided: false,
+  paymentMethod: 'CASH',
+  ...EXCLUDE_REVERSALS,
+};

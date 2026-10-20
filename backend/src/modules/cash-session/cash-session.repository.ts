@@ -2,7 +2,10 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { CashSessionStatus, Prisma } from '../../generated/prisma';
 import { FilterCashSessionsDto } from './dto';
-import { EXCLUDE_REVERSALS } from '../cash-movement/cash-movement.helpers';
+import {
+  CASH_IN_DRAWER_WHERE,
+  EXCLUDE_REVERSALS,
+} from '../cash-movement/cash-movement.helpers';
 import { clampPageSize, MAX_PAGE_SIZE } from '../../common/dto/pagination.dto';
 import { LOCATION_SUMMARY_SELECT } from '../../common/constants/location-select';
 import { endOfDay, startOfDay } from '../../common/utils/date-range.util';
@@ -62,6 +65,8 @@ export class CashSessionRepository {
             voidedBy: {
               select: { id: true, firstName: true, lastName: true },
             },
+            // El frontend lo usa para dejar las reversas «-ANUL» fuera de los totales.
+            originalMovement: { select: { id: true, receiptNumber: true } },
           },
         },
       },
@@ -127,12 +132,7 @@ export class CashSessionRepository {
 
   async computeSystemBalance(cashSessionId: string): Promise<Prisma.Decimal> {
     const allMovements = await this.prisma.cashMovement.findMany({
-      where: {
-        cashSessionId,
-        isVoided: false,
-        paymentMethod: 'CASH',
-        ...EXCLUDE_REVERSALS,
-      },
+      where: { cashSessionId, ...CASH_IN_DRAWER_WHERE },
       select: { movementType: true, amount: true },
     });
 

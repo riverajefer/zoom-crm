@@ -135,6 +135,21 @@ export const useCashMovements = (filters?: FilterCashMovementsDto) => {
   });
 };
 
+/**
+ * Todos los movimientos de una sesión (incluidos los anulados), sin cortar en la
+ * primera página: el saldo y los desgloses de la sesión activa se calculan sobre
+ * esta lista. Comparte la raíz de claves con `useCashMovements`, así que las
+ * mutaciones que invalidan movimientos también la refrescan.
+ */
+export const useSessionMovements = (cashSessionId: string) => {
+  return useQuery({
+    queryKey: [...cashKeys.movements.lists(), 'session-all', cashSessionId] as const,
+    queryFn: () => cashRegisterApi.getAllSessionMovements({ cashSessionId, includeVoided: true }),
+    enabled: !!cashSessionId,
+    refetchInterval: 15_000, // refresca cada 15s para capturar pagos de OG desde otras pestañas/usuarios
+  });
+};
+
 // ── Mutations ─────────────────────────────────────────────────────────────────
 
 export const useCashMutations = () => {

@@ -195,7 +195,7 @@ function drawSessionInfo(doc: jsPDF, y: number, session: CashSession, runningBal
 
   const pairs = [
     ['Cajero:', userName(session.openedBy), 'Fondo Inicial:', formatCurrency(session.openingAmount)],
-    ['Estado:', session.status === 'OPEN' ? 'Abierta' : 'Cerrada', 'Saldo Actual:', formatCurrency(runningBalance)],
+    ['Estado:', session.status === 'OPEN' ? 'Abierta' : 'Cerrada', 'Efectivo en caja:', formatCurrency(runningBalance)],
   ];
 
   pairs.forEach((row) => {

@@ -242,5 +242,27 @@ describe('CashSessionService', () => {
       expect(Number(preview.totalDeposits.toString())).toBe(5000);
       expect(preview.movementCount).toBe(4);
     });
+
+    it('desglosa solo el efectivo, igual que el saldo del sistema', async () => {
+      // Si el desglose sumara transferencias, Fondo + Ingresos − Egresos no daría
+      // el «Saldo del Sistema» que la conciliación muestra justo debajo.
+      repository.findById.mockResolvedValue(sessionStub());
+      repository.computeSystemBalance.mockResolvedValue(new Prisma.Decimal(0));
+      repository.getMovementCount.mockResolvedValue(0);
+      prisma.cashMovement.findMany.mockResolvedValue([] as any);
+
+      await service.getBalancePreview('cs-1');
+
+      expect(prisma.cashMovement.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            cashSessionId: 'cs-1',
+            isVoided: false,
+            paymentMethod: 'CASH',
+            originalMovement: null,
+          }),
+        }),
+      );
+    });
   });
 });

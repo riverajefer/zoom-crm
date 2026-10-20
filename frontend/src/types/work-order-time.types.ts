@@ -91,6 +91,40 @@ export interface ProductivityTotals {
   workOrders: number;
   entries: number;
   closedBySystem: number;
+  /** Solo con el permiso de costos. */
+  cost?: {
+    periodCost: number;
+    laborCost: number;
+    costPerProductiveHour: number | null;
+    operatorsWithoutSalary: number;
+  };
+}
+
+/** Costos de un operario; `null` si no tiene salario registrado. */
+export interface ProductivityOperatorCost {
+  hourlyRate: number;
+  periodCost: number;
+  overtimeCost: number;
+  costPerProductiveHour: number | null;
+}
+
+export interface ProductivityWorkOrderRow {
+  id: string;
+  workOrderNumber: string;
+  client: string | null;
+  /** Horas-persona prorrateadas: dos tareas a la vez se reparten el tramo. */
+  personMs: number;
+  people: number;
+  days: number;
+  firstDay: string | null;
+  lastDay: string | null;
+  /** Lo siguiente solo con el permiso de costos. Venta sin IVA de la OP. */
+  saleValue?: number | null;
+  /** `null` si nadie de la OT tiene salario en nómina. */
+  laborCost?: number | null;
+  laborShare?: number | null;
+  /** Algún operario de la OT no tiene salario: la mano de obra se queda corta. */
+  costIncomplete?: boolean;
 }
 
 export interface ProductivityOperatorRow {
@@ -104,6 +138,8 @@ export interface ProductivityOperatorRow {
   parallel: number | null;
   workOrders: { id: string; workOrderNumber: string; ms: number }[];
   machines: { id: string; name: string; ms: number }[];
+  /** Solo con el permiso de costos (`undefined` sin permiso, `null` sin salario). */
+  cost?: ProductivityOperatorCost | null;
   quality: {
     entries: number;
     closedBySystem: number;
@@ -126,10 +162,13 @@ export interface ProductivityReport {
   from: string;
   to: string;
   workdayEnd: string;
+  /** Parámetros del costo; `null` si quien consulta no puede ver costos. */
+  costs: { hourlyDivisor: number; overtimeFactor: number } | null;
   totals: ProductivityTotals;
   daily: { date: string; plantMs: number; busyMs: number }[];
   areas: { id: string | null; name: string; plantMs: number; busyMs: number }[];
   operators: ProductivityOperatorRow[];
+  workOrders: ProductivityWorkOrderRow[];
   previous: { from: string; to: string; totals: ProductivityTotals };
 }
 

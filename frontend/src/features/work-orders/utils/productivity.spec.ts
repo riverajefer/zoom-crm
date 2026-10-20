@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   buildInsights,
   confidenceLevel,
+  copLabel,
+  laborShareLevel,
   heatmapCells,
   heatmapHours,
   msLabel,
@@ -58,6 +60,8 @@ const report = (operators: ProductivityOperatorRow[], occ: number, prevOcc: numb
   daily: [],
   areas: [],
   operators,
+  workOrders: [],
+  costs: null,
   previous: { from: '2026-09-16', to: '2026-09-30', totals: totals(prevOcc) },
 });
 
@@ -109,5 +113,28 @@ describe('productivity utils', () => {
       { hour: 9, plantMs: H, busyMs: 0 },
     ]);
     expect(heatmapHours([{ attendance: [[at(5, 45), at(20, 30)]] }])).toEqual({ from: 5, to: 21 });
+  });
+
+  it('formatea pesos y el semáforo de mano de obra', () => {
+    expect(copLabel(12_727.27)).toBe('$ 12.700');
+    expect(copLabel(1_234_567)).toBe('$ 1.235.000');
+    expect(copLabel(null)).toBe('—');
+    expect(laborShareLevel(0.1)).toBe('success');
+    expect(laborShareLevel(0.2)).toBe('warning');
+    expect(laborShareLevel(0.4)).toBe('error');
+    expect(laborShareLevel(null)).toBeNull();
+  });
+
+  it('con costos, señala la OT con más mano de obra y a quien no tiene salario', () => {
+    const r = report([row('a', 'Carlos', 8, 7)], 0.7, null);
+    r.costs = { hourlyDivisor: 210, overtimeFactor: 1.25 };
+    r.totals.cost = { periodCost: 1, laborCost: 1, costPerProductiveHour: 1, operatorsWithoutSalary: 2 };
+    r.workOrders = [
+      { id: 'w1', workOrderNumber: 'OT-1', client: 'Hotel Mirador', personMs: H, people: 1, days: 1, firstDay: null, lastDay: null, saleValue: 100_000, laborCost: 35_000, laborShare: 0.35 },
+      { id: 'w2', workOrderNumber: 'OT-2', client: null, personMs: H, people: 1, days: 1, firstDay: null, lastDay: null, saleValue: 100_000, laborCost: 5_000, laborShare: 0.05 },
+    ];
+    const insights = buildInsights(r);
+    expect(insights.find((i) => i.text.startsWith('OT-1'))).toMatchObject({ severity: 'error' });
+    expect(insights.some((i) => i.text.includes('2 operarios no tienen salario'))).toBe(true);
   });
 });

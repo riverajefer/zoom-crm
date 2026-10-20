@@ -12,7 +12,7 @@ describe('ProductionReportController', () => {
     ]);
 
     const query = { from: '2026-10-01', to: '2026-10-15', areaId: 'a1' };
-    await controller.getProductivity(query);
-    expect(service.getReport).toHaveBeenCalledWith(query);
+    await controller.getProductivity(query, { id: 'u1', username: 'x', roleId: 'role-1' });
+    expect(service.getReport).toHaveBeenCalledWith(query, 'role-1');
   });
 });

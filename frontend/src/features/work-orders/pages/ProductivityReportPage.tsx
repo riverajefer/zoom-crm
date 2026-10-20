@@ -33,6 +33,7 @@ import type {
   ProductivityOperatorRow,
   ProductivityReport,
   ProductivityTotals,
+  ProductivityWorkOrderRow,
 } from '../../../types/work-order-time.types';
 import { useProductivityReport, useTimeMachines } from '../hooks/useWorkOrderTime';
 import { operatorColor, userInitials, userName } from '../utils/timeline';
@@ -40,6 +41,8 @@ import {
   PERIOD_LABELS,
   buildInsights,
   confidenceLevel,
+  copLabel,
+  laborShareLevel,
   hoursLabel,
   msLabel,
   percentLabel,
@@ -52,7 +55,7 @@ import { ChartLegend, DailyHoursChart, HorizontalBars } from '../components/prod
 import { useChartColors } from '../components/production-report/useChartColors';
 import { OperatorReportDrawer } from '../components/production-report/OperatorReportDrawer';
 
-type TabKey = 'summary' | 'operators' | 'quality';
+type TabKey = 'summary' | 'operators' | 'workOrders' | 'quality';
 
 const dayLabel = (day: string) => format(parseISO(day), 'dd/MM/yyyy');
 
@@ -205,6 +208,7 @@ const ProductivityReportPage: React.FC = () => {
       <Tabs value={tab} onChange={(_, v: TabKey) => setTab(v)} sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }} variant="scrollable">
         <Tab value="summary" label="Resumen" />
         <Tab value="operators" label="Operarios" />
+        <Tab value="workOrders" label="OTs" />
         <Tab value="quality" label="Calidad del registro" />
       </Tabs>
 
@@ -219,12 +223,14 @@ const ProductivityReportPage: React.FC = () => {
       ) : tab === 'summary' ? (
         <SummaryTab report={report} />
       ) : tab === 'operators' ? (
-        <OperatorsTab rows={report.operators} onOpen={setOpenUserId} />
+        <OperatorsTab rows={report.operators} costs={report.costs} onOpen={setOpenUserId} />
+      ) : tab === 'workOrders' ? (
+        <WorkOrdersTab rows={report.workOrders} costs={report.costs} />
       ) : (
         <QualityTab rows={report.operators} />
       )}
 
-      <Definitions />
+      <Definitions costs={report?.costs ?? null} />
       <OperatorReportDrawer row={openRow} onClose={() => setOpenUserId(null)} />
     </Box>
   );
@@ -308,7 +314,22 @@ const SummaryTab: React.FC<{ report: ProductivityReport }> = ({ report }) => {
         <Kpi label="Ocupación" value={percentLabel(t.occupancy)} change={occChange} />
         <Kpi label="Horas extra" value={msLabel(t.extraMs)} change={changeOf(t.extraMs, p.extraMs, false)} />
         <Kpi label="OTs con tiempo registrado" value={String(t.workOrders)} change={changeOf(t.workOrders, p.workOrders)} />
+        {t.cost && (
+          <>
+            <Kpi
+              label="Costo por hora productiva *"
+              value={copLabel(t.cost.costPerProductiveHour)}
+              change={
+                t.cost.costPerProductiveHour && p.cost?.costPerProductiveHour
+                  ? changeOf(t.cost.costPerProductiveHour, p.cost.costPerProductiveHour, false)
+                  : null
+              }
+            />
+            <Kpi label="Mano de obra en OT *" value={copLabel(t.cost.laborCost)} change={p.cost ? changeOf(t.cost.laborCost, p.cost.laborCost) : null} />
+          </>
+        )}
       </Box>
+      {report.costs && <CostFootnote costs={report.costs} />}
 
       {insights.length > 0 && (
         <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 1.5, mb: 2 }}>
@@ -366,7 +387,19 @@ const SummaryTab: React.FC<{ report: ProductivityReport }> = ({ report }) => {
 // Operarios
 // ─────────────────────────────────────────────────────────────────────────────
 
-type SortKey = 'name' | 'daysWorked' | 'plantMs' | 'busyMs' | 'occupancy' | 'parallel' | 'extraMs' | 'workOrders' | 'closed';
+type SortKey =
+  | 'name'
+  | 'daysWorked'
+  | 'plantMs'
+  | 'busyMs'
+  | 'occupancy'
+  | 'parallel'
+  | 'extraMs'
+  | 'workOrders'
+  | 'closed'
+  | 'hourlyRate'
+  | 'periodCost'
+  | 'costPerHour';
 
 const sortValue = (r: ProductivityOperatorRow, key: SortKey): number | string | null => {
   switch (key) {
@@ -378,6 +411,12 @@ const sortValue = (r: ProductivityOperatorRow, key: SortKey): number | string | 
       const valid = r.quality.entries - r.quality.voided;
       return valid ? r.quality.closedBySystem / valid : null;
     }
+    case 'hourlyRate':
+      return r.cost?.hourlyRate ?? null;
+    case 'periodCost':
+      return r.cost?.periodCost ?? null;
+    case 'costPerHour':
+      return r.cost?.costPerProductiveHour ?? null;
     default:
       return r[key];
   }
@@ -432,7 +471,21 @@ const OperatorCell: React.FC<{ row: ProductivityOperatorRow }> = ({ row }) => (
   </Stack>
 );
 
-const OperatorsTab: React.FC<{ rows: ProductivityOperatorRow[]; onOpen: (id: string) => void }> = ({ rows, onOpen }) => {
+type CostSettings = ProductivityReport['costs'];
+
+/** Nota de los valores estimados (marcados con *). */
+const CostFootnote: React.FC<{ costs: NonNullable<CostSettings> }> = ({ costs }) => (
+  <Typography variant="caption" color="text.secondary" component="p" sx={{ mb: 2 }}>
+    * Estimado: valor hora = salario ÷ {costs.hourlyDivisor} h al mes; horas extra × {String(costs.overtimeFactor).replace('.', ',')}.
+    Lo confirma el contador.
+  </Typography>
+);
+
+const OperatorsTab: React.FC<{
+  rows: ProductivityOperatorRow[];
+  costs: CostSettings;
+  onOpen: (id: string) => void;
+}> = ({ rows, costs, onOpen }) => {
   const { sorted, header } = useSorted(rows, 'occupancy');
   return (
     <Card>
@@ -456,6 +509,9 @@ const OperatorsTab: React.FC<{ rows: ProductivityOperatorRow[]; onOpen: (id: str
               {header('workOrders', 'OTs')}
               <TableCell>Máquina principal</TableCell>
               {header('closed', 'Cerradas por el sistema')}
+              {costs && header('hourlyRate', 'Valor hora *')}
+              {costs && header('periodCost', 'Costo del periodo *')}
+              {costs && header('costPerHour', 'Costo / h productiva *')}
             </TableRow>
           </TableHead>
           <TableBody>
@@ -504,12 +560,153 @@ const OperatorsTab: React.FC<{ rows: ProductivityOperatorRow[]; onOpen: (id: str
                       />
                     )}
                   </TableCell>
+                  {costs &&
+                    (r.cost ? (
+                      <>
+                        <TableCell align="right">{copLabel(r.cost.hourlyRate)}</TableCell>
+                        <TableCell align="right">{copLabel(r.cost.periodCost)}</TableCell>
+                        <TableCell align="right">{copLabel(r.cost.costPerProductiveHour)}</TableCell>
+                      </>
+                    ) : (
+                      <TableCell align="right" colSpan={3}>
+                        <Typography variant="caption" color="text.secondary">
+                          Sin salario en nómina
+                        </Typography>
+                      </TableCell>
+                    ))}
                 </TableRow>
               );
             })}
           </TableBody>
         </Table>
       </TableContainer>
+      {costs && (
+        <Box sx={{ px: 2.5, pt: 1.5 }}>
+          <CostFootnote costs={costs} />
+        </Box>
+      )}
+    </Card>
+  );
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// OTs
+// ─────────────────────────────────────────────────────────────────────────────
+
+const WorkOrdersTab: React.FC<{ rows: ProductivityWorkOrderRow[]; costs: CostSettings }> = ({ rows, costs }) => {
+  type Key = 'personMs' | 'people' | 'days' | 'laborCost' | 'saleValue' | 'laborShare';
+  const [key, setKey] = useState<Key>(costs ? 'laborShare' : 'personMs');
+  const [dir, setDir] = useState<'asc' | 'desc'>('desc');
+  const sorted = rows.slice().sort((a, b) => {
+    const x = a[key] ?? null;
+    const y = b[key] ?? null;
+    if (x === null) return 1;
+    if (y === null) return -1;
+    return dir === 'asc' ? x - y : y - x;
+  });
+  const header = (k: Key, label: string) => (
+    <TableCell align="right" sortDirection={key === k ? dir : false} sx={{ whiteSpace: 'nowrap' }}>
+      <TableSortLabel
+        active={key === k}
+        direction={key === k ? dir : 'desc'}
+        onClick={() => {
+          if (key === k) setDir(dir === 'asc' ? 'desc' : 'asc');
+          else {
+            setKey(k);
+            setDir('desc');
+          }
+        }}
+      >
+        {label}
+      </TableSortLabel>
+    </TableCell>
+  );
+  const shortDay = (d: string | null) => (d ? format(parseISO(d), 'dd/MM') : '—');
+
+  return (
+    <Card>
+      <Box sx={{ px: 2.5, pt: 2 }}>
+        <Typography variant="h6">OTs</Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ maxWidth: '85ch' }}>
+          Tiempo de cada OT en el periodo, prorrateado: si un operario llevaba dos tareas a la vez, cada una recibe la
+          mitad de ese tramo. Así el total cuadra con las horas pagadas.
+          {costs && ' La mano de obra se compara con la venta sin IVA de la OP.'}
+        </Typography>
+      </Box>
+      {rows.length === 0 ? (
+        <Typography color="text.secondary" sx={{ px: 2.5, py: 3 }}>
+          Ninguna OT tiene tiempo registrado en el periodo.
+        </Typography>
+      ) : (
+        <TableContainer>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>OT</TableCell>
+                <TableCell>Cliente</TableCell>
+                {header('personMs', 'Horas-persona')}
+                {header('people', 'Personas')}
+                {header('days', 'Días con trabajo')}
+                <TableCell align="right">Periodo</TableCell>
+                {costs && header('laborCost', 'Mano de obra *')}
+                {costs && header('saleValue', 'Venta sin IVA')}
+                {costs && header('laborShare', 'MO / venta')}
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {sorted.map((w) => {
+                const level = laborShareLevel(w.laborShare);
+                return (
+                  <TableRow key={w.id} sx={{ '& td': { fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' } }}>
+                    <TableCell>
+                      <Typography variant="body2" fontWeight={600}>
+                        {w.workOrderNumber}
+                      </Typography>
+                    </TableCell>
+                    <TableCell>{w.client ?? '—'}</TableCell>
+                    <TableCell align="right">{msLabel(w.personMs)}</TableCell>
+                    <TableCell align="right">{w.people}</TableCell>
+                    <TableCell align="right">{w.days}</TableCell>
+                    <TableCell align="right">
+                      {w.firstDay === w.lastDay ? shortDay(w.firstDay) : `${shortDay(w.firstDay)} – ${shortDay(w.lastDay)}`}
+                    </TableCell>
+                    {costs && (
+                      <>
+                        <TableCell align="right">
+                          {copLabel(w.laborCost)}
+                          {w.costIncomplete && w.laborCost != null && (
+                            <Typography component="span" variant="caption" color="warning.main" title="Algún operario no tiene salario en nómina">
+                              {' '}
+                              (parcial)
+                            </Typography>
+                          )}
+                        </TableCell>
+                        <TableCell align="right">{copLabel(w.saleValue)}</TableCell>
+                        <TableCell align="right">
+                          {level ? (
+                            <Chip size="small" variant="outlined" color={level} label={percentLabel(w.laborShare)} />
+                          ) : (
+                            '—'
+                          )}
+                        </TableCell>
+                      </>
+                    )}
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      )}
+      {costs && (
+        <Box sx={{ px: 2.5, pt: 1.5 }}>
+          <Typography variant="caption" color="text.secondary" component="p">
+            MO / venta: verde hasta 15 %, naranja hasta 30 %, rojo por encima. «Parcial»: algún operario no tiene salario
+            en nómina, así que la mano de obra se queda corta.
+          </Typography>
+          <CostFootnote costs={costs} />
+        </Box>
+      )}
     </Card>
   );
 };
@@ -626,14 +823,22 @@ const DEFINITIONS: [string, string][] = [
   ['Mostrador', 'El trabajo de mostrador (DTF) no tiene OT: quien trabaja ahí sale con baja ocupación aunque esté ocupado.'],
 ];
 
-const Definitions: React.FC = () => (
+const COST_DEFINITIONS: [string, string][] = [
+  ['Valor hora *', 'Salario mensual ÷ horas al mes (210 con la jornada de 42 h). Un temporal: tarifa diaria ÷ 7 h.'],
+  ['Costo del periodo *', 'Salario × días del periodo ÷ 30 (temporal: tarifa × días trabajados), más horas extra × valor hora × recargo.'],
+  ['Costo por hora productiva *', 'Costo del periodo ÷ horas en tareas: cuánto le cuesta a la empresa cada hora que el operario está en una OT.'],
+  ['Mano de obra de una OT *', 'Horas prorrateadas × valor hora. Con dos tareas abiertas cada una recibe la mitad del tramo; la extra lleva recargo.'],
+  ['MO / venta', 'Mano de obra ÷ venta sin IVA de la OP (subtotal menos descuentos).'],
+];
+
+const Definitions: React.FC<{ costs: CostSettings }> = ({ costs }) => (
   <Accordion sx={{ mt: 2 }} disableGutters>
     <AccordionSummary expandIcon={<ExpandMoreIcon />}>
       <Typography fontWeight={600}>Cómo se calcula cada número</Typography>
     </AccordionSummary>
     <AccordionDetails>
       <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 2 }}>
-        {DEFINITIONS.map(([term, text]) => (
+        {[...DEFINITIONS, ...(costs ? COST_DEFINITIONS : [])].map(([term, text]) => (
           <Box key={term}>
             <Typography variant="body2" fontWeight={600}>
               {term}

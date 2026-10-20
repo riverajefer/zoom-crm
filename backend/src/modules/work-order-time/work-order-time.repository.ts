@@ -198,9 +198,20 @@ export class WorkOrderTimeRepository {
         lastName: true,
         email: true,
         cargo: { select: { name: true, productionArea: { select: { id: true, name: true } } } },
+        // Para el costo; el servicio lo quita de la respuesta si no hay permiso.
+        payrollEmployee: { select: { employeeType: true, monthlySalary: true, dailyRate: true } },
       },
       orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }],
     });
+  }
+
+  /** ¿El rol tiene este permiso? (para mostrar u ocultar los costos). */
+  async roleHasPermission(roleId: string, permission: string) {
+    const found = await this.prisma.rolePermission.findFirst({
+      where: { roleId, permission: { name: permission } },
+      select: { roleId: true },
+    });
+    return Boolean(found);
   }
 
   findAttendanceInRange(userIds: string[], from: Date, to: Date) {
@@ -228,7 +239,12 @@ export class WorkOrderTimeRepository {
         adjustedAt: true,
         createdById: true,
         voidedAt: true,
-        workOrder: { select: { workOrderNumber: true } },
+        workOrder: {
+          select: {
+            workOrderNumber: true,
+            order: { select: { subtotal: true, discountAmount: true, client: { select: { name: true } } } },
+          },
+        },
         machine: { select: { id: true, name: true } },
       },
     });

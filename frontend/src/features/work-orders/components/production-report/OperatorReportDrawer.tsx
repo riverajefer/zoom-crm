@@ -14,7 +14,7 @@ import {
 import CloseIcon from '@mui/icons-material/Close';
 import type { ProductivityOperatorRow } from '../../../../types/work-order-time.types';
 import { operatorColor, userInitials, userName } from '../../utils/timeline';
-import { hoursLabel, msLabel, percentLabel } from '../../utils/productivity';
+import { copLabel, hoursLabel, msLabel, percentLabel } from '../../utils/productivity';
 import { HeatmapLegend, HorizontalBars, OccupancyHeatmap } from './ReportCharts';
 
 const Stat: React.FC<{ label: string; value: string }> = ({ label, value }) => (
@@ -70,7 +70,19 @@ export const OperatorReportDrawer: React.FC<{
               <Stat label="En planta" value={msLabel(row.plantMs)} />
               <Stat label="Paralelo" value={row.parallel ? `${row.parallel.toFixed(2).replace('.', ',')}×` : '—'} />
               <Stat label="Horas extra" value={row.extraMs ? msLabel(row.extraMs) : '—'} />
+              {row.cost && (
+                <>
+                  <Stat label="Valor hora *" value={copLabel(row.cost.hourlyRate)} />
+                  <Stat label="Costo del periodo *" value={copLabel(row.cost.periodCost)} />
+                  <Stat label="Costo / h productiva *" value={copLabel(row.cost.costPerProductiveHour)} />
+                </>
+              )}
             </Box>
+            {row.cost === null && (
+              <Typography variant="body2" color="warning.main">
+                No tiene salario en nómina: su tiempo no suma al costo.
+              </Typography>
+            )}
 
             <Box>
               <Typography variant="subtitle1" fontWeight={600}>

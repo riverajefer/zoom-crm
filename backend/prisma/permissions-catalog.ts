@@ -251,6 +251,11 @@ export const permissionGroups: PermissionGroup[] = [
           'Ver el reporte de productividad de producción (ocupación, horas y calidad del registro por operario)',
       },
       {
+        name: 'read_production_costs',
+        description:
+          'Ver costos en el reporte de productividad: valor hora, costo del periodo y mano de obra por OT (usa salarios)',
+      },
+      {
         name: 'read_production_plant',
         description:
           'Ver «Planta hoy»: asistencia, tareas en curso y ocupación de cada operario',

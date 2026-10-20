@@ -132,6 +132,7 @@ export const PERMISSIONS = {
   ADJUST_WORK_ORDER_TIME: 'adjust_work_order_time',
   READ_PRODUCTION_PLANT: 'read_production_plant',
   READ_PRODUCTION_REPORTS: 'read_production_reports',
+  READ_PRODUCTION_COSTS: 'read_production_costs',
   // Expense Types
   CREATE_EXPENSE_TYPES: 'create_expense_types',
   READ_EXPENSE_TYPES: 'read_expense_types',

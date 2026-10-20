@@ -65,6 +65,19 @@ export const hoursLabel = (ms: number) =>
 export const percentLabel = (ratio: number | null | undefined) =>
   ratio == null ? '—' : `${Math.round(ratio * 100)} %`;
 
+const cop = new Intl.NumberFormat('es-CO', { maximumFractionDigits: 0 });
+
+/** Pesos redondeados: a cientos por debajo de $100.000 y a miles por encima. */
+export const copLabel = (value: number | null | undefined) => {
+  if (value == null) return '—';
+  const rounded = value < 100_000 ? Math.round(value / 100) * 100 : Math.round(value / 1000) * 1000;
+  return `$ ${cop.format(rounded)}`;
+};
+
+/** Semáforo de mano de obra frente a la venta: hasta 15 % bien, hasta 30 % atención. */
+export const laborShareLevel = (share: number | null | undefined): 'success' | 'warning' | 'error' | null =>
+  share == null ? null : share > 0.3 ? 'error' : share > 0.15 ? 'warning' : 'success';
+
 /** Cambio relativo frente al periodo anterior (`null` si no hay con qué comparar). */
 export const relativeChange = (current: number, previous: number) =>
   previous > 0 ? (current - previous) / previous : null;
@@ -133,6 +146,27 @@ export const buildInsights = (report: ProductivityReport): Insight[] => {
         outside.quality.outsideAttendanceMs,
       )} de tareas fuera de su asistencia: no cuentan en la ocupación. ¿Olvidó marcar entrada o salida?`,
     });
+  }
+
+  if (report.costs) {
+    const heaviest = report.workOrders
+      .filter((w) => w.laborShare != null)
+      .sort((a, b) => (b.laborShare ?? 0) - (a.laborShare ?? 0))[0];
+    if (heaviest && (heaviest.laborShare ?? 0) > 0.15) {
+      insights.push({
+        severity: (heaviest.laborShare ?? 0) > 0.3 ? 'error' : 'warning',
+        text: `${heaviest.workOrderNumber}${heaviest.client ? ` (${heaviest.client})` : ''} es la OT con más mano de obra frente a su venta: ${percentLabel(
+          heaviest.laborShare,
+        )} de ${copLabel(heaviest.saleValue)} sin IVA.`,
+      });
+    }
+    const missing = report.totals.cost?.operatorsWithoutSalary ?? 0;
+    if (missing > 0) {
+      insights.push({
+        severity: 'info',
+        text: `${missing} operario${missing === 1 ? ' no tiene' : 's no tienen'} salario en nómina: su tiempo no suma al costo.`,
+      });
+    }
   }
 
   const prev = report.previous.totals.occupancy;

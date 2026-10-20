@@ -9,6 +9,16 @@
 >   - **Operarios**: con ficha (mapa de calor, horas por OT y por máquina).
 >   - **Calidad del registro**: suma «tareas fuera de la asistencia», que sirve para detectar entradas o salidas sin marcar.
 > - Faltan la fase 2 (costos) y la fase 3 (pestañas OTs y Máquinas, y exportar a Excel).
+>
+> **Fase 2, hecha el 2026-10-20:**
+> - **Permiso nuevo:** `read_production_costs`. Sin él, el backend no envía ni salarios ni costos.
+> - **Configuración:** el valor hora y el recargo se ajustan con `PRODUCTION_HOURLY_DIVISOR` (210) y `PRODUCTION_OVERTIME_FACTOR` (1,25).
+> - **Operarios:** valor hora, costo del periodo y costo por hora productiva. Los temporales usan su tarifa diaria.
+> - **Resumen:** costo por hora productiva y mano de obra en OT.
+> - **Pestaña OTs, adelantada de la fase 3:**
+>   - horas-persona prorrateadas, mano de obra y MO / venta, medida contra la **venta sin IVA** (subtotal menos descuentos), no contra el total;
+>   - marca «parcial» cuando a algún operario le falta el salario.
+> - **Falta para la fase 3:** la pestaña Máquinas y la exportación a Excel.
 
 ## 1. Para qué sirve
 

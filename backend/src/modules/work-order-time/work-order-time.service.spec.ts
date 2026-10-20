@@ -60,6 +60,7 @@ const mockRepository = {
   countRunningByUser: jest.fn(),
   findRunningTask: jest.fn(),
   findRunningToClose: jest.fn(),
+  findRunningStartedBefore: jest.fn(),
   findPendingReview: jest.fn(),
   findOperators: jest.fn(),
   findPlantOperators: jest.fn(),
@@ -535,6 +536,63 @@ describe('WorkOrderTimeService', () => {
       expect(result.operators).toEqual([]);
       expect(mockRepository.findAttendanceForDay).not.toHaveBeenCalled();
       expect(mockRepository.findEntriesForDay).not.toHaveBeenCalled();
+    });
+  });
+
+  // ─────────────────────────────────────────
+  // closeMissedTasks (red de seguridad)
+  // ─────────────────────────────────────────
+  describe('closeMissedTasks', () => {
+    // Martes 20 oct 2026 en Bogotá (UTC−5)
+    const bogota = (day: number, hh: number, mm = 0) =>
+      new Date(Date.UTC(2026, 9, day, hh + 5, mm));
+
+    beforeEach(() => mockRepository.findRunningStartedBefore.mockResolvedValue([]));
+
+    it('una tarea de un día anterior se cierra al final de su propio día', async () => {
+      mockRepository.findRunningStartedBefore.mockResolvedValueOnce([{ id: 'vieja', startAt: bogota(17, 14, 30) }]);
+
+      const closed = await service.closeMissedTasks(bogota(20, 11, 0));
+
+      expect(closed).toBe(1);
+      const [before, includeExtended] = mockRepository.findRunningStartedBefore.mock.calls[0];
+      expect(before).toEqual(bogota(20, 0, 0));
+      expect(includeExtended).toBe(true);
+      const [id, data] = mockRepository.closeIfRunning.mock.calls[0];
+      expect(id).toBe('vieja');
+      expect(data.endAt.toISOString()).toBe('2026-10-18T04:59:59.000Z'); // 17 oct 23:59:59 Bogotá
+      expect(data.closedBySystem).toBe(true);
+      expect(Number(data.hoursWorked.toString())).toBeCloseTo(9.5, 2);
+    });
+
+    it('antes del fin de la jornada no toca las tareas de hoy', async () => {
+      await service.closeMissedTasks(bogota(20, 11, 0));
+
+      expect(mockRepository.findRunningStartedBefore).toHaveBeenCalledTimes(1);
+      expect(mockRepository.closeIfRunning).not.toHaveBeenCalled();
+    });
+
+    it('si se saltó el cierre de las 18:00, cierra las de hoy no extendidas a las 18:00', async () => {
+      mockRepository.findRunningStartedBefore
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([{ id: 'hoy', startAt: bogota(20, 15, 0) }]);
+
+      const closed = await service.closeMissedTasks(bogota(20, 19, 5));
+
+      expect(closed).toBe(1);
+      const [before, includeExtended] = mockRepository.findRunningStartedBefore.mock.calls[1];
+      expect(before).toEqual(bogota(20, 18, 0));
+      expect(includeExtended).toBe(false);
+      const [, data] = mockRepository.closeIfRunning.mock.calls[0];
+      expect(data.endAt).toEqual(bogota(20, 18, 0));
+      expect(Number(data.hoursWorked.toString())).toBe(3);
+    });
+
+    it('no cuenta lo que otra petición ya cerró', async () => {
+      mockRepository.findRunningStartedBefore.mockResolvedValueOnce([{ id: 'vieja', startAt: bogota(19, 9, 0) }]);
+      mockRepository.closeIfRunning.mockResolvedValue(0);
+
+      await expect(service.closeMissedTasks(bogota(20, 8, 0))).resolves.toBe(0);
     });
   });
 });

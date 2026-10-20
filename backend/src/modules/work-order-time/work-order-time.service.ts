@@ -24,9 +24,11 @@ import {
   MAX_RUNNING_TASKS,
   PRODUCTION_OVERTIME_CAP,
   WORKDAY_END_WARNING_MINUTES,
+  businessDate,
   hoursBetween,
   parseProductionWorkdayEnd,
   systemCloseTime,
+  workdayEndInstant,
   workedDateFor,
 } from './work-order-time.util';
 
@@ -369,11 +371,42 @@ export class WorkOrderTimeService {
   async closeRunningTasks(includeExtended: boolean): Promise<number> {
     const running = await this.repository.findRunningToClose(includeExtended);
     const now = new Date();
-    let closed = 0;
+    return this.closeBySystem(running, (startAt) => systemCloseTime(startAt, now));
+  }
 
-    for (const entry of running) {
+  /**
+   * Red de seguridad para cuando el backend no estaba vivo a las 18:00 o a las
+   * 23:59 (un deploy, una caída). Sin esto la tarea queda «en curso» hasta el
+   * siguiente cierre, y mientras tanto «Planta hoy» la cuenta como trabajo
+   * actual e infla la ocupación.
+   *
+   * - Las de días anteriores se cierran al final de su propio día, como el tope.
+   * - Si ya pasó el fin de la jornada de hoy, las de hoy que no se extendieron
+   *   se cierran a la hora del fin de jornada, no a la hora en que se detectan.
+   */
+  async closeMissedTasks(now: Date = new Date()): Promise<number> {
+    const today = businessDate(now);
+    const todayStart = startOfDay(today)!;
+
+    const stale = await this.repository.findRunningStartedBefore(todayStart, true);
+    let closed = await this.closeBySystem(stale, (startAt) => systemCloseTime(startAt, now));
+
+    const workdayEnd = workdayEndInstant(today, this.getSchedule().workdayEnd);
+    if (now.getTime() >= workdayEnd.getTime()) {
+      const missed = await this.repository.findRunningStartedBefore(workdayEnd, false);
+      closed += await this.closeBySystem(missed, () => workdayEnd);
+    }
+    return closed;
+  }
+
+  private async closeBySystem(
+    entries: { id: string; startAt: Date | null }[],
+    closeAt: (startAt: Date) => Date,
+  ): Promise<number> {
+    let closed = 0;
+    for (const entry of entries) {
       if (!entry.startAt) continue;
-      const endAt = systemCloseTime(entry.startAt, now);
+      const endAt = closeAt(entry.startAt);
       try {
         closed += await this.repository.closeIfRunning(entry.id, {
           endAt,

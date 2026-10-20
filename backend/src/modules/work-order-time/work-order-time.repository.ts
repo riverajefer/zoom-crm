@@ -95,6 +95,22 @@ export class WorkOrderTimeRepository {
     });
   }
 
+  /**
+   * Tareas en curso que empezaron antes de `before`; sin `includeExtended`,
+   * solo las que no se marcaron «Sigo trabajando». Para la red de seguridad del
+   * cierre automático.
+   */
+  findRunningStartedBefore(before: Date, includeExtended: boolean) {
+    return this.prisma.workOrderTimeEntry.findMany({
+      where: {
+        ...RUNNING_WHERE,
+        startAt: { lt: before },
+        ...(includeExtended ? {} : { extendedAt: null }),
+      },
+      select: { id: true, startAt: true },
+    });
+  }
+
   findPendingReview() {
     return this.prisma.workOrderTimeEntry.findMany({
       where: { closedBySystem: true, reviewedAt: null, voidedAt: null },

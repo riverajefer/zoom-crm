@@ -57,3 +57,8 @@ export function systemCloseTime(startAt: Date, now: Date): Date {
   const cap = endOfBusinessDay(startAt);
   return now.getTime() > cap.getTime() ? cap : now;
 }
+
+/** Instante del cierre de jornada (`HH:mm` hora Colombia) en un día `YYYY-MM-DD`. */
+export function workdayEndInstant(day: string, hhmm: string): Date {
+  return new Date(`${day}T${hhmm}:00.000${BUSINESS_UTC_OFFSET}`);
+}

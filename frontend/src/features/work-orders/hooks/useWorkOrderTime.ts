@@ -8,6 +8,7 @@ import type {
   CreateManualTimeEntryDto,
   ProductivityReportQuery,
   StartTimeEntryDto,
+  UpdateProductionSettingsDto,
 } from '../../../types/work-order-time.types';
 import { workOrdersKeys } from './useWorkOrders';
 import { formatDuration, entryDurationSeconds } from '../utils/timeline';
@@ -73,6 +74,29 @@ export const useProductivityReport = (query: ProductivityReportQuery) =>
     queryFn: () => productionReportsApi.getProductivity(query),
     placeholderData: keepPreviousData,
   });
+
+/** Parámetros del reporte (divisor, recargo y umbrales); solo con `manage_production_settings`. */
+export const useProductionSettings = (enabled: boolean) =>
+  useQuery({
+    queryKey: [...workOrderTimeKeys.all, 'production-settings'] as const,
+    queryFn: () => productionReportsApi.getSettings(),
+    enabled,
+  });
+
+/** Guarda los parámetros y recalcula el reporte con ellos. */
+export const useUpdateProductionSettings = () => {
+  const queryClient = useQueryClient();
+  const { enqueueSnackbar } = useSnackbar();
+  return useMutation({
+    mutationFn: (dto: UpdateProductionSettingsDto) => productionReportsApi.updateSettings(dto),
+    onSuccess: (settings) => {
+      queryClient.setQueryData([...workOrderTimeKeys.all, 'production-settings'], settings);
+      queryClient.invalidateQueries({ queryKey: [...workOrderTimeKeys.all, 'productivity'] });
+      enqueueSnackbar('Parámetros guardados: el reporte se recalculó con ellos', { variant: 'success' });
+    },
+    onError: (error: unknown) => enqueueSnackbar(apiErrorMessage(error), { variant: 'error' }),
+  });
+};
 
 /** Mensaje del backend; class-validator lo manda como arreglo. */
 const apiErrorMessage = (error: unknown): string => {

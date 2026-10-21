@@ -62,6 +62,7 @@ model User {
   reviewedWorkOrderTimeEntries              WorkOrderTimeEntry[]                   @relation("WorkOrderTimeEntryReviewedBy")
   adjustedWorkOrderTimeEntries              WorkOrderTimeEntry[]                   @relation("WorkOrderTimeEntryAdjustedBy")
   voidedWorkOrderTimeEntries                WorkOrderTimeEntry[]                   @relation("WorkOrderTimeEntryVoidedBy")
+  updatedProductionSettings                 ProductionSettings[]                   @relation("ProductionSettingsUpdatedBy")
   authorizedExpenseOrders                   ExpenseOrder[]                         @relation("AuthorizedExpenseOrders")
   cajaAuthorizedExpenseOrders               ExpenseOrder[]                         @relation("CajaAuthorizedExpenseOrders")
   cajaRejectedExpenseOrders                 ExpenseOrder[]                         @relation("CajaRejectedExpenseOrders")
@@ -1410,6 +1411,25 @@ model ProductionArea {
   machines          Machine[]
 
   @@map("production_areas")
+}
+
+// Parámetros del reporte de productividad que gerencia ajusta desde el CRM.
+// Una sola fila (id = "default"); si no existe, se usan los valores por defecto.
+model ProductionSettings {
+  id                    String   @id @default("default")
+  // Horas al mes para el valor hora: salario ÷ este número (210 = 42 h semanales).
+  hourlyDivisor         Decimal  @default(210) @map("hourly_divisor") @db.Decimal(6, 2)
+  // Multiplicador de la hora extra (1,25 = recargo del 25 %).
+  overtimeFactor        Decimal  @default(1.25) @map("overtime_factor") @db.Decimal(4, 2)
+  // Mano de obra ÷ venta de una OT, en porcentaje: desde aquí «atención» y «alerta».
+  laborShareWarningPct  Decimal  @default(15) @map("labor_share_warning_pct") @db.Decimal(5, 2)
+  laborShareCriticalPct Decimal  @default(30) @map("labor_share_critical_pct") @db.Decimal(5, 2)
+  updatedById           String?  @map("updated_by_id")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  updatedBy User? @relation("ProductionSettingsUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@map("production_settings")
 }
 
 // Máquinas de la planta. Se elige (opcional) al iniciar una tarea con el

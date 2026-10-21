@@ -78,7 +78,7 @@ describe('exportProductivity', () => {
   it('con costos agrega las columnas y los parámetros', () => {
     const withCosts: ProductivityReport = {
       ...base,
-      costs: { hourlyDivisor: 210, overtimeFactor: 1.25 },
+      costs: { hourlyDivisor: 210, overtimeFactor: 1.25, laborShareWarning: 0.15, laborShareCritical: 0.3 },
       totals: { ...totals, cost: { periodCost: 300000, laborCost: 75000, costPerProductiveHour: 40000, operatorsWithoutSalary: 0 } },
       operators: [{ ...base.operators[0], cost: { hourlyRate: 9047.6, periodCost: 300000, overtimeCost: 5654.8, costPerProductiveHour: 40000 } }],
       workOrders: [{ ...base.workOrders[0], laborCost: 75000, saleValue: 500000, laborShare: 0.15, costIncomplete: false }],
@@ -86,5 +86,6 @@ describe('exportProductivity', () => {
     expect(sheet('Operarios', withCosts).rows[1].slice(-3)).toEqual([9048, 300000, 40000]);
     expect(sheet('OTs', withCosts).rows[1].slice(-4)).toEqual([75000, 500000, 15, 'No']);
     expect(sheet('Resumen', withCosts).rows).toContainEqual(['Valor hora = salario ÷', 210, 'horas al mes']);
+    expect(sheet('Resumen', withCosts).rows).toContainEqual(['MO / venta: alerta desde (%)', 30, null]);
   });
 });

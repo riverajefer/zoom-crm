@@ -1,5 +1,6 @@
 import { format, startOfWeek, subDays } from 'date-fns';
 import type {
+  ProductivityCostSettings,
   ProductivityOperatorRow,
   ProductivityReport,
   ReportInterval,
@@ -74,9 +75,21 @@ export const copLabel = (value: number | null | undefined) => {
   return `$ ${cop.format(rounded)}`;
 };
 
-/** Semáforo de mano de obra frente a la venta: hasta 15 % bien, hasta 30 % atención. */
-export const laborShareLevel = (share: number | null | undefined): 'success' | 'warning' | 'error' | null =>
-  share == null ? null : share > 0.3 ? 'error' : share > 0.15 ? 'warning' : 'success';
+/** Umbrales del semáforo de mano de obra / venta (se editan en «Parámetros»). */
+export type LaborShareThresholds = Pick<ProductivityCostSettings, 'laborShareWarning' | 'laborShareCritical'>;
+
+/** Semáforo de mano de obra frente a la venta: verde hasta el umbral de atención, naranja hasta el de alerta. */
+export const laborShareLevel = (
+  share: number | null | undefined,
+  { laborShareWarning, laborShareCritical }: LaborShareThresholds,
+): 'success' | 'warning' | 'error' | null =>
+  share == null ? null : share > laborShareCritical ? 'error' : share > laborShareWarning ? 'warning' : 'success';
+
+/** Número con coma decimal y sin ceros sobrantes: «1,25», «210», «12,5». */
+export const decimalLabel = (value: number) => value.toLocaleString('es-CO', { maximumFractionDigits: 2 });
+
+/** Umbral como porcentaje: 0,125 → «12,5 %». */
+export const thresholdLabel = (fraction: number) => `${decimalLabel(Math.round(fraction * 10_000) / 100)} %`;
 
 /** Cambio relativo frente al periodo anterior (`null` si no hay con qué comparar). */
 export const relativeChange = (current: number, previous: number) =>
@@ -152,9 +165,10 @@ export const buildInsights = (report: ProductivityReport): Insight[] => {
     const heaviest = report.workOrders
       .filter((w) => w.laborShare != null)
       .sort((a, b) => (b.laborShare ?? 0) - (a.laborShare ?? 0))[0];
-    if (heaviest && (heaviest.laborShare ?? 0) > 0.15) {
+    const level = laborShareLevel(heaviest?.laborShare, report.costs);
+    if (heaviest && (level === 'warning' || level === 'error')) {
       insights.push({
-        severity: (heaviest.laborShare ?? 0) > 0.3 ? 'error' : 'warning',
+        severity: level,
         text: `${heaviest.workOrderNumber}${heaviest.client ? ` (${heaviest.client})` : ''} es la OT con más mano de obra frente a su venta: ${percentLabel(
           heaviest.laborShare,
         )} de ${copLabel(heaviest.saleValue)} sin IVA.`,

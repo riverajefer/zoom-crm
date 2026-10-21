@@ -2,6 +2,7 @@ import { BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ProductionReportService } from './production-report.service';
 import { WorkOrderTimeRepository } from './work-order-time.repository';
+import { ProductionSettingsService } from './production-settings.service';
 import {
   daysBetween,
   intersectIntervals,
@@ -65,6 +66,7 @@ describe('ProductionReportService', () => {
     findEntriesInRange: jest.fn(),
     roleHasPermission: jest.fn(),
     findActiveMachines: jest.fn(),
+    findProductionSettings: jest.fn(),
   };
   const now = b(20, 11, 0);
 
@@ -73,6 +75,8 @@ describe('ProductionReportService', () => {
     entries = [];
     repository.findReportOperators.mockResolvedValue([operator]);
     repository.roleHasPermission.mockResolvedValue(false);
+    // Sin fila de parámetros: rigen los de arranque (210, 1,25, 15 %, 30 %).
+    repository.findProductionSettings.mockResolvedValue(null);
     repository.findActiveMachines.mockResolvedValue([
       { id: 'm1', name: 'PLOTTER ECOSOLVENTE', productionArea: { id: 'a1', name: 'Plotter ecosolvente' } },
       { id: 'm2', name: 'CALANDRA', productionArea: { id: 'a2', name: 'Calandra' } },
@@ -86,6 +90,7 @@ describe('ProductionReportService', () => {
     );
     service = new ProductionReportService(
       repository as unknown as WorkOrderTimeRepository,
+      new ProductionSettingsService(repository as unknown as WorkOrderTimeRepository),
       { get: jest.fn().mockReturnValue(undefined) } as unknown as ConfigService,
     );
   });
@@ -210,11 +215,42 @@ describe('ProductionReportService', () => {
       const report = await service.getReport({ from: '2026-10-14', to: '2026-10-14' }, 'role', now);
       const cost = (report.operators[0] as { cost: Record<string, number> }).cost;
 
-      expect(report.costs).toEqual({ hourlyDivisor: 210, overtimeFactor: 1.25 });
+      expect(report.costs).toEqual({
+        hourlyDivisor: 210,
+        overtimeFactor: 1.25,
+        laborShareWarning: 0.15,
+        laborShareCritical: 0.3,
+      });
       expect(cost.hourlyRate).toBe(10_000);
       expect(cost.periodCost).toBeCloseTo(70_000); // 2.100.000 × 1 día ÷ 30
       expect(cost.costPerProductiveHour).toBeCloseTo(70_000 / 5.5);
       expect(report.operators[0].user).not.toHaveProperty('payrollEmployee');
+    });
+
+    it('usa los parámetros que gerencia guardó en el CRM', async () => {
+      repository.roleHasPermission.mockResolvedValue(true);
+      repository.findProductionSettings.mockResolvedValue({
+        hourlyDivisor: '200',
+        overtimeFactor: '1.75',
+        laborShareWarningPct: '20',
+        laborShareCriticalPct: '40',
+        updatedAt: now,
+        updatedBy: null,
+      });
+      attendance.push({ userId: 'u1', clockIn: b(14, 8), clockOut: b(14, 19, 30) });
+      entries.push(entry('a', b(14, 17), b(14, 19)));
+
+      const report = await service.getReport({ from: '2026-10-14', to: '2026-10-14' }, 'role', now);
+      const cost = (report.operators[0] as { cost: Record<string, number> }).cost;
+
+      expect(report.costs).toEqual({
+        hourlyDivisor: 200,
+        overtimeFactor: 1.75,
+        laborShareWarning: 0.2,
+        laborShareCritical: 0.4,
+      });
+      expect(cost.hourlyRate).toBe(10_500); // 2.100.000 ÷ 200
+      expect(cost.overtimeCost).toBeCloseTo(18_375); // 1 h × 10.500 × 1,75
     });
 
     it('la mano de obra de la OT se prorratea: dos tareas a la vez se reparten la hora', async () => {

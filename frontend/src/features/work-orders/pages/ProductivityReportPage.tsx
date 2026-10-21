@@ -29,9 +29,12 @@ import { DatePicker } from '@mui/x-date-pickers';
 import InsightsIcon from '@mui/icons-material/Insights';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
+import TuneIcon from '@mui/icons-material/Tune';
 import { exportProductivityReport } from '../utils/exportProductivity';
 import { format, parseISO } from 'date-fns';
 import { PageHeader } from '../../../components/common/PageHeader';
+import { useAuthStore } from '../../../store/authStore';
+import { PERMISSIONS } from '../../../utils/constants';
 import type {
   ProductivityOperatorRow,
   ProductivityReport,
@@ -46,7 +49,9 @@ import {
   buildInsights,
   confidenceLevel,
   copLabel,
+  decimalLabel,
   laborShareLevel,
+  thresholdLabel,
   hoursLabel,
   msLabel,
   percentLabel,
@@ -63,6 +68,7 @@ import {
 } from '../components/production-report/ReportCharts';
 import { useChartColors } from '../components/production-report/useChartColors';
 import { OperatorReportDrawer } from '../components/production-report/OperatorReportDrawer';
+import { ProductionSettingsDialog } from '../components/production-report/ProductionSettingsDialog';
 
 type TabKey = 'summary' | 'operators' | 'workOrders' | 'machines' | 'quality';
 
@@ -81,6 +87,8 @@ const ProductivityReportPage: React.FC = () => {
   const [machineId, setMachineId] = useState('');
   const [tab, setTab] = useState<TabKey>('summary');
   const [openUserId, setOpenUserId] = useState<string | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const canManageSettings = useAuthStore((s) => s.hasPermission(PERMISSIONS.MANAGE_PRODUCTION_SETTINGS));
 
   const { data: report, isLoading, isError, isFetching } = useProductivityReport({
     from: range.from,
@@ -128,16 +136,24 @@ const ProductivityReportPage: React.FC = () => {
         icon={<InsightsIcon />}
         breadcrumbs={[{ label: 'Producción' }, { label: 'Productividad' }]}
         action={
-          <Button
-            variant="outlined"
-            startIcon={<FileDownloadIcon />}
-            disabled={!report || isFetching}
-            onClick={() => report && exportProductivityReport(report, filtersLabel)}
-          >
-            Exportar a Excel
-          </Button>
+          <Stack direction="row" spacing={1}>
+            {canManageSettings && (
+              <Button variant="outlined" startIcon={<TuneIcon />} onClick={() => setSettingsOpen(true)}>
+                Parámetros
+              </Button>
+            )}
+            <Button
+              variant="outlined"
+              startIcon={<FileDownloadIcon />}
+              disabled={!report || isFetching}
+              onClick={() => report && exportProductivityReport(report, filtersLabel)}
+            >
+              Exportar a Excel
+            </Button>
+          </Stack>
         }
       />
+      {canManageSettings && <ProductionSettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />}
 
       <Card sx={{ p: 2, mb: 2 }}>
         <Box
@@ -508,8 +524,8 @@ type CostSettings = ProductivityReport['costs'];
 /** Nota de los valores estimados (marcados con *). */
 const CostFootnote: React.FC<{ costs: NonNullable<CostSettings> }> = ({ costs }) => (
   <Typography variant="caption" color="text.secondary" component="p" sx={{ mb: 2 }}>
-    * Estimado: valor hora = salario ÷ {costs.hourlyDivisor} h al mes; horas extra × {String(costs.overtimeFactor).replace('.', ',')}.
-    Lo confirma el contador.
+    * Estimado: valor hora = salario ÷ {decimalLabel(costs.hourlyDivisor)} h al mes; horas extra ×{' '}
+    {decimalLabel(costs.overtimeFactor)}. Gerencia los ajusta en «Parámetros».
   </Typography>
 );
 
@@ -687,7 +703,7 @@ const WorkOrdersTab: React.FC<{ rows: ProductivityWorkOrderRow[]; costs: CostSet
             </TableHead>
             <TableBody>
               {sorted.map((w) => {
-                const level = laborShareLevel(w.laborShare);
+                const level = costs ? laborShareLevel(w.laborShare, costs) : null;
                 return (
                   <TableRow key={w.id} sx={{ '& td': { fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' } }}>
                     <TableCell>
@@ -733,7 +749,8 @@ const WorkOrdersTab: React.FC<{ rows: ProductivityWorkOrderRow[]; costs: CostSet
       {costs && (
         <Box sx={{ px: 2.5, pt: 1.5 }}>
           <Typography variant="caption" color="text.secondary" component="p">
-            MO / venta: verde hasta 15 %, naranja hasta 30 %, rojo por encima. «Parcial»: algún operario no tiene salario
+            MO / venta: verde hasta {thresholdLabel(costs.laborShareWarning)}, naranja hasta{' '}
+            {thresholdLabel(costs.laborShareCritical)}, rojo por encima. «Parcial»: algún operario no tiene salario
             en nómina, así que la mano de obra se queda corta.
           </Typography>
           <CostFootnote costs={costs} />
@@ -961,12 +978,22 @@ const DEFINITIONS: [string, string][] = [
   ['Mostrador', 'El trabajo de mostrador (DTF) no tiene OT: quien trabaja ahí sale con baja ocupación aunque esté ocupado.'],
 ];
 
-const COST_DEFINITIONS: [string, string][] = [
-  ['Valor hora *', 'Salario mensual ÷ horas al mes (210 con la jornada de 42 h). Un temporal: tarifa diaria ÷ 7 h.'],
+const costDefinitions = (costs: NonNullable<CostSettings>): [string, string][] => [
+  [
+    'Valor hora *',
+    `Salario mensual ÷ ${decimalLabel(costs.hourlyDivisor)} horas al mes. Un temporal: tarifa diaria ÷ ${decimalLabel(
+      costs.hourlyDivisor / 30,
+    )} h.`,
+  ],
   ['Costo del periodo *', 'Salario × días del periodo ÷ 30 (temporal: tarifa × días trabajados), más horas extra × valor hora × recargo.'],
   ['Costo por hora productiva *', 'Costo del periodo ÷ horas en tareas: cuánto le cuesta a la empresa cada hora que el operario está en una OT.'],
   ['Mano de obra de una OT *', 'Horas prorrateadas × valor hora. Con dos tareas abiertas cada una recibe la mitad del tramo; la extra lleva recargo.'],
-  ['MO / venta', 'Mano de obra ÷ venta sin IVA de la OP (subtotal menos descuentos).'],
+  [
+    'MO / venta',
+    `Mano de obra ÷ venta sin IVA de la OP (subtotal menos descuentos). Naranja por encima de ${thresholdLabel(
+      costs.laborShareWarning,
+    )}, rojo por encima de ${thresholdLabel(costs.laborShareCritical)}.`,
+  ],
 ];
 
 const Definitions: React.FC<{ costs: CostSettings }> = ({ costs }) => (
@@ -976,7 +1003,7 @@ const Definitions: React.FC<{ costs: CostSettings }> = ({ costs }) => (
     </AccordionSummary>
     <AccordionDetails>
       <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 2 }}>
-        {[...DEFINITIONS, ...(costs ? COST_DEFINITIONS : [])].map(([term, text]) => (
+        {[...DEFINITIONS, ...(costs ? costDefinitions(costs) : [])].map(([term, text]) => (
           <Box key={term}>
             <Typography variant="body2" fontWeight={600}>
               {term}

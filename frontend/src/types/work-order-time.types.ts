@@ -179,12 +179,37 @@ export interface ProductivityOperatorRow {
   }[];
 }
 
+export interface ProductivityCostSettings {
+  hourlyDivisor: number;
+  overtimeFactor: number;
+  laborShareWarning: number;
+  laborShareCritical: number;
+}
+
+/** Parámetros del reporte tal como se editan (umbrales en %). */
+export interface ProductionSettings {
+  hourlyDivisor: number;
+  overtimeFactor: number;
+  laborShareWarningPct: number;
+  laborShareCriticalPct: number;
+  updatedAt: string | null;
+  updatedBy: { id: string; firstName: string | null; lastName: string | null } | null;
+}
+
+export type UpdateProductionSettingsDto = Pick<
+  ProductionSettings,
+  'hourlyDivisor' | 'overtimeFactor' | 'laborShareWarningPct' | 'laborShareCriticalPct'
+>;
+
 export interface ProductivityReport {
   from: string;
   to: string;
   workdayEnd: string;
-  /** Parámetros del costo; `null` si quien consulta no puede ver costos. */
-  costs: { hourlyDivisor: number; overtimeFactor: number } | null;
+  /**
+   * Parámetros del costo, editables desde el CRM; `null` si quien consulta no
+   * puede ver costos. Los umbrales de mano de obra / venta van como fracción (0,15).
+   */
+  costs: ProductivityCostSettings | null;
   totals: ProductivityTotals;
   daily: { date: string; plantMs: number; busyMs: number }[];
   areas: { id: string | null; name: string; plantMs: number; busyMs: number }[];

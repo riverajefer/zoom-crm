@@ -4,6 +4,7 @@ import { endOfDay, startOfDay } from '../../common/utils/date-range.util';
 import { EmployeeType } from '../../generated/prisma';
 import { ProductionReportQueryDto } from './dto';
 import { WorkOrderTimeRepository } from './work-order-time.repository';
+import { CostSettings, ProductionSettingsService } from './production-settings.service';
 import {
   businessDate,
   parseProductionWorkdayEnd,
@@ -22,12 +23,6 @@ import {
 /** Un reporte más largo se vuelve lento de leer y de calcular; para eso está el Excel. */
 export const MAX_REPORT_DAYS = 92;
 
-/** Horas al mes para el valor hora: jornada de 42 h semanales (julio de 2026) × 30 ÷ 6. */
-export const DEFAULT_HOURLY_DIVISOR = 210;
-
-/** Recargo de la hora extra diurna. */
-export const DEFAULT_OVERTIME_FACTOR = 1.25;
-
 /** Horas al día que una máquina podría trabajar, para la utilización (8:00–18:00). */
 export const DEFAULT_MACHINE_DAILY_HOURS = 10;
 
@@ -44,11 +39,6 @@ interface Filters {
   areaId?: string;
   userId?: string;
   machineId?: string;
-}
-
-export interface CostSettings {
-  hourlyDivisor: number;
-  overtimeFactor: number;
 }
 
 export interface ReportTotals {
@@ -87,7 +77,8 @@ function positiveNumber(value: string | undefined, fallback: number) {
  * tareas, ocupación, paralelo, horas extra, OT y máquinas, y qué tan confiable
  * es su registro. Con el permiso `read_production_costs`, además, costos:
  *
- * - **Valor hora** = salario mensual ÷ divisor (210 por defecto); un temporal,
+ * - **Valor hora** = salario mensual ÷ divisor (parámetro editable, 210 al
+ *   arrancar; ver `ProductionSettingsService`); un temporal,
  *   tarifa diaria ÷ (divisor ÷ 30).
  * - **Costo del periodo** = salario × días del periodo ÷ 30 (temporal: tarifa
  *   diaria × días trabajados) + horas extra × valor hora × recargo.
@@ -103,6 +94,7 @@ function positiveNumber(value: string | undefined, fallback: number) {
 export class ProductionReportService {
   constructor(
     private readonly repository: WorkOrderTimeRepository,
+    private readonly settingsService: ProductionSettingsService,
     private readonly configService: ConfigService,
   ) {}
 
@@ -119,8 +111,10 @@ export class ProductionReportService {
       throw new BadRequestException(`El periodo no puede pasar de ${MAX_REPORT_DAYS} días.`);
     }
 
-    const withCosts = await this.repository.roleHasPermission(roleId, COSTS_PERMISSION);
-    const settings = this.costSettings();
+    const [withCosts, settings] = await Promise.all([
+      this.repository.roleHasPermission(roleId, COSTS_PERMISSION),
+      this.settingsService.getCostSettings(),
+    ]);
     const filters: Filters = { areaId: query.areaId, userId: query.userId, machineId: query.machineId };
     const previousFrom = shiftDay(from, -length);
     const previousTo = shiftDay(from, -1);
@@ -141,19 +135,6 @@ export class ProductionReportService {
 
   private workdayEndLabel() {
     return parseProductionWorkdayEnd(this.configService.get<string>('PRODUCTION_WORKDAY_END')).label;
-  }
-
-  private costSettings(): CostSettings {
-    return {
-      hourlyDivisor: positiveNumber(
-        this.configService.get<string>('PRODUCTION_HOURLY_DIVISOR'),
-        DEFAULT_HOURLY_DIVISOR,
-      ),
-      overtimeFactor: positiveNumber(
-        this.configService.get<string>('PRODUCTION_OVERTIME_FACTOR'),
-        DEFAULT_OVERTIME_FACTOR,
-      ),
-    };
   }
 
   private async compute(

@@ -256,6 +256,11 @@ export const permissionGroups: PermissionGroup[] = [
           'Ver costos en el reporte de productividad: valor hora, costo del periodo y mano de obra por OT (usa salarios)',
       },
       {
+        name: 'manage_production_settings',
+        description:
+          'Editar los parámetros del reporte de productividad: horas al mes del valor hora, recargo de la hora extra y umbrales de mano de obra / venta',
+      },
+      {
         name: 'read_production_plant',
         description:
           'Ver «Planta hoy»: asistencia, tareas en curso y ocupación de cada operario',

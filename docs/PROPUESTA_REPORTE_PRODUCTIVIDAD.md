@@ -12,7 +12,7 @@
 >
 > **Fase 2, hecha el 2026-10-20:**
 > - **Permiso nuevo:** `read_production_costs`. Sin él, el backend no envía ni salarios ni costos.
-> - **Configuración:** el valor hora y el recargo se ajustan con `PRODUCTION_HOURLY_DIVISOR` (210) y `PRODUCTION_OVERTIME_FACTOR` (1,25).
+> - **Configuración:** desde el 2026-10-21 el divisor del valor hora (210), el recargo de la hora extra (25 %) y los umbrales de MO / venta (15 % y 30 %) se editan en el CRM, botón «Parámetros» del reporte, con el permiso `manage_production_settings`. Viven en la tabla `production_settings`; antes eran variables de entorno.
 > - **Operarios:** valor hora, costo del periodo y costo por hora productiva. Los temporales usan su tarifa diaria.
 > - **Resumen:** costo por hora productiva y mano de obra en OT.
 > - **Pestaña OTs, adelantada de la fase 3:**
@@ -116,8 +116,8 @@ Todo ya existe; no hace falta capturar nada nuevo.
 
 ## 6. Preguntas para el cliente
 
-1. ¿El **divisor de horas** para el valor hora es 210 (42 h semanales)? ¿Las horas extra se pagan al 1,25 (diurnas)?
-2. ¿Cuál es el **umbral de MO / valor** que les preocupa? La maqueta usa 15 % para naranja y 30 % para rojo.
+1. ¿El **divisor de horas** para el valor hora es 210 (42 h semanales)? ¿Las horas extra se pagan al 1,25 (diurnas)? Gerencia puede cambiarlos sola en «Parámetros»; solo falta que el contador confirme los valores.
+2. ¿Cuál es el **umbral de MO / valor** que les preocupa? Arranca en 15 % (naranja) y 30 % (rojo), y también se edita en «Parámetros».
 3. ¿Marcan salida a almorzar? Si no, el almuerzo cuenta como tiempo en planta y baja la ocupación de todos por igual, unos 45 minutos al día.
 4. ¿Quién ve los costos y salarios? Proponemos que el permiso `read_production_reports` muestre todo, y que gerencia sea la única que lo tenga.
 5. ¿Qué jornada de máquina usamos para la utilización: 10 h (8:00–18:00) o la real de cada área?

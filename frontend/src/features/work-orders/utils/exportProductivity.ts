@@ -52,6 +52,8 @@ export const buildProductivitySheets = (report: ProductivityReport, filtersLabel
       [],
       ['Valor hora = salario ÷', costs.hourlyDivisor, 'horas al mes'],
       ['Recargo de la hora extra', costs.overtimeFactor, null],
+      ['MO / venta: atención desde (%)', pct(costs.laborShareWarning), null],
+      ['MO / venta: alerta desde (%)', pct(costs.laborShareCritical), null],
     );
   }
   sheets.push({ name: 'Resumen', rows: summary });

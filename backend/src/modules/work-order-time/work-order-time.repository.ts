@@ -15,6 +15,17 @@ const OPERATOR_WHERE = {
   },
 } satisfies Prisma.UserWhereInput;
 
+const PRODUCTION_SETTINGS_ID = 'default';
+
+const PRODUCTION_SETTINGS_SELECT = {
+  hourlyDivisor: true,
+  overtimeFactor: true,
+  laborShareWarningPct: true,
+  laborShareCriticalPct: true,
+  updatedAt: true,
+  updatedBy: { select: { id: true, firstName: true, lastName: true } },
+} satisfies Prisma.ProductionSettingsSelect;
+
 @Injectable()
 export class WorkOrderTimeRepository {
   constructor(private readonly prisma: PrismaService) {}
@@ -309,5 +320,27 @@ export class WorkOrderTimeRepository {
       data: { extendedAt },
     });
     return result.count;
+  }
+
+  /** Parámetros del reporte de productividad (una sola fila, «default»). */
+  findProductionSettings() {
+    return this.prisma.productionSettings.findUnique({
+      where: { id: PRODUCTION_SETTINGS_ID },
+      select: PRODUCTION_SETTINGS_SELECT,
+    });
+  }
+
+  saveProductionSettings(
+    data: Pick<
+      Prisma.ProductionSettingsUncheckedCreateInput,
+      'hourlyDivisor' | 'overtimeFactor' | 'laborShareWarningPct' | 'laborShareCriticalPct' | 'updatedById'
+    >,
+  ) {
+    return this.prisma.productionSettings.upsert({
+      where: { id: PRODUCTION_SETTINGS_ID },
+      create: { id: PRODUCTION_SETTINGS_ID, ...data },
+      update: data,
+      select: PRODUCTION_SETTINGS_SELECT,
+    });
   }
 }

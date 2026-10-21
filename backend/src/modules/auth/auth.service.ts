@@ -9,6 +9,7 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
+import { createHash, timingSafeEqual } from 'crypto';
 import { PrismaService } from '../../database/prisma.service';
 import { JwtPayload, TokenPair, AuthenticatedUser } from '../../common/interfaces';
 import { SessionLogsService } from '../session-logs/session-logs.service';
@@ -156,15 +157,9 @@ export class AuthService {
   async login(user: AuthenticatedUser): Promise<TokenPair> {
     const tokens = await this.generateTokens(user);
 
-    // Hashear y guardar el refresh token
-    const hashedRefreshToken = await bcrypt.hash(
-      tokens.refreshToken,
-      this.SALT_ROUNDS,
-    );
-
     await this.prisma.user.update({
       where: { id: user.id },
-      data: { refreshToken: hashedRefreshToken },
+      data: { refreshToken: this.hashRefreshToken(tokens.refreshToken) },
     });
 
     return tokens;
@@ -265,6 +260,22 @@ export class AuthService {
    * Refresca el access token usando el refresh token
    */
   async refreshTokens(userId: string, refreshToken: string): Promise<TokenPair & { user: AuthenticatedUser }> {
+    // Firma, expiración, tipo y dueño: sin esto, un token armado a mano con el
+    // id de otro usuario pasaba (bcrypt solo compara los primeros 72 bytes, que
+    // en un JWT son el header y el inicio del `sub`).
+    let payload: JwtPayload;
+    try {
+      payload = await this.jwtService.verifyAsync<JwtPayload>(refreshToken, {
+        secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
+      });
+    } catch {
+      throw new UnauthorizedException('Invalid refresh token');
+    }
+
+    if (payload.type !== 'refresh' || payload.sub !== userId) {
+      throw new UnauthorizedException('Invalid refresh token');
+    }
+
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: {
@@ -304,11 +315,13 @@ export class AuthService {
       throw new UnauthorizedException('Invalid refresh token');
     }
 
-    // Verificar el refresh token contra el hash almacenado
-    const isRefreshTokenValid = await bcrypt.compare(
-      refreshToken,
-      user.refreshToken,
-    );
+    // Debe ser el último emitido (rotación). Los hashes bcrypt de antes de este
+    // cambio no coinciden: esas sesiones vuelven a pedir login una vez.
+    const storedHash = Buffer.from(user.refreshToken);
+    const incomingHash = Buffer.from(this.hashRefreshToken(refreshToken));
+    const isRefreshTokenValid =
+      storedHash.length === incomingHash.length &&
+      timingSafeEqual(storedHash, incomingHash);
 
     if (!isRefreshTokenValid) {
       throw new UnauthorizedException('Invalid refresh token');
@@ -332,14 +345,9 @@ export class AuthService {
     const tokens = await this.generateTokens(authenticatedUser);
 
     // Actualizar el refresh token en la base de datos
-    const hashedRefreshToken = await bcrypt.hash(
-      tokens.refreshToken,
-      this.SALT_ROUNDS,
-    );
-
     await this.prisma.user.update({
       where: { id: userId },
-      data: { refreshToken: hashedRefreshToken },
+      data: { refreshToken: this.hashRefreshToken(tokens.refreshToken) },
     });
 
     return {
@@ -578,6 +586,14 @@ export class AuthService {
     ]);
 
     return { accessToken, refreshToken };
+  }
+
+  /**
+   * SHA-256 del refresh token. No bcrypt: trunca en 72 bytes y un JWT es más
+   * largo. Un token firmado ya es aleatorio, así que no hace falta sal.
+   */
+  private hashRefreshToken(refreshToken: string): string {
+    return createHash('sha256').update(refreshToken).digest('hex');
   }
 
   /**

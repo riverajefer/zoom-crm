@@ -16,9 +16,13 @@ jest.mock('bcrypt', () => ({
 
 // Import after mock so we get the mocked version
 import * as bcrypt from 'bcrypt';
+import { createHash } from 'crypto';
+
+const sha256 = (value: string) => createHash('sha256').update(value).digest('hex');
 
 const mockJwtService = {
   signAsync: jest.fn(),
+  verifyAsync: jest.fn(),
 };
 
 const mockConfigService = {
@@ -156,7 +160,6 @@ describe('AuthService', () => {
       (mockJwtService.signAsync as jest.Mock)
         .mockResolvedValueOnce('mock-access-token')
         .mockResolvedValueOnce('mock-refresh-token');
-      (bcrypt.hash as jest.Mock).mockResolvedValue('hashed-refresh-token');
       (prisma.user.update as jest.Mock).mockResolvedValue({});
     });
 
@@ -169,18 +172,18 @@ describe('AuthService', () => {
       });
     });
 
-    it('should hash the refresh token with 12 salt rounds before saving', async () => {
+    it('should not hash the refresh token with bcrypt (truncates at 72 bytes)', async () => {
       await service.login(mockUser);
 
-      expect(bcrypt.hash).toHaveBeenCalledWith('mock-refresh-token', 12);
+      expect(bcrypt.hash).not.toHaveBeenCalled();
     });
 
-    it('should update the user refreshToken in DB with the hashed value', async () => {
+    it('should update the user refreshToken in DB with its SHA-256', async () => {
       await service.login(mockUser);
 
       expect(prisma.user.update).toHaveBeenCalledWith({
         where: { id: mockUser.id },
-        data: { refreshToken: 'hashed-refresh-token' },
+        data: { refreshToken: sha256('mock-refresh-token') },
       });
     });
 
@@ -209,7 +212,6 @@ describe('AuthService', () => {
       (mockJwtService.signAsync as jest.Mock)
         .mockResolvedValueOnce('mock-access-token')
         .mockResolvedValueOnce('mock-refresh-token');
-      (bcrypt.hash as jest.Mock).mockResolvedValue('hashed-refresh-token');
       (prisma.user.update as jest.Mock).mockResolvedValue({});
       // getUserPermissions call
       (prisma.user.findUnique as jest.Mock).mockResolvedValue({
@@ -257,13 +259,15 @@ describe('AuthService', () => {
   // refreshTokens
   // ─────────────────────────────────────────────
   describe('refreshTokens', () => {
-    const storedRefreshHash = 'stored-hashed-refresh-token';
+    const incomingRefreshToken = 'incoming-refresh-token';
+    const storedRefreshHash = sha256(incomingRefreshToken);
 
     beforeEach(() => {
       // Use mockResolvedValue (not Once) so clearAllMocks() fully resets these between tests
       (mockJwtService.signAsync as jest.Mock)
         .mockResolvedValue('new-access-token');
-      (bcrypt.hash as jest.Mock).mockResolvedValue('new-hashed-refresh-token');
+      (mockJwtService.verifyAsync as jest.Mock)
+        .mockResolvedValue({ sub: mockUser.id, type: 'refresh' });
       (prisma.user.update as jest.Mock).mockResolvedValue({});
     });
 
@@ -273,9 +277,8 @@ describe('AuthService', () => {
         isActive: true,
         refreshToken: storedRefreshHash,
       });
-      (bcrypt.compare as jest.Mock).mockResolvedValue(true);
 
-      const result = await service.refreshTokens(mockUser.id, 'incoming-refresh-token');
+      const result = await service.refreshTokens(mockUser.id, incomingRefreshToken);
 
       expect(result).toMatchObject({
         accessToken: expect.any(String),
@@ -284,11 +287,84 @@ describe('AuthService', () => {
       });
     });
 
+    it('should verify the JWT with the refresh secret', async () => {
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue({
+        ...mockUserFromDb,
+        isActive: true,
+        refreshToken: storedRefreshHash,
+      });
+
+      await service.refreshTokens(mockUser.id, incomingRefreshToken);
+
+      expect(mockJwtService.verifyAsync).toHaveBeenCalledWith(incomingRefreshToken, {
+        secret: 'test-refresh-secret',
+      });
+    });
+
+    it('should throw UnauthorizedException without reading the DB when the JWT is invalid or expired', async () => {
+      (mockJwtService.verifyAsync as jest.Mock).mockRejectedValue(new Error('invalid signature'));
+
+      await expect(
+        service.refreshTokens(mockUser.id, incomingRefreshToken),
+      ).rejects.toThrow(UnauthorizedException);
+
+      expect(prisma.user.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('should throw UnauthorizedException when the token is an access token', async () => {
+      (mockJwtService.verifyAsync as jest.Mock).mockResolvedValue({ sub: mockUser.id, type: 'access' });
+
+      await expect(
+        service.refreshTokens(mockUser.id, incomingRefreshToken),
+      ).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('should throw UnauthorizedException when the token belongs to another user', async () => {
+      (mockJwtService.verifyAsync as jest.Mock).mockResolvedValue({ sub: 'user-2', type: 'refresh' });
+
+      await expect(
+        service.refreshTokens(mockUser.id, incomingRefreshToken),
+      ).rejects.toThrow(UnauthorizedException);
+
+      expect(prisma.user.update).not.toHaveBeenCalled();
+    });
+
+    it('should reject a token forged with another secret even if it shares the first 72 bytes', async () => {
+      // Antes bastaba con que los primeros 72 bytes coincidieran (bcrypt);
+      // aquí la verificación es la real de @nestjs/jwt.
+      const realJwt = new JwtService();
+      const realToken = realJwt.sign(
+        { sub: mockUser.id, username: 'testuser', roleId: 'role-1', type: 'refresh' },
+        { secret: 'test-refresh-secret', expiresIn: '7d' },
+      );
+      const forgedToken = realJwt.sign(
+        { sub: mockUser.id, username: 'x', roleId: 'y', type: 'refresh' },
+        { secret: 'otro-secreto' },
+      );
+      expect(forgedToken.slice(0, 72)).toBe(realToken.slice(0, 72));
+
+      (mockJwtService.verifyAsync as jest.Mock).mockImplementation((token: string, options) =>
+        realJwt.verifyAsync(token, options),
+      );
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue({
+        ...mockUserFromDb,
+        isActive: true,
+        refreshToken: sha256(realToken),
+      });
+
+      await expect(service.refreshTokens(mockUser.id, forgedToken)).rejects.toThrow(
+        UnauthorizedException,
+      );
+      await expect(service.refreshTokens(mockUser.id, realToken)).resolves.toMatchObject({
+        user: expect.objectContaining({ id: mockUser.id }),
+      });
+    });
+
     it('should throw UnauthorizedException when user is not found', async () => {
       (prisma.user.findUnique as jest.Mock).mockResolvedValue(null);
 
       await expect(
-        service.refreshTokens('nonexistent-id', 'some-token'),
+        service.refreshTokens(mockUser.id, incomingRefreshToken),
       ).rejects.toThrow(UnauthorizedException);
     });
 
@@ -300,20 +376,31 @@ describe('AuthService', () => {
       });
 
       await expect(
-        service.refreshTokens(mockUser.id, 'some-token'),
+        service.refreshTokens(mockUser.id, incomingRefreshToken),
       ).rejects.toThrow(UnauthorizedException);
     });
 
-    it('should throw UnauthorizedException when refresh token hash does not match', async () => {
+    it('should throw UnauthorizedException when the token is not the last one issued', async () => {
       (prisma.user.findUnique as jest.Mock).mockResolvedValue({
         ...mockUserFromDb,
         isActive: true,
-        refreshToken: storedRefreshHash,
+        refreshToken: sha256('newer-refresh-token'),
       });
-      (bcrypt.compare as jest.Mock).mockResolvedValue(false);
 
       await expect(
-        service.refreshTokens(mockUser.id, 'wrong-refresh-token'),
+        service.refreshTokens(mockUser.id, incomingRefreshToken),
+      ).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('should throw UnauthorizedException when the stored hash is a legacy bcrypt hash', async () => {
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue({
+        ...mockUserFromDb,
+        isActive: true,
+        refreshToken: '$2b$12$abcdefghijklmnopqrstuuabcdefghijklmnopqrstuvwxyz01234',
+      });
+
+      await expect(
+        service.refreshTokens(mockUser.id, incomingRefreshToken),
       ).rejects.toThrow(UnauthorizedException);
     });
 
@@ -323,7 +410,6 @@ describe('AuthService', () => {
         isActive: true,
         refreshToken: storedRefreshHash,
       });
-      (bcrypt.compare as jest.Mock).mockResolvedValue(false);
 
       await expect(
         service.refreshTokens(mockUser.id, 'wrong-token'),
@@ -332,19 +418,21 @@ describe('AuthService', () => {
       expect(prisma.user.update).not.toHaveBeenCalled();
     });
 
-    it('should update the refreshToken in DB with a new hash after successful refresh', async () => {
+    it('should update the refreshToken in DB with the SHA-256 of the new token after successful refresh', async () => {
       (prisma.user.findUnique as jest.Mock).mockResolvedValue({
         ...mockUserFromDb,
         isActive: true,
         refreshToken: storedRefreshHash,
       });
-      (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+      (mockJwtService.signAsync as jest.Mock)
+        .mockResolvedValueOnce('new-access-token')
+        .mockResolvedValueOnce('new-refresh-token');
 
-      await service.refreshTokens(mockUser.id, 'valid-refresh-token');
+      await service.refreshTokens(mockUser.id, incomingRefreshToken);
 
       expect(prisma.user.update).toHaveBeenCalledWith({
         where: { id: mockUser.id },
-        data: { refreshToken: 'new-hashed-refresh-token' },
+        data: { refreshToken: sha256('new-refresh-token') },
       });
     });
 
@@ -355,7 +443,7 @@ describe('AuthService', () => {
         refreshToken: storedRefreshHash,
       });
 
-      await expect(service.refreshTokens(mockUser.id, 'incoming-refresh-token')).rejects.toThrow(
+      await expect(service.refreshTokens(mockUser.id, incomingRefreshToken)).rejects.toThrow(
         UnauthorizedException,
       );
     });

@@ -8,6 +8,7 @@ import { PrismaService } from '../../database/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { ApprovalRequestRegistry } from '../whatsapp/approval-request-registry';
 import { WhatsappService } from '../whatsapp/whatsapp.service';
+import { runWithAuditContext } from '../../common/utils/audit-context';
 import {
   ApprovalRequestType,
   EditRequestStatus,
@@ -224,6 +225,30 @@ describe('ExpenseOrderEditRequestsService', () => {
         where: { id: 'req-1', consumedAt: null },
         data: { consumedAt: expect.any(Date) },
       });
+    });
+  });
+
+  describe('bandeja por sede (solo Zoom)', () => {
+    it('quien no ve todas las sedes solo ve las de su sede activa', async () => {
+      prisma.expenseOrderEditRequest.findMany.mockResolvedValue([]);
+      await runWithAuditContext(
+        { location: { locationId: 'loc-104', all: false, permittedIds: ['loc-104'] } },
+        () => service.findPendingRequests(),
+      );
+      const [[{ where }]] = prisma.expenseOrderEditRequest.findMany.mock.calls.slice(-1);
+      expect(where.expenseOrder).toEqual(
+        expect.objectContaining({ locationId: { in: ['loc-104'] } }),
+      );
+    });
+
+    it('al admin le muestra las de todas las sedes aunque tenga una activa', async () => {
+      prisma.expenseOrderEditRequest.findMany.mockResolvedValue([]);
+      await runWithAuditContext(
+        { location: { locationId: 'loc-104', all: false, permittedIds: ['loc-104'], viewAll: true } },
+        () => service.findAll(),
+      );
+      const [[{ where }]] = prisma.expenseOrderEditRequest.findMany.mock.calls.slice(-1);
+      expect(where).toEqual({ expenseOrder: {} });
     });
   });
 });

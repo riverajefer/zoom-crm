@@ -22,6 +22,7 @@ import {
   Prisma,
 } from '../../generated/prisma';
 import { createOrReturnTwin } from '../../common/utils/unique-violation.util';
+import { queueLocationFilter } from '../../common/utils/location-context';
 import { CreateExpenseOrderEditRequestDto, ReviewExpenseOrderEditRequestDto } from './dto';
 
 const USER_SELECT = {
@@ -249,7 +250,7 @@ export class ExpenseOrderEditRequestsService implements OnModuleInit, ApprovalRe
     return this.prisma.expenseOrderEditRequest.findMany({
       where: {
         status: EditRequestStatus.PENDING,
-        expenseOrder: { status: { in: EDITABLE_WITH_APPROVAL } },
+        expenseOrder: { status: { in: EDITABLE_WITH_APPROVAL }, ...queueLocationFilter() },
       },
       include: {
         requestedBy: { select: USER_SELECT },
@@ -261,6 +262,7 @@ export class ExpenseOrderEditRequestsService implements OnModuleInit, ApprovalRe
 
   async findAll() {
     return this.prisma.expenseOrderEditRequest.findMany({
+      where: { expenseOrder: queueLocationFilter() },
       include: {
         requestedBy: { select: USER_SELECT },
         reviewedBy: { select: USER_SELECT },

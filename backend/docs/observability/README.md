@@ -11,7 +11,7 @@ en consola). No requiere infraestructura adicional en Railway.
 NestJS (pino) ──push (pino-loki, batched cada 5s)──▶ Grafana Cloud Loki ──▶ Grafana (Explore / Dashboards)
 ```
 
-Cada log lleva las labels `app="backoffice-backend"` y `env="<NODE_ENV>"`, más campos
+Cada log lleva las labels `app="zoom-backend"` y `env="<NODE_ENV>"`, más campos
 estructurados: `level`, `context`, `req` (id/método/url), `res.statusCode`,
 `responseTime`, y `userId`/`ip`/`userAgent` (del `AuditContextInterceptor`).
 
@@ -64,8 +64,8 @@ Ambos ambientes pueden empujar al **mismo** Loki/stack de Grafana; se distinguen
 etiqueta `env` (derivada de `NODE_ENV`). En Grafana:
 
 ```logql
-{app="backoffice-backend", env="staging"}      # solo staging
-{app="backoffice-backend", env="production"}   # solo producción
+{app="zoom-backend", env="staging"}      # solo staging
+{app="zoom-backend", env="production"}   # solo producción
 ```
 
 > ⚠️ **Importante — start command por ambiente.** Los scripts fijan `NODE_ENV` en línea:
@@ -103,20 +103,26 @@ texto libre, con variables de `Ambiente` (staging/production) y `Buscar texto`.
 
 ```logql
 # Todo lo de producción
-{app="backoffice-backend", env="production"}
+{app="zoom-backend", env="production"}
 
-# Sólo errores
-{app="backoffice-backend"} | json | level=~"error|fatal"
+# Sólo errores (la etiqueta `level` filtra en el índice: más barato que `| json`)
+{app="zoom-backend", level=~"error|fatal"}
 
 # Actividad de un usuario
-{app="backoffice-backend"} | json | userId="<uuid>"
+{app="zoom-backend"} | json | userId="<uuid>"
 
 # Respuestas 5xx
-{app="backoffice-backend"} | json | res_statusCode>=500
+{app="zoom-backend"} | json | res_statusCode>=500
 
 # Requests lentos (>1s)
-{app="backoffice-backend"} | json | responseTime > 1000
+{app="zoom-backend"} | json | responseTime > 1000
 ```
+
+> **Logs anteriores al 2026-10-21:** hasta ese día la etiqueta `level` llegaba
+> siempre como `info` (pino-loki buscaba el nivel numérico en su `levelMap` y el
+> formatter lo emite como texto). Para consultar esos logs hay que filtrar por el
+> campo del JSON, que tras `| json` se llama `level_extracted` porque choca con la
+> etiqueta: `{app="zoom-backend"} | json | level_extracted=~"error|fatal"`.
 
 ### WhatsApp (Meta API)
 
@@ -126,10 +132,10 @@ así que su actividad ya llega a Loki. El dashboard incluye una sección **Whats
 
 ```logql
 # Toda la actividad de WhatsApp (envíos, fallos, webhooks)
-{app="backoffice-backend"} | json | context=~"Whatsapp.*"
+{app="zoom-backend"} | json | context=~"Whatsapp.*"
 
 # Solo fallos de envío a Meta
-{app="backoffice-backend"} | json | context="WhatsappService" | level="error"
+{app="zoom-backend"} | json | context="WhatsappService" | level="error"
 ```
 
 > El *payload* completo enviado a Meta se registra con `logger.debug`, por lo que con
@@ -153,7 +159,7 @@ filtro base de NestJS).
 
 ```logql
 # Errores 5xx con el stack real y el usuario afectado
-{app="backoffice-backend", env="production"} | json | context="ExceptionsFilter"
+{app="zoom-backend", env="production"} | json | context="ExceptionsFilter"
 ```
 
 ## Seguridad

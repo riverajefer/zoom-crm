@@ -13,6 +13,7 @@ import { CustomToolbar } from './CustomToolbar';
 import { ColumnSettingsDialog } from './ColumnSettingsDialog';
 import { useColumnPreferences } from '../../../hooks/useColumnPreferences';
 import { dataGridStyles, paperStyles } from './styles';
+import { withDisplayTextFilters } from './displayTextFilter';
 
 interface DataTableProps<T extends GridValidRowModel> {
   rows: T[];
@@ -169,7 +170,15 @@ export function DataTable<T extends GridValidRowModel>({
     columns,
     lockedColumnFields,
   );
-  const effectiveColumns = columnSettingsKey ? columnPreferences.columns : columns;
+  const preferredColumns = columnSettingsKey ? columnPreferences.columns : columns;
+  // Con paginación en el servidor la grilla solo tiene la página actual, así que
+  // el filtro de cabecera se apaga (ver `disableColumnFilter`); sin ella, filtra
+  // contra el texto que se ve en la celda y no contra el valor crudo.
+  const effectiveColumns = useMemo(
+    () =>
+      isServerPagination ? preferredColumns : preferredColumns.map(withDisplayTextFilters),
+    [preferredColumns, isServerPagination],
+  );
   const [columnSettingsOpen, setColumnSettingsOpen] = useState(false);
 
   // Agregar columna de numeración automática (oculta en mobile)
@@ -333,6 +342,12 @@ export function DataTable<T extends GridValidRowModel>({
         pageSizeOptions={pageSizeOptions}
         paginationMode={isServerPagination ? 'server' : 'client'}
         rowCount={isServerPagination ? rowCount : undefined}
+        // Filtrar u ordenar solo las filas de la página cargada da resultados
+        // falsos («sin resultados» con miles de registros, o un «mayor total»
+        // que no es el mayor); esas pantallas tienen sus propios filtros, que
+        // sí consultan al servidor.
+        disableColumnFilter={isServerPagination}
+        disableColumnSorting={isServerPagination}
         checkboxSelection={checkboxSelection}
         getRowId={getRowId}
         onRowClick={onRowClick ? handleRowClick : undefined}

@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
-import { ExpenseOrderStatus } from '../../generated/prisma';
+import { ExpenseOrderStatus, Prisma } from '../../generated/prisma';
 import { FilterExpenseOrdersDto } from './dto';
 import { clampPageSize, MAX_PAGE_SIZE } from '../../common/dto/pagination.dto';
 import { LOCATION_SUMMARY_SELECT } from '../../common/constants/location-select';
@@ -305,8 +305,11 @@ export class ExpenseOrdersRepository {
       productionAreaIds?: string[];
       sortOrder: number;
     }>,
+    // Para reemplazar los ítems dentro de una transacción del llamador, junto
+    // con otras escrituras que deben salir o fallar con ellos.
+    outerTx?: Prisma.TransactionClient,
   ) {
-    return this.prisma.$transaction(async (tx) => {
+    const run = async (tx: Prisma.TransactionClient) => {
       // Delete existing items (cascade will remove productionAreas)
       await tx.expenseOrderItem.deleteMany({ where: { expenseOrderId } });
 
@@ -345,7 +348,9 @@ export class ExpenseOrdersRepository {
           });
         }
       }
-    });
+    };
+
+    return outerTx ? run(outerTx) : this.prisma.$transaction(run);
   }
 
   async addItem(

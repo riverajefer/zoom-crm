@@ -335,11 +335,17 @@ export const ExpenseOrderFormPage = () => {
   const existingOG = expenseOrderQuery.data;
 
   // Una OG pagada se corrige con autorización del admin. Sus ítems ya salieron
-  // de caja: no se quitan ni se les cambia método de pago, banco o comprobante
-  // (el backend lo vuelve a validar). Se pueden agregar ítems y corregir montos.
+  // de caja: no se quitan ni se les cambia el comprobante (el backend lo vuelve
+  // a validar). Se pueden agregar ítems y corregir montos. El método de pago y
+  // el banco se pueden corregir mientras la caja de donde salieron siga abierta.
   const paidEdit = usePaidExpenseOrderEdit(isEditing ? existingOG : undefined);
   const lockedItemCount = isEditing && paidEdit.isPaid ? existingOG?.items.length ?? 0 : 0;
   const isItemLocked = (index: number) => index < lockedItemCount;
+  const correctableItemCount = lockedItemCount > 0 ? existingOG?.paymentCorrectableItems ?? 0 : 0;
+  const isPaymentLocked = (index: number) =>
+    isItemLocked(index) && index >= correctableItemCount;
+  const isPaymentCorrectable = (index: number) =>
+    isItemLocked(index) && index < correctableItemCount;
 
   useEffect(() => {
     if (existingOG) {
@@ -912,8 +918,14 @@ export const ExpenseOrderFormPage = () => {
                   select
                   label="Método de pago"
                   value={item.paymentMethod}
-                  disabled={isItemLocked(index)}
-                  helperText={isItemLocked(index) ? 'Ya se pagó: no se puede cambiar' : undefined}
+                  disabled={isPaymentLocked(index)}
+                  helperText={
+                    isPaymentLocked(index)
+                      ? 'Ya se pagó y la caja se cerró: no se puede cambiar'
+                      : isPaymentCorrectable(index)
+                        ? 'Caja abierta: corrige también el egreso'
+                        : undefined
+                  }
                   onChange={(e) => {
                     const method = e.target.value as PaymentMethod;
                     updateItem(index, 'paymentMethod', method);
@@ -923,11 +935,19 @@ export const ExpenseOrderFormPage = () => {
                   }}
                   sx={{ flex: 1 }}
                 >
-                  {Object.entries(PAYMENT_METHOD_LABELS).map(([value, label]) => (
-                    <MenuItem key={value} value={value}>
-                      {label}
-                    </MenuItem>
-                  ))}
+                  {Object.entries(PAYMENT_METHOD_LABELS)
+                    // Un ítem pagado no pasa a crédito: el dinero ya salió.
+                    .filter(
+                      ([value]) =>
+                        !isItemLocked(index) ||
+                        value !== PaymentMethod.CREDIT ||
+                        value === item.paymentMethod,
+                    )
+                    .map(([value, label]) => (
+                      <MenuItem key={value} value={value}>
+                        {label}
+                      </MenuItem>
+                    ))}
                 </TextField>
 
                 {item.paymentMethod === PaymentMethod.TRANSFER && (
@@ -935,7 +955,7 @@ export const ExpenseOrderFormPage = () => {
                     <BankSelector
                       value={item.bankEntity ?? null}
                       onChange={(val) => updateItem(index, 'bankEntity', val)}
-                      disabled={isItemLocked(index)}
+                      disabled={isPaymentLocked(index)}
                     />
                   </Box>
                 )}
@@ -1442,7 +1462,10 @@ export const ExpenseOrderFormPage = () => {
           <strong>Estás corrigiendo una OG que ya fue pagada.</strong> Si el total sube, la
           diferencia queda pendiente en su cuenta por pagar y Caja la paga desde ahí; el total no
           puede quedar por debajo de lo ya pagado. Los ítems pagados no se pueden quitar ni
-          cambiar de método de pago, banco o comprobante.
+          cambiar de comprobante.
+          {correctableItemCount > 0
+            ? ' Su método de pago y banco sí se pueden corregir mientras la caja de donde salieron siga abierta.'
+            : ' Tampoco se les puede cambiar el método de pago ni el banco: la caja de donde salieron ya se cerró.'}
           {!paidEdit.isAdmin && ' La autorización sirve para una sola edición.'}
         </Alert>
       )}

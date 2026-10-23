@@ -7,7 +7,7 @@ import {
   NotFoundException,
   forwardRef,
 } from '@nestjs/common';
-import { ExpenseOrderStatus, Prisma } from '../../generated/prisma';
+import { ExpenseOrderStatus, PaymentMethod, Prisma } from '../../generated/prisma';
 import { PrismaService } from '../../database/prisma.service';
 import { ConsecutivesService } from '../consecutives/consecutives.service';
 import { ExpenseOrdersRepository } from './expense-orders.repository';
@@ -31,6 +31,13 @@ import {
 import { normalizeRate } from '../../common/utils/rounding.util';
 import { findActiveCashSessionForLocation } from '../cash-session/active-cash-session.util';
 import { requireActiveLocationId } from '../../common/utils/location-context';
+import { paymentMovesCash } from '../../common/utils/payment-method.util';
+
+/** Egreso de caja de un ítem pagado cuyo método hay que corregir. */
+interface PaymentCorrection {
+  movementId: string;
+  paymentMethod: PaymentMethod;
+}
 
 const ALLOWED_TRANSITIONS: Record<ExpenseOrderStatus, ExpenseOrderStatus[]> = {
   [ExpenseOrderStatus.DRAFT]: [ExpenseOrderStatus.CREATED, ExpenseOrderStatus.ADMIN_AUTHORIZED],
@@ -267,7 +274,15 @@ export class ExpenseOrdersService {
     if (!expenseOrder) {
       throw new NotFoundException(`OG con id ${id} no encontrada`);
     }
-    return expenseOrder;
+
+    // El formulario solo habilita el método de pago de los ítems pagados que
+    // el backend dejaría corregir (ver `assertPaidItemsKeepPayment`).
+    let paymentCorrectableItems = 0;
+    if (expenseOrder.status === ExpenseOrderStatus.PAID) {
+      const movements = await this.paidItemMovements(id);
+      paymentCorrectableItems = this.paymentCorrectableCount(expenseOrder.items, movements);
+    }
+    return { ...expenseOrder, paymentCorrectableItems };
   }
 
   async update(id: string, dto: UpdateExpenseOrderDto, currentUser?: AuthenticatedUser) {
@@ -288,9 +303,10 @@ export class ExpenseOrdersService {
     // se quedan como están y, si el total sube, la diferencia queda como saldo
     // de su CP para que Caja la pague por ahí.
     let editApprovalId: string | null = null;
+    let paymentCorrections: PaymentCorrection[] = [];
     if (isPaidEdit) {
       editApprovalId = await this.assertCanEditPaid(id, currentUser);
-      this.assertPaidItemsKeepPayment(expenseOrder.items, dto.items);
+      paymentCorrections = await this.assertPaidItemsKeepPayment(id, expenseOrder.items, dto.items);
       await this.assertTotalCoversPaid(expenseOrder, dto);
 
       // Se consume antes de escribir: dos guardados simultáneos con la misma
@@ -306,7 +322,7 @@ export class ExpenseOrdersService {
     }
 
     try {
-      return await this.applyUpdate(id, expenseOrder, dto, isPaidEdit, currentUser?.id);
+      return await this.applyUpdate(id, expenseOrder, dto, isPaidEdit, currentUser?.id, paymentCorrections);
     } catch (error) {
       if (editApprovalId) {
         await this.prisma.expenseOrderEditRequest.update({
@@ -345,19 +361,26 @@ export class ExpenseOrdersService {
 
   /**
    * Los ítems de una OG pagada ya tienen su egreso de caja: no se pueden quitar
-   * ni cambiar su método de pago, banco o comprobante. Sí se pueden corregir
-   * cantidad, precio y descripción, agregar ítems nuevos y subir un comprobante
-   * que faltaba. Los ítems llegan en el mismo orden en que se guardaron.
+   * ni cambiar su comprobante. Sí se pueden corregir cantidad, precio y
+   * descripción, agregar ítems nuevos y subir un comprobante que faltaba. Los
+   * ítems llegan en el mismo orden en que se guardaron.
+   *
+   * El método de pago y el banco se pueden corregir solo mientras la sesión de
+   * caja del egreso siga abierta: nadie ha contado el cajón todavía, así que
+   * cambiar el método del egreso deja el arqueo correcto en vez de
+   * descuadrarlo. Con la caja cerrada se bloquea, porque el arqueo ya se firmó.
+   * Devuelve los egresos que hay que corregir.
    */
-  private assertPaidItemsKeepPayment(
+  private async assertPaidItemsKeepPayment(
+    expenseOrderId: string,
     existing: Array<{
       paymentMethod: string;
       bankEntity: string | null;
       receiptFileId: string | null;
     }>,
     incoming: UpdateExpenseOrderDto['items'],
-  ) {
-    if (!incoming || incoming.length === 0) return;
+  ): Promise<PaymentCorrection[]> {
+    if (!incoming || incoming.length === 0) return [];
 
     if (incoming.length < existing.length) {
       throw new BadRequestException(
@@ -365,20 +388,118 @@ export class ExpenseOrdersService {
       );
     }
 
+    const movements = await this.paidItemMovements(expenseOrderId);
+    const correctable = this.paymentCorrectableCount(existing, movements);
+    const corrections: PaymentCorrection[] = [];
+
     existing.forEach((item, index) => {
       const next = incoming[index];
-      const samePayment =
-        (next.paymentMethod ?? 'CASH') === item.paymentMethod &&
-        (next.bankEntity ?? null) === (item.bankEntity ?? null);
+      const nextMethod = next.paymentMethod ?? 'CASH';
+      const methodChanged = nextMethod !== item.paymentMethod;
+      const bankChanged = (next.bankEntity ?? null) !== (item.bankEntity ?? null);
       const receiptKept =
         !item.receiptFileId || (next.receiptFileId ?? null) === item.receiptFileId;
 
-      if (!samePayment || !receiptKept) {
+      if (!receiptKept) {
         throw new BadRequestException(
-          `El ítem ${index + 1} ya se pagó: no se puede cambiar su método de pago, banco ni comprobante.`,
+          `El ítem ${index + 1} ya se pagó: no se puede cambiar su comprobante.`,
         );
       }
+
+      if (!methodChanged && !bankChanged) return;
+
+      if (index >= correctable) {
+        throw new BadRequestException(
+          `El ítem ${index + 1} ya se pagó y la caja de donde salió ya se cerró: ` +
+            'no se puede cambiar su método de pago ni banco.',
+        );
+      }
+
+      // Pasar a crédito diría que no salió dinero, y el egreso sí salió: eso
+      // no es corregir el método, es anular el pago.
+      if (methodChanged && !paymentMovesCash(nextMethod)) {
+        throw new BadRequestException(
+          `El ítem ${index + 1} ya se pagó: su método de pago no puede pasar a ${nextMethod}.`,
+        );
+      }
+
+      if (methodChanged) {
+        corrections.push({ movementId: movements[index].id, paymentMethod: nextMethod });
+      }
     });
+
+    return corrections;
+  }
+
+  /**
+   * Egresos de caja que generó la autorización de Caja de la OG, uno por ítem y
+   * en el orden de los ítems: `cajaAuthorize` los crea en ese orden y es el
+   * único camino que escribe egresos con referencia a la OG.
+   */
+  private paidItemMovements(expenseOrderId: string) {
+    return this.prisma.cashMovement.findMany({
+      where: {
+        referenceType: 'EXPENSE_ORDER',
+        referenceId: expenseOrderId,
+        movementType: 'EXPENSE',
+        isVoided: false,
+      },
+      select: {
+        id: true,
+        paymentMethod: true,
+        cashSession: { select: { status: true } },
+      },
+      orderBy: [{ createdAt: 'asc' }, { receiptNumber: 'asc' }],
+    });
+  }
+
+  /**
+   * Cuántos de los primeros ítems pagados admiten corregir su método de pago.
+   * Los ítems agregados al editar la OG ya pagada van al final y no tienen
+   * egreso, así que hay a lo sumo un egreso por ítem. Si hay más egresos que
+   * ítems (OG viejas, movimientos manuales), no se sabe cuál es de cuál y no se
+   * corrige nada. Todos salieron en la misma autorización, así que la caja
+   * está abierta para todos o para ninguno.
+   */
+  private paymentCorrectableCount(
+    items: Array<{ paymentMethod: string }>,
+    movements: Array<{ paymentMethod: string; cashSession: { status: string } | null }>,
+  ): number {
+    if (movements.length === 0 || movements.length > items.length) return 0;
+
+    const consistent = movements.every(
+      (movement, index) =>
+        movement.cashSession?.status === 'OPEN' &&
+        movement.paymentMethod === items[index].paymentMethod &&
+        paymentMovesCash(items[index].paymentMethod as PaymentMethod),
+    );
+    return consistent ? movements.length : 0;
+  }
+
+  /**
+   * Corrige el método del egreso y del abono de la CP que lo refleja. Exige
+   * otra vez la sesión abierta: si Caja cerró entre la validación y este punto,
+   * la edición no sale.
+   */
+  private async applyPaymentCorrections(
+    tx: Prisma.TransactionClient,
+    corrections: PaymentCorrection[],
+  ) {
+    for (const { movementId, paymentMethod } of corrections) {
+      const { count } = await tx.cashMovement.updateMany({
+        where: { id: movementId, isVoided: false, cashSession: { is: { status: 'OPEN' } } },
+        data: { paymentMethod },
+      });
+      if (count === 0) {
+        throw new ConflictException(
+          'La caja de donde salió el pago se acaba de cerrar: ya no se puede cambiar el método de pago.',
+        );
+      }
+      await tx.accountPayablePayment.updateMany({
+        where: { cashMovementId: movementId },
+        data: { paymentMethod },
+      });
+    }
   }
 
   /**
@@ -445,6 +566,7 @@ export class ExpenseOrdersService {
     isPaidEdit: boolean,
     // Siempre presente cuando `isPaidEdit`: `assertCanEditPaid` exige usuario.
     editedById?: string,
+    paymentCorrections: PaymentCorrection[] = [],
   ) {
 
     // Validate new workOrderId if changed
@@ -492,7 +614,16 @@ export class ExpenseOrdersService {
         productionAreaIds: item.productionAreaIds,
         sortOrder: index,
       }));
-      await this.repository.replaceItems(id, itemsData);
+
+      if (paymentCorrections.length > 0) {
+        // El ítem y su egreso cambian de método juntos o ninguno.
+        await this.prisma.$transaction(async (tx) => {
+          await this.applyPaymentCorrections(tx, paymentCorrections);
+          await this.repository.replaceItems(id, itemsData, tx);
+        });
+      } else {
+        await this.repository.replaceItems(id, itemsData);
+      }
     }
 
     const updated = await this.repository.findById(id);

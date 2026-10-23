@@ -77,7 +77,12 @@ describe('ExpenseOrdersService', () => {
       },
       cashMovement: {
         create: jest.fn(),
+        findMany: jest.fn().mockResolvedValue([]),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
         aggregate: jest.fn().mockResolvedValue({ _sum: { amount: null } }),
+      },
+      accountPayablePayment: {
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
       expenseOrderEditRequest: {
         update: jest.fn(),
@@ -579,8 +584,11 @@ describe('ExpenseOrdersService', () => {
       expect(repository.replaceItems).not.toHaveBeenCalled();
     });
 
-    it('no deja cambiar el método de pago ni quitar ítems ya pagados', async () => {
+    it('no deja cambiar el método de pago con la caja cerrada ni quitar ítems ya pagados', async () => {
       asRole('admin');
+      ((prisma as any).cashMovement.findMany as jest.Mock).mockResolvedValue([
+        { id: 'mov-1', paymentMethod: 'CASH', cashSession: { status: 'CLOSED' } },
+      ]);
 
       await expect(
         service.update(
@@ -592,7 +600,8 @@ describe('ExpenseOrdersService', () => {
           },
           admin,
         ),
-      ).rejects.toThrow(/ya se pagó/);
+      ).rejects.toThrow(/la caja de donde salió ya se cerró/);
+      expect(repository.replaceItems).not.toHaveBeenCalled();
 
       (repository.findById as jest.Mock).mockImplementation(async () => ({
         ...paidOg(),
@@ -609,6 +618,90 @@ describe('ExpenseOrdersService', () => {
           admin,
         ),
       ).rejects.toThrow(/no se pueden quitar ítems/);
+    });
+
+    describe('corrección del método de pago con la caja abierta', () => {
+      // OG-2026-0826: Caja la pagó en efectivo y en realidad fue transferencia.
+      const openMovement = { id: 'mov-1', paymentMethod: 'CASH', cashSession: { status: 'OPEN' } };
+      const asTransfer = {
+        items: [
+          {
+            quantity: 1,
+            unitPrice: 100000,
+            paymentMethod: 'TRANSFER' as any,
+            bankEntity: 'Bancolombia',
+            receiptFileId: 'receipt-1',
+          },
+        ],
+      };
+
+      beforeEach(() => {
+        asRole('admin');
+        ((prisma as any).cashMovement.findMany as jest.Mock).mockResolvedValue([openMovement]);
+      });
+
+      it('cambia el método del ítem, de su egreso y del abono de la CP en una transacción', async () => {
+        await service.update('og-1', asTransfer, admin);
+
+        expect((prisma as any).cashMovement.updateMany).toHaveBeenCalledWith({
+          where: { id: 'mov-1', isVoided: false, cashSession: { is: { status: 'OPEN' } } },
+          data: { paymentMethod: 'TRANSFER' },
+        });
+        expect((prisma as any).accountPayablePayment.updateMany).toHaveBeenCalledWith({
+          where: { cashMovementId: 'mov-1' },
+          data: { paymentMethod: 'TRANSFER' },
+        });
+        expect(repository.replaceItems).toHaveBeenCalledWith(
+          'og-1',
+          [expect.objectContaining({ paymentMethod: 'TRANSFER', bankEntity: 'Bancolombia' })],
+          prisma,
+        );
+      });
+
+      it('si Caja cerró entre la validación y la escritura, responde 409 y no toca los ítems', async () => {
+        ((prisma as any).cashMovement.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
+
+        await expect(service.update('og-1', asTransfer, admin)).rejects.toThrow(ConflictException);
+        expect(repository.replaceItems).not.toHaveBeenCalled();
+      });
+
+      it('no deja pasar un ítem pagado a crédito', async () => {
+        await expect(
+          service.update(
+            'og-1',
+            { items: [{ ...asTransfer.items[0], paymentMethod: 'CREDIT' as any, bankEntity: undefined }] },
+            admin,
+          ),
+        ).rejects.toThrow(/no puede pasar a CREDIT/);
+        expect((prisma as any).cashMovement.updateMany).not.toHaveBeenCalled();
+      });
+
+      it('sin cambio de método no toca el egreso', async () => {
+        await service.update(
+          'og-1',
+          { items: [{ quantity: 1, unitPrice: 100000, paymentMethod: 'CASH' as any, receiptFileId: 'receipt-1' }] },
+          admin,
+        );
+
+        expect((prisma as any).cashMovement.updateMany).not.toHaveBeenCalled();
+        expect(repository.replaceItems).toHaveBeenCalledWith('og-1', expect.any(Array));
+      });
+
+      it('findOne le dice al formulario cuántos ítems pagados admiten la corrección', async () => {
+        await expect(service.findOne('og-1')).resolves.toMatchObject({ paymentCorrectableItems: 1 });
+
+        ((prisma as any).cashMovement.findMany as jest.Mock).mockResolvedValue([
+          { ...openMovement, cashSession: { status: 'CLOSED' } },
+        ]);
+        await expect(service.findOne('og-1')).resolves.toMatchObject({ paymentCorrectableItems: 0 });
+
+        // Más egresos que ítems: no se sabe cuál es de cuál.
+        ((prisma as any).cashMovement.findMany as jest.Mock).mockResolvedValue([
+          openMovement,
+          { ...openMovement, id: 'mov-2' },
+        ]);
+        await expect(service.findOne('og-1')).resolves.toMatchObject({ paymentCorrectableItems: 0 });
+      });
     });
 
     it('con aprobación vigente la consume y deja editar', async () => {

@@ -31,6 +31,7 @@ import {
 } from '@mui/icons-material';
 import axiosInstance from '../../../api/axios';
 import { useIsCashOpen } from '../../cash-register/hooks/useCashRegister';
+import CashCountInProgressAlert from '../../cash-register/components/CashCountInProgressAlert';
 import { storageApi } from '../../../api/storage.api';
 import type {
   InitialPaymentData,
@@ -224,6 +225,8 @@ export const InitialPayment: React.FC<InitialPaymentProps> = ({
             automáticamente cuando se abra la próxima caja.
           </Alert>
         )}
+
+        {enabled && <CashCountInProgressAlert />}
 
         <Collapse in={enabled || required}>
           <Stack spacing={2}>

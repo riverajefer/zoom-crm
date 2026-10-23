@@ -23,6 +23,7 @@ const SESSION_SELECT = {
   notes: true,
   openedAt: true,
   closedAt: true,
+  countStartedAt: true,
   createdAt: true,
   updatedAt: true,
   // La sede de la caja: la dirección y el teléfono de los recibos y reportes (docs/PLAN_SEDES.md §9).
@@ -33,6 +34,9 @@ const SESSION_SELECT = {
     select: { id: true, firstName: true, lastName: true, username: true },
   },
   closedBy: {
+    select: { id: true, firstName: true, lastName: true, username: true },
+  },
+  countStartedBy: {
     select: { id: true, firstName: true, lastName: true, username: true },
   },
   denominations: {
@@ -146,6 +150,42 @@ export class CashSessionRepository {
     }
 
     return balance;
+  }
+
+  /**
+   * Movimientos que movieron lo esperado después de `since` (el inicio del
+   * arqueo): efectivo creado después, o cualquier movimiento previo editado o
+   * anulado después. Un cambio de método no se puede ver en la fila —solo
+   * queda el nuevo—, por eso el segundo caso no filtra por efectivo.
+   *
+   * Los caminos normales ya bloquean esto durante el arqueo; esta consulta es la
+   * red para los que se cuelan: una transacción que leyó la sesión justo antes
+   * de que empezara el conteo, o una anulación administrativa.
+   */
+  async findMovementsChangedSince(cashSessionId: string, since: Date) {
+    return this.prisma.cashMovement.findMany({
+      where: {
+        cashSessionId,
+        ...EXCLUDE_REVERSALS,
+        OR: [
+          { paymentMethod: 'CASH', createdAt: { gt: since } },
+          { createdAt: { lte: since }, updatedAt: { gt: since } },
+        ],
+      },
+      select: {
+        id: true,
+        receiptNumber: true,
+        movementType: true,
+        paymentMethod: true,
+        amount: true,
+        description: true,
+        isVoided: true,
+        createdAt: true,
+        updatedAt: true,
+        performedBy: { select: { id: true, firstName: true, lastName: true } },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
   }
 
   async getMovementCount(cashSessionId: string): Promise<number> {

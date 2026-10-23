@@ -22,6 +22,7 @@ import {
   Tooltip,
   Typography,
   Alert,
+  AlertTitle,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -93,6 +94,7 @@ import ApprovedRefundsToPayPanel from '../components/ApprovedRefundsToPayPanel';
 import PendingApAuthorizationsPanel from '../components/PendingApAuthorizationsPanel';
 import PendingApReversalsCajaPanel from '../components/PendingApReversalsCajaPanel';
 import { useApprovalSocket } from '../hooks/useApprovalSocket';
+import { LoadingButton } from '../../../components/common/LoadingButton';
 import { useCreateVoidRequest } from '../../../hooks/useVoidRequests';
 import type { CashMovementType, CashMovement } from '../../../types/cash-register.types';
 import { PAYMENT_METHOD_LABELS } from '../../../utils/paymentMethods';
@@ -166,7 +168,7 @@ const ActiveSessionPage: React.FC = () => {
 
   const sessionQuery = useCashSession(id);
   const movementsQuery = useSessionMovements(id);
-  const { createMovement, voidMovement } = useCashMutations();
+  const { createMovement, voidMovement, cancelCount } = useCashMutations();
   const createVoidRequest = useCreateVoidRequest();
 
   // Real-time WebSocket for advance payment approvals
@@ -350,6 +352,45 @@ const ActiveSessionPage: React.FC = () => {
         title={`Sesión — ${session.cashRegister.name}`}
         subtitle={`Abierta el ${formatDate(session.openedAt)}`}
       />
+
+      {/* Si Caja inicia el arqueo y sale de la pantalla de cierre, la sesión
+          sigue sin aceptar efectivo: sin este aviso nadie sabría por qué las
+          comerciales no pueden registrar abonos. */}
+      {session.countStartedAt && (
+        <Alert
+          severity="warning"
+          sx={{ mb: 2 }}
+          action={
+            canCloseSession && (
+              <Stack direction="row" spacing={1}>
+                <LoadingButton
+                  size="small"
+                  color="inherit"
+                  loading={cancelCount.isPending}
+                  onClick={() => cancelCount.mutate(id)}
+                >
+                  Cancelar arqueo
+                </LoadingButton>
+                <Button
+                  size="small"
+                  variant="contained"
+                  color="warning"
+                  onClick={() => navigate(PATHS.CASH_SESSION_CLOSE.replace(':id', id))}
+                >
+                  Continuar cierre
+                </Button>
+              </Stack>
+            )
+          }
+        >
+          <AlertTitle>Arqueo de cierre en curso</AlertTitle>
+          Desde el {formatDate(session.countStartedAt)}
+          {session.countStartedBy
+            ? ` (${[session.countStartedBy.firstName, session.countStartedBy.lastName].filter(Boolean).join(' ')})`
+            : ''}.
+          {' '}La caja no recibe ni entrega efectivo hasta cerrar o cancelar el arqueo.
+        </Alert>
+      )}
 
       {/* ── Session Overview ─────────────────────────────────────── */}
       <Card sx={{ mb: 2 }}>

@@ -471,6 +471,21 @@ describe('AccountsPayableService', () => {
       );
     });
 
+    it('no paga en efectivo mientras Caja hace el arqueo de cierre', async () => {
+      repository.findById!.mockResolvedValue(apStub() as any);
+      prisma.cashSession.findUnique.mockResolvedValue({
+        id: 'cs-1',
+        status: 'OPEN',
+        countStartedAt: new Date(),
+      } as any);
+
+      await expect(
+        service.registerPayment('ap-1', { ...paymentDto, cashSessionId: 'cs-1' }, 'user-1'),
+      ).rejects.toThrow(/arqueo de cierre/);
+      expect(prisma.cashMovement.create).not.toHaveBeenCalled();
+      expect(repository.createPayment).not.toHaveBeenCalled();
+    });
+
     it('rechaza si la sesión de caja indicada no está abierta', async () => {
       repository.findById!.mockResolvedValue(apStub() as any);
       prisma.cashSession.findUnique.mockResolvedValue({ id: 'cs-1', status: 'CLOSED' } as any);

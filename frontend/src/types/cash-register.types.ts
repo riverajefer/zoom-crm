@@ -57,11 +57,14 @@ export interface CashSession {
   notes?: string;
   openedAt: string;
   closedAt?: string;
+  /** Arqueo de cierre en curso: la sesión no acepta efectivo hasta cerrar o cancelar. */
+  countStartedAt?: string | null;
   createdAt: string;
   updatedAt: string;
   cashRegister: Pick<CashRegister, 'id' | 'name' | 'description'> & { location?: SedeSummary };
   openedBy: UserSummary;
   closedBy?: UserSummary;
+  countStartedBy?: UserSummary | null;
   denominations: DenominationCount[];
   movements?: CashMovement[];
 }
@@ -126,6 +129,22 @@ export interface BalancePreview {
   totalWithdrawals: string;
   totalDeposits: string;
   movementCount: number;
+  countStartedAt: string | null;
+  /** Movimientos que entraron o cambiaron después de iniciar el arqueo. */
+  lateMovements: LateCashMovement[];
+}
+
+export interface LateCashMovement {
+  id: string;
+  receiptNumber: string;
+  movementType: CashMovementType;
+  paymentMethod: string;
+  amount: string;
+  description: string;
+  isVoided: boolean;
+  createdAt: string;
+  updatedAt: string;
+  performedBy?: { id: string; firstName?: string; lastName?: string } | null;
 }
 
 // Paginated list responses
@@ -166,6 +185,8 @@ export interface OpenCashSessionDto {
 export interface CloseCashSessionDto {
   denominations: DenominationCountItemDto[];
   notes?: string;
+  /** Cerrar aunque haya movimientos posteriores al inicio del arqueo. */
+  acknowledgeLateMovements?: boolean;
 }
 
 export interface CreateCashMovementDto {

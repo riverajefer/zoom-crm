@@ -127,7 +127,12 @@ export class CashMovementRepository {
       select: {
         ...MOVEMENT_SELECT,
         cashSession: {
-          select: { id: true, status: true, cashRegisterId: true },
+          select: {
+            id: true,
+            status: true,
+            cashRegisterId: true,
+            countStartedAt: true,
+          },
         },
       },
     });

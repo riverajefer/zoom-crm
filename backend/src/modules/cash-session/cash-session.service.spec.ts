@@ -25,7 +25,10 @@ const sessionStub = (overrides: Record<string, any> = {}) => ({
 describe('CashSessionService', () => {
   let service: CashSessionService;
   let repository: any;
-  let prisma: ReturnType<typeof createMockPrismaService> & { cashDenominationCount: any };
+  let prisma: ReturnType<typeof createMockPrismaService> & {
+    cashDenominationCount: any;
+    cashSession: any;
+  };
   let auditLogs: { logCreate: jest.Mock; logUpdate: jest.Mock };
   let pendingEntries: { flushInto: jest.Mock };
 
@@ -37,10 +40,12 @@ describe('CashSessionService', () => {
       findOpenByRegisterId: jest.fn(),
       computeSystemBalance: jest.fn(),
       getMovementCount: jest.fn(),
+      findMovementsChangedSince: jest.fn().mockResolvedValue([]),
     };
 
     prisma = createMockPrismaService() as any;
     prisma.cashDenominationCount = { createMany: jest.fn() };
+    prisma.cashSession.updateMany = jest.fn();
     // El servicio usa $transaction(async tx => ...); tx === prisma para controlar los mocks.
     prisma.$transaction.mockImplementation((fn: any) => fn(prisma));
     // Solo Zoom: la caja se busca antes de abrir (filtrada por la sede activa).
@@ -214,6 +219,116 @@ describe('CashSessionService', () => {
       const updateArg = prisma.cashSession.update.mock.calls[0][0].data;
       expect(Number(updateArg.discrepancy.toString())).toBe(-50000);
     });
+
+    describe('con el arqueo en curso', () => {
+      const countStartedAt = new Date('2026-10-23T14:00:00Z');
+      const lateCashIncome = {
+        id: 'mov-late',
+        receiptNumber: 'RC-0101',
+        movementType: 'INCOME',
+        paymentMethod: 'CASH',
+        amount: new Prisma.Decimal(492000),
+        createdAt: new Date('2026-10-23T14:04:00Z'),
+      };
+
+      it('no cierra si entró efectivo después de iniciar el conteo (caso 2026-10-23)', async () => {
+        // Dos abonos en efectivo cinco minutos antes del cierre sumaron a lo
+        // esperado sin estar en el conteo: el cierre quedó con faltante falso.
+        repository.findById.mockResolvedValue(sessionStub({ countStartedAt }));
+        repository.findMovementsChangedSince.mockResolvedValue([lateCashIncome]);
+
+        await expect(service.closeSession('cs-1', dto, 'user-1')).rejects.toThrow(
+          ConflictException,
+        );
+        expect(repository.findMovementsChangedSince).toHaveBeenCalledWith(
+          'cs-1',
+          countStartedAt,
+        );
+        expect(prisma.cashSession.update).not.toHaveBeenCalled();
+      });
+
+      it('cierra si Caja confirma que vio los movimientos posteriores', async () => {
+        repository.findById.mockResolvedValue(sessionStub({ countStartedAt }));
+        repository.findMovementsChangedSince.mockResolvedValue([lateCashIncome]);
+        repository.computeSystemBalance.mockResolvedValue(new Prisma.Decimal(50000));
+        prisma.cashSession.update.mockResolvedValue({ id: 'cs-1' });
+
+        await service.closeSession(
+          'cs-1',
+          { ...dto, acknowledgeLateMovements: true },
+          'user-1',
+        );
+
+        expect(prisma.cashSession.update).toHaveBeenCalled();
+      });
+
+      it('cierra normal si nada cambió durante el conteo', async () => {
+        repository.findById.mockResolvedValue(sessionStub({ countStartedAt }));
+        repository.computeSystemBalance.mockResolvedValue(new Prisma.Decimal(50000));
+        prisma.cashSession.update.mockResolvedValue({ id: 'cs-1' });
+
+        await service.closeSession('cs-1', dto, 'user-1');
+
+        expect(prisma.cashSession.update).toHaveBeenCalled();
+      });
+    });
+  });
+
+  describe('startCount', () => {
+    it('marca el inicio del arqueo con la hora y quien lo inició', async () => {
+      repository.findById.mockResolvedValue(sessionStub({ countStartedAt: null }));
+      prisma.cashSession.updateMany.mockResolvedValue({ count: 1 });
+
+      await service.startCount('cs-1', 'user-1');
+
+      const arg = prisma.cashSession.updateMany.mock.calls[0][0];
+      expect(arg.where).toEqual({ id: 'cs-1', status: 'OPEN', countStartedAt: null });
+      expect(arg.data.countStartedAt).toBeInstanceOf(Date);
+      expect(arg.data.countStartedById).toBe('user-1');
+    });
+
+    it('no mueve la hora si el arqueo ya había empezado', async () => {
+      // Esa hora separa lo contado de lo que llegó después; correrla escondería
+      // los movimientos que se colaron entre medio.
+      repository.findById.mockResolvedValue(
+        sessionStub({ countStartedAt: new Date('2026-10-23T14:00:00Z') }),
+      );
+
+      await service.startCount('cs-1', 'user-1');
+
+      expect(prisma.cashSession.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('rechaza una sesión cerrada', async () => {
+      repository.findById.mockResolvedValue(sessionStub({ status: 'CLOSED' }));
+      await expect(service.startCount('cs-1', 'user-1')).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+  });
+
+  describe('cancelCount', () => {
+    it('quita la marca y la sesión vuelve a aceptar efectivo', async () => {
+      repository.findById.mockResolvedValue(
+        sessionStub({ countStartedAt: new Date('2026-10-23T14:00:00Z') }),
+      );
+      prisma.cashSession.update.mockResolvedValue({ id: 'cs-1' });
+
+      await service.cancelCount('cs-1', 'user-1');
+
+      expect(prisma.cashSession.update).toHaveBeenCalledWith({
+        where: { id: 'cs-1' },
+        data: { countStartedAt: null, countStartedById: null },
+      });
+    });
+
+    it('no hace nada si no había arqueo en curso', async () => {
+      repository.findById.mockResolvedValue(sessionStub({ countStartedAt: null }));
+
+      await service.cancelCount('cs-1', 'user-1');
+
+      expect(prisma.cashSession.update).not.toHaveBeenCalled();
+    });
   });
 
   describe('getBalancePreview', () => {
@@ -241,6 +356,23 @@ describe('CashSessionService', () => {
       expect(Number(preview.totalWithdrawals.toString())).toBe(10000);
       expect(Number(preview.totalDeposits.toString())).toBe(5000);
       expect(preview.movementCount).toBe(4);
+      expect(preview.lateMovements).toEqual([]);
+      expect(repository.findMovementsChangedSince).not.toHaveBeenCalled();
+    });
+
+    it('lista lo que cambió después de iniciar el arqueo', async () => {
+      const countStartedAt = new Date('2026-10-23T14:00:00Z');
+      const late = [{ id: 'mov-late', amount: new Prisma.Decimal(19500) }];
+      repository.findById.mockResolvedValue(sessionStub({ countStartedAt }));
+      repository.computeSystemBalance.mockResolvedValue(new Prisma.Decimal(0));
+      repository.getMovementCount.mockResolvedValue(0);
+      repository.findMovementsChangedSince.mockResolvedValue(late);
+      prisma.cashMovement.findMany.mockResolvedValue([] as any);
+
+      const preview = await service.getBalancePreview('cs-1');
+
+      expect(preview.countStartedAt).toBe(countStartedAt);
+      expect(preview.lateMovements).toBe(late);
     });
 
     it('desglosa solo el efectivo, igual que el saldo del sistema', async () => {

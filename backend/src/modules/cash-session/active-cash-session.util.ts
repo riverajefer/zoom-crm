@@ -1,5 +1,5 @@
 import { ConflictException } from '@nestjs/common';
-import { CashSessionStatus, Prisma } from '../../generated/prisma';
+import { CashSessionStatus, PaymentMethod, Prisma } from '../../generated/prisma';
 import { withoutLocationScope } from '../../common/utils/location-context';
 
 /**
@@ -27,7 +27,15 @@ import { withoutLocationScope } from '../../common/utils/location-context';
 export interface ActiveCashSession {
   id: string;
   cashRegisterId: string;
+  /** Inicio del arqueo de cierre; `null` si Caja no está contando. */
+  countStartedAt: Date | null;
 }
+
+const ACTIVE_SESSION_SELECT = {
+  id: true,
+  cashRegisterId: true,
+  countStartedAt: true,
+} satisfies Prisma.CashSessionSelect;
 
 /** Acepta tanto `PrismaService` como el cliente de una transacción. */
 type CashSessionClient = Pick<Prisma.TransactionClient, 'cashSession'>;
@@ -54,7 +62,7 @@ export async function findActiveCashSessionForLocation(
   const open = await withoutLocationScope(() =>
     client.cashSession.findMany({
       where: { status: CashSessionStatus.OPEN, cashRegister: { locationId } },
-      select: { id: true, cashRegisterId: true },
+      select: ACTIVE_SESSION_SELECT,
       orderBy: { openedAt: 'asc' },
       take: 2,
     }),
@@ -64,4 +72,72 @@ export async function findActiveCashSessionForLocation(
   if (open.length === 1) return open[0];
 
   throw new ConflictException(NO_REGISTER_FOR_SEDE_MULTIPLE);
+}
+
+export const COUNT_IN_PROGRESS_MESSAGE =
+  'Caja está haciendo el arqueo de cierre y no puede recibir ni entregar ' +
+  'efectivo hasta terminar. Intenta de nuevo en unos minutos.';
+
+/**
+ * Bloquea un movimiento en efectivo sobre una sesión cuyo arqueo ya empezó.
+ *
+ * Mientras Caja cuenta el cajón, cualquier efectivo que entre o salga en el
+ * sistema cambia lo esperado sin estar en el conteo, y el cierre queda con un
+ * descuadre falso. Pasó el 2026-10-23: dos abonos en efectivo registrados
+ * cinco minutos antes del cierre cayeron en la sesión que se estaba contando.
+ *
+ * Solo el efectivo: el arqueo cuadra billetes (`CASH_IN_DRAWER_WHERE`), así que
+ * una transferencia o un pago con tarjeta no lo altera y no hay por qué frenarlo.
+ *
+ * @throws ConflictException si la sesión está en arqueo y el método es efectivo.
+ */
+export function assertCashSessionNotCounting(
+  session: Pick<ActiveCashSession, 'countStartedAt'> | null | undefined,
+  paymentMethod: PaymentMethod | string | null | undefined,
+): void {
+  if (!session?.countStartedAt) return;
+  if (paymentMethod !== PaymentMethod.CASH) return;
+  throw new ConflictException(COUNT_IN_PROGRESS_MESSAGE);
+}
+
+/**
+ * La misma regla para editar o anular un movimiento que ya existe: cambiar el
+ * monto de un abono en efectivo, o pasarlo de transferencia a efectivo, mueve
+ * lo esperado igual que crear uno nuevo.
+ *
+ * @param next  Monto y método después del cambio, o `null` si se anula.
+ *   Si no cambia nada (el formulario reenvía el abono tal cual), se permite.
+ *
+ * @throws ConflictException si la sesión del movimiento está en arqueo y el
+ *   cambio toca efectivo.
+ */
+export async function assertMovementChangeAllowedDuringCount(
+  client: Pick<Prisma.TransactionClient, 'cashMovement'>,
+  movementId: string,
+  next: { amount: Prisma.Decimal; paymentMethod: PaymentMethod | string } | null,
+): Promise<void> {
+  // Sin el filtro de sede: el movimiento es de la sede de su documento, que
+  // puede no ser la sede activa de quien opera.
+  const movement = await withoutLocationScope(() =>
+    client.cashMovement.findUnique({
+      where: { id: movementId },
+      select: {
+        amount: true,
+        paymentMethod: true,
+        cashSession: { select: { status: true, countStartedAt: true } },
+      },
+    }),
+  );
+  const session = movement?.cashSession;
+  if (!movement || session?.status !== CashSessionStatus.OPEN) return;
+  if (!session.countStartedAt) return;
+
+  const unchanged =
+    next !== null &&
+    movement.amount.equals(next.amount) &&
+    movement.paymentMethod === next.paymentMethod;
+  if (unchanged) return;
+
+  assertCashSessionNotCounting(session, movement.paymentMethod);
+  if (next) assertCashSessionNotCounting(session, next.paymentMethod);
 }

@@ -203,6 +203,28 @@ describe('ExpenseOrdersService', () => {
 
     // Antes marcaba AUTHORIZED y después descubría que no había caja: la OG
     // quedaba fuera de ADMIN_AUTHORIZED, sin pago y sin forma de reintentar.
+    it('durante el arqueo de cierre no paga en efectivo ni toca el estado', async () => {
+      (prisma.cashSession.findMany as jest.Mock).mockResolvedValue([{ id: 'session-1', cashRegisterId: 'cr-1', countStartedAt: new Date() }]);
+
+      await expect(service.cajaAuthorize('og-1', currentUser)).rejects.toThrow(
+        /arqueo de cierre/,
+      );
+      expect(repository.claimCajaAuthorization).not.toHaveBeenCalled();
+      expect(prisma.cashMovement.create).not.toHaveBeenCalled();
+    });
+
+    it('durante el arqueo sí paga una OG solo por transferencia', async () => {
+      (prisma.cashSession.findMany as jest.Mock).mockResolvedValue([{ id: 'session-1', cashRegisterId: 'cr-1', countStartedAt: new Date() }]);
+      (repository.findById as jest.Mock).mockResolvedValue({
+        ...adminAuthorized,
+        items: [{ total: 50000, paymentMethod: 'TRANSFER' }],
+      });
+
+      await service.cajaAuthorize('og-1', currentUser);
+
+      expect(prisma.cashMovement.create).toHaveBeenCalledTimes(1);
+    });
+
     it('sin caja abierta no toca el estado de la OG', async () => {
       (prisma.cashSession.findMany as jest.Mock).mockResolvedValue([]);
 

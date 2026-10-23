@@ -120,13 +120,84 @@ export class CashSessionService {
     return this.repository.findById(session.id);
   }
 
+  /**
+   * Caja empieza a contar el cajón. Desde aquí y hasta cerrar o cancelar, la
+   * sesión no acepta movimientos en efectivo: lo que entrara ahora sumaría a lo
+   * esperado sin estar en el conteo (ver `assertCashSessionNotCounting`).
+   *
+   * Idempotente: si el arqueo ya está en curso se deja la hora original, que es
+   * la que separa lo contado de lo que llegó después.
+   */
+  async startCount(id: string, userId: string) {
+    const session = await this.findOpenSession(id);
+    if (session.countStartedAt) return session;
+
+    await this.prisma.cashSession.updateMany({
+      where: { id, status: 'OPEN', countStartedAt: null },
+      data: { countStartedAt: new Date(), countStartedById: userId },
+    });
+    const updated = await this.repository.findById(id);
+
+    setImmediate(() => {
+      this.auditLogsService
+        .logUpdate(
+          'CashSession',
+          id,
+          { countStartedAt: null },
+          { countStartedAt: updated?.countStartedAt, action: 'START_COUNT' },
+          userId,
+        )
+        .catch(() => {});
+    });
+
+    return updated;
+  }
+
+  /** Caja deja el arqueo sin cerrar: la sesión vuelve a aceptar efectivo. */
+  async cancelCount(id: string, userId: string) {
+    const session = await this.findOpenSession(id);
+    if (!session.countStartedAt) return session;
+
+    await this.prisma.cashSession.update({
+      where: { id },
+      data: { countStartedAt: null, countStartedById: null },
+    });
+
+    setImmediate(() => {
+      this.auditLogsService
+        .logUpdate(
+          'CashSession',
+          id,
+          { countStartedAt: session.countStartedAt },
+          { countStartedAt: null, action: 'CANCEL_COUNT' },
+          userId,
+        )
+        .catch(() => {});
+    });
+
+    return this.repository.findById(id);
+  }
+
   async closeSession(id: string, dto: CloseCashSessionDto, userId: string) {
-    const session = await this.repository.findById(id);
-    if (!session) {
-      throw new NotFoundException(`Sesión de caja ${id} no encontrada`);
-    }
-    if (session.status !== 'OPEN') {
-      throw new BadRequestException('La sesión ya está cerrada');
+    const session = await this.findOpenSession(id);
+
+    // Red para lo que se coló durante el conteo (ver `findMovementsChangedSince`).
+    // No se descarta solo: Caja decide si recuenta o cierra sabiendo que esos
+    // movimientos no están en su conteo.
+    if (session.countStartedAt && !dto.acknowledgeLateMovements) {
+      const late = await this.repository.findMovementsChangedSince(
+        id,
+        session.countStartedAt,
+      );
+      if (late.length > 0) {
+        throw new ConflictException(
+          late.length === 1
+            ? 'Un movimiento entró o cambió después de iniciar el arqueo y no ' +
+              'está en tu conteo. Revisa la conciliación antes de cerrar.'
+            : `${late.length} movimientos entraron o cambiaron después de iniciar ` +
+              'el arqueo y no están en tu conteo. Revisa la conciliación antes de cerrar.',
+        );
+      }
     }
 
     const systemBalance = await this.repository.computeSystemBalance(id);
@@ -189,6 +260,9 @@ export class CashSessionService {
     const openingAmount = new Prisma.Decimal(session.openingAmount.toString());
     const systemBalance = openingAmount.add(movementsBalance);
     const movementCount = await this.repository.getMovementCount(id);
+    const lateMovements = session.countStartedAt
+      ? await this.repository.findMovementsChangedSince(id, session.countStartedAt)
+      : [];
 
     // Desglose por tipo con el mismo filtro del saldo: solo efectivo. Antes
     // sumaba todos los métodos, y la conciliación mostraba Fondo + Ingresos −
@@ -230,7 +304,20 @@ export class CashSessionService {
       totalWithdrawals,
       totalDeposits,
       movementCount,
+      countStartedAt: session.countStartedAt,
+      lateMovements,
     };
+  }
+
+  private async findOpenSession(id: string) {
+    const session = await this.repository.findById(id);
+    if (!session) {
+      throw new NotFoundException(`Sesión de caja ${id} no encontrada`);
+    }
+    if (session.status !== 'OPEN') {
+      throw new BadRequestException('La sesión ya está cerrada');
+    }
+    return session;
   }
 
   private sumDenominations(

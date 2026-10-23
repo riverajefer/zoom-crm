@@ -82,6 +82,24 @@ describe('CashMovementService', () => {
   });
 
   describe('voidMovement', () => {
+    it('no anula efectivo de la sesión que Caja está contando', async () => {
+      repository.findById.mockResolvedValue(
+        openMovement({
+          cashSession: {
+            id: 'cs1',
+            status: 'OPEN',
+            cashRegisterId: 'cr1',
+            countStartedAt: new Date(),
+          },
+        }),
+      );
+
+      await expect(
+        service.voidMovement('cm1', { voidReason: 'Error' }, 'u1'),
+      ).rejects.toThrow(/arqueo de cierre/);
+      expect(prisma.cashMovement.create).not.toHaveBeenCalled();
+    });
+
     it('should create the counter-movement with the inverse type', async () => {
       repository.findById.mockResolvedValue(openMovement());
 
@@ -224,6 +242,19 @@ describe('CashMovementService', () => {
       await expect(service.createMovement(dto, 'u1')).rejects.toThrow(
         /sesión cerrada/,
       );
+    });
+
+    it('no registra efectivo mientras Caja hace el arqueo de cierre', async () => {
+      prisma.cashSession.findUnique.mockResolvedValue({
+        id: 'cs1',
+        status: 'OPEN',
+        countStartedAt: new Date(),
+      });
+
+      await expect(service.createMovement(dto, 'u1')).rejects.toThrow(
+        /arqueo de cierre/,
+      );
+      expect(prisma.cashMovement.create).not.toHaveBeenCalled();
     });
 
     it('crea un movimiento simple (sin orden asociada)', async () => {

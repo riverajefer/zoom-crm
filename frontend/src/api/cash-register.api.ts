@@ -61,6 +61,17 @@ export const cashRegisterApi = {
     return data;
   },
 
+  /** Caja empieza a contar: la sesión deja de aceptar efectivo. */
+  startCount: async (id: string): Promise<CashSession> => {
+    const { data } = await axiosInstance.post<CashSession>(`/cash-sessions/${id}/start-count`);
+    return data;
+  },
+
+  cancelCount: async (id: string): Promise<CashSession> => {
+    const { data } = await axiosInstance.post<CashSession>(`/cash-sessions/${id}/cancel-count`);
+    return data;
+  },
+
   getBalancePreview: async (id: string): Promise<BalancePreview> => {
     const { data } = await axiosInstance.get<BalancePreview>(`/cash-sessions/${id}/balance-preview`);
     return data;
@@ -93,8 +104,8 @@ export const cashRegisterApi = {
    * ¿Hay caja abierta ahora? Booleano sin datos sensibles: lo consultan las
    * comerciales desde el formulario de OP, que no tienen permiso sobre caja.
    */
-  isCashOpen: async (): Promise<{ isOpen: boolean }> => {
-    const { data } = await axiosInstance.get<{ isOpen: boolean }>(
+  isCashOpen: async (): Promise<{ isOpen: boolean; isCounting: boolean }> => {
+    const { data } = await axiosInstance.get<{ isOpen: boolean; isCounting: boolean }>(
       '/cash-sessions/is-open',
     );
     return data;

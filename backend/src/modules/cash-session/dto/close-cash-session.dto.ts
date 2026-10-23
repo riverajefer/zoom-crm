@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsArray,
+  IsBoolean,
   IsOptional,
   IsString,
   ValidateNested,
@@ -24,4 +25,13 @@ export class CloseCashSessionDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Cerrar aunque haya movimientos que entraron o cambiaron después de ' +
+      'iniciar el arqueo (no están en el conteo)',
+  })
+  @IsOptional()
+  @IsBoolean()
+  acknowledgeLateMovements?: boolean;
 }

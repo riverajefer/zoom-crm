@@ -5,7 +5,11 @@ import {
   voidReasonForNonCash,
 } from '../../common/utils/payment-method.util';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
-import { findActiveCashSessionForLocation } from './active-cash-session.util';
+import {
+  assertCashSessionNotCounting,
+  assertMovementChangeAllowedDuringCount,
+  findActiveCashSessionForLocation,
+} from './active-cash-session.util';
 import { businessToday } from '../../common/utils/date-range.util';
 
 /**
@@ -72,6 +76,14 @@ export async function syncPaymentCashMovement(
   const becameNonCash = !paymentMovesCash(updated.paymentMethod);
 
   if (updated.cashMovementId) {
+    await assertMovementChangeAllowedDuringCount(
+      tx,
+      updated.cashMovementId,
+      becameNonCash
+        ? null
+        : { amount: updated.amount, paymentMethod: updated.paymentMethod },
+    );
+
     // Si la sesión de ese movimiento ya está cerrada, editarlo altera un
     // arqueo firmado: `closingAmount`/`systemBalance`/`discrepancy` quedaron
     // congelados al cerrar y no se recalculan. Se permite igual (decisión de
@@ -153,6 +165,7 @@ export async function syncPaymentCashMovement(
     // El movimiento se crea en la sesión abierta HOY, no en la del día en
     // que se registró el crédito: el dinero entra ahora.
     const activeSession = await findActiveCashSessionForLocation(tx, params.locationId);
+    assertCashSessionNotCounting(activeSession, updated.paymentMethod);
 
     if (activeSession) {
       const receiptNumber = await params.generateReceiptNumber();

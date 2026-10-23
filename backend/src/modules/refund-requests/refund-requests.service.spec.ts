@@ -990,6 +990,18 @@ describe('RefundRequestsService', () => {
       });
     });
 
+    // El efectivo que sale mientras Caja cuenta no está en el conteo.
+    it('no paga en efectivo mientras Caja hace el arqueo de cierre', async () => {
+      prisma.refundRequest.findFirst.mockResolvedValue(aprobada());
+      prisma.cashSession.findMany.mockResolvedValue([{ id: 'session-1', cashRegisterId: 'cr-1', countStartedAt: new Date() }]);
+
+      await expect(service.execute(requestId, executorId)).rejects.toThrow(
+        /arqueo de cierre/,
+      );
+      expect(prisma.cashMovement.create).not.toHaveBeenCalled();
+      expect(prisma.refundRequest.updateMany).not.toHaveBeenCalled();
+    });
+
     it('exige sesión de caja abierta', async () => {
       prisma.refundRequest.findFirst.mockResolvedValue(aprobada());
       prisma.cashSession.findMany.mockResolvedValue([]);

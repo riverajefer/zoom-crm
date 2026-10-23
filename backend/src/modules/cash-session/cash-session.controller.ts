@@ -44,7 +44,7 @@ export class CashSessionController {
 
   // Sin `@RequirePermissions` a propósito: basta con estar autenticado. Lo
   // consultan las comerciales, que no tienen `read_cash_sessions`, y la
-  // respuesta es un booleano sin datos de caja.
+  // respuesta son dos booleanos sin datos de caja.
   @Get('is-open')
   @ApiOperation({
     summary: '¿Hay una sesión de caja abierta ahora?',
@@ -105,10 +105,32 @@ export class CashSessionController {
     return this.service.openSession(dto, userId);
   }
 
+  @Post(':id/start-count')
+  @RequirePermissions('close_cash_session')
+  @ApiOperation({
+    summary:
+      'Iniciar el arqueo de cierre: la sesión deja de aceptar efectivo hasta cerrar o cancelar',
+  })
+  startCount(@Param('id') id: string, @CurrentUser('id') userId: string) {
+    return this.service.startCount(id, userId);
+  }
+
+  @Post(':id/cancel-count')
+  @RequirePermissions('close_cash_session')
+  @ApiOperation({ summary: 'Cancelar el arqueo en curso sin cerrar la sesión' })
+  cancelCount(@Param('id') id: string, @CurrentUser('id') userId: string) {
+    return this.service.cancelCount(id, userId);
+  }
+
   @Post(':id/close')
   @RequirePermissions('close_cash_session')
   @ApiOperation({ summary: 'Cerrar la sesión de caja con conteo de denominaciones' })
   @ApiResponse({ status: 200, description: 'Sesión cerrada con resumen de conciliación' })
+  @ApiResponse({
+    status: 409,
+    description:
+      'Hay movimientos posteriores al inicio del arqueo; reenviar con acknowledgeLateMovements',
+  })
   closeSession(
     @Param('id') id: string,
     @Body() dto: CloseCashSessionDto,

@@ -22,6 +22,7 @@ import {
 } from '../../common/utils/order-balance.util';
 import { CreditBalanceService } from '../credit-balance/credit-balance.service';
 import { lockOrderForUpdate } from '../../common/utils/order-lock.util';
+import { assertCashSessionNotCounting } from '../cash-session/active-cash-session.util';
 
 @Injectable()
 export class CashMovementService {
@@ -49,7 +50,12 @@ export class CashMovementService {
     // Validate session exists and is open
     const session = await this.prisma.cashSession.findUnique({
       where: { id: dto.cashSessionId },
-      select: { id: true, status: true, cashRegister: { select: { locationId: true } } },
+      select: {
+        id: true,
+        status: true,
+        countStartedAt: true,
+        cashRegister: { select: { locationId: true } },
+      },
     });
     if (!session) {
       throw new NotFoundException(`Sesión de caja ${dto.cashSessionId} no encontrada`);
@@ -59,6 +65,7 @@ export class CashMovementService {
         'No se pueden registrar movimientos en una sesión cerrada',
       );
     }
+    assertCashSessionNotCounting(session, dto.paymentMethod || 'CASH');
 
     // El recibo se numera en la sede de la caja (docs/PLAN_SEDES.md §3).
     const receiptNumber = await this.consecutivesService.generateNumber(
@@ -275,6 +282,12 @@ export class CashMovementService {
     }
     if (movement.isVoided) {
       throw new BadRequestException('El movimiento ya está anulado');
+    }
+    // Anular un movimiento de una sesión ya cerrada no toca el arqueo en curso:
+    // la reversa queda fuera del saldo (EXCLUDE_REVERSALS). Solo frena si el
+    // movimiento es de la sesión que se está contando.
+    if (movement.cashSession?.status === CashSessionStatus.OPEN) {
+      assertCashSessionNotCounting(movement.cashSession, movement.paymentMethod);
     }
 
     // La reversa va a la sesión donde el dinero todavía se puede mover.

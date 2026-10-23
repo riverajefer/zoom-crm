@@ -37,7 +37,10 @@ const money = (value: unknown) =>
 
 import { computeExpenseTotals } from '../../common/utils/expense-totals.util';
 import { normalizeRate } from '../../common/utils/rounding.util';
-import { findActiveCashSessionForLocation } from '../cash-session/active-cash-session.util';
+import {
+  assertCashSessionNotCounting,
+  findActiveCashSessionForLocation,
+} from '../cash-session/active-cash-session.util';
 import {
   BUSINESS_TIMEZONE,
   businessToday,
@@ -682,6 +685,7 @@ export class AccountsPayableService {
       if (!session || session.status !== 'OPEN') {
         throw new BadRequestException('La sesión de caja indicada no está activa o no existe');
       }
+      assertCashSessionNotCounting(session, dto.paymentMethod);
 
       const receiptNumber = await this.consecutivesService.generateNumber('CASH_RECEIPT', locationId);
       const cashMovement = await this.prisma.cashMovement.create({

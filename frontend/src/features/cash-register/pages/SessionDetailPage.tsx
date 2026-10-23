@@ -211,6 +211,9 @@ const SessionDetailPage: React.FC = () => {
         totalWithdrawals: String(cashTotals.WITHDRAWAL),
         totalDeposits: String(cashTotals.DEPOSIT),
         movementCount: movements.filter(countsInTotals).length,
+        countStartedAt: session.countStartedAt ?? null,
+        // Lo que se coló durante el arqueo se resolvió al cerrar; aquí no aplica.
+        lateMovements: [],
       }
     : null;
 

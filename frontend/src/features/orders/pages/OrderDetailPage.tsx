@@ -109,6 +109,7 @@ import { RequestAdvisorChangeButton } from '../components/RequestAdvisorChangeBu
 import { ActionToolbar } from '../components/ActionToolbar';
 import { AdvisorChangeStatusAlert } from '../components/AdvisorChangeStatusAlert';
 import { useIsCashOpen } from '../../cash-register/hooks/useCashRegister';
+import CashCountInProgressAlert from '../../cash-register/components/CashCountInProgressAlert';
 import { EditRequestsList } from '../components/EditRequestsList';
 import VoidPaymentDialog from '../components/VoidPaymentDialog';
 import { AdvancePaymentApprovalBadge } from '../components/AdvancePaymentApprovalBadge';
@@ -3243,6 +3244,7 @@ export const OrderDetailPage: React.FC = () => {
                 automáticamente cuando se abra la próxima caja.
               </Alert>
             )}
+            <CashCountInProgressAlert />
 
             <TextField
               fullWidth

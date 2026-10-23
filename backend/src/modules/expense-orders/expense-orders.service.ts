@@ -30,7 +30,10 @@ import {
   computeExpenseTotals,
 } from '../../common/utils/expense-totals.util';
 import { normalizeRate } from '../../common/utils/rounding.util';
-import { findActiveCashSessionForLocation } from '../cash-session/active-cash-session.util';
+import {
+  assertCashSessionNotCounting,
+  findActiveCashSessionForLocation,
+} from '../cash-session/active-cash-session.util';
 import { requireActiveLocationId } from '../../common/utils/location-context';
 import { paymentMovesCash } from '../../common/utils/payment-method.util';
 
@@ -883,6 +886,9 @@ export class ExpenseOrdersService {
       throw new BadRequestException(
         'No hay una sesión de caja abierta. Abre la caja y vuelve a autorizar la OG.',
       );
+    }
+    for (const item of expenseOrder.items) {
+      assertCashSessionNotCounting(activeSession, item.paymentMethod || 'CASH');
     }
 
     await this.assertNotPaidThroughAccountPayable(expenseOrder.id, expenseOrder.ogNumber);

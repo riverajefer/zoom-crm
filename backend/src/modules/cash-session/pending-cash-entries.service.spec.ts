@@ -146,16 +146,34 @@ describe('PendingCashEntriesService', () => {
     it('devuelve true cuando hay una sesión abierta', async () => {
       mockPrisma.cashSession.findFirst.mockResolvedValue({ id: 'session-1' });
 
-      expect(await service.isAnySessionOpen()).toEqual({ isOpen: true });
+      expect(await service.isAnySessionOpen()).toEqual({
+        isOpen: true,
+        isCounting: false,
+      });
+    });
+
+    it('avisa cuando Caja está haciendo el arqueo de cierre', async () => {
+      mockPrisma.cashSession.findFirst.mockResolvedValue({
+        id: 'session-1',
+        countStartedAt: new Date('2026-10-23T14:00:00Z'),
+      });
+
+      expect(await service.isAnySessionOpen()).toEqual({
+        isOpen: true,
+        isCounting: true,
+      });
     });
 
     it('devuelve false cuando no hay ninguna', async () => {
       mockPrisma.cashSession.findFirst.mockResolvedValue(null);
 
-      expect(await service.isAnySessionOpen()).toEqual({ isOpen: false });
+      expect(await service.isAnySessionOpen()).toEqual({
+        isOpen: false,
+        isCounting: false,
+      });
     });
 
-    it('no expone datos de caja: solo el booleano', async () => {
+    it('no expone datos de caja: solo los booleanos', async () => {
       // Lo consultan las comerciales, que no tienen permiso sobre caja.
       mockPrisma.cashSession.findFirst.mockResolvedValue({
         id: 'session-1',
@@ -164,7 +182,7 @@ describe('PendingCashEntriesService', () => {
 
       const res = await service.isAnySessionOpen();
 
-      expect(Object.keys(res)).toEqual(['isOpen']);
+      expect(Object.keys(res)).toEqual(['isOpen', 'isCounting']);
     });
   });
 

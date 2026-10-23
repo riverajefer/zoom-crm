@@ -3025,6 +3025,34 @@ describe('OrdersService', () => {
       });
     });
 
+    // Caso 2026-10-23: dos abonos en efectivo registrados mientras Caja contaba
+    // cayeron en la sesión que se cerraba y dejaron un faltante falso.
+    describe('arqueo de cierre en curso', () => {
+      it('rechaza el abono en efectivo y no lo registra', async () => {
+        mockPrisma.cashSession.findMany.mockResolvedValue([{ id: 'session-1', cashRegisterId: 'cr-1', countStartedAt: new Date() }]);
+
+        await expect(
+          service.addPayment('order-1', paymentDto, 'user-1'),
+        ).rejects.toThrow(/arqueo de cierre/);
+        expect(mockPrisma.payment.create).not.toHaveBeenCalled();
+        expect(mockPrisma.cashMovement.create).not.toHaveBeenCalled();
+      });
+
+      it('deja pasar la transferencia: no toca el conteo del cajón', async () => {
+        mockPrisma.cashSession.findMany.mockResolvedValue([{ id: 'session-1', cashRegisterId: 'cr-1', countStartedAt: new Date() }]);
+        mockPrisma.cashMovement.create.mockResolvedValue({ id: 'mov-1' });
+        mockConsecutivesService.generateNumber.mockResolvedValue('RC-2026-0001');
+
+        await service.addPayment(
+          'order-1',
+          { amount: 50, paymentMethod: PaymentMethod.TRANSFER },
+          'user-1',
+        );
+
+        expect(mockPrisma.payment.create).toHaveBeenCalled();
+      });
+    });
+
     // Cola de pendientes: un abono cobrado fuera del horario de caja no puede
     // perderse ni frenar a la comercial.
     describe('cola de pendientes de caja', () => {

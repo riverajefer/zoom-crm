@@ -252,6 +252,40 @@ export const useCashMutations = () => {
     },
   });
 
+  // Iniciar o cancelar el arqueo cambia si las comerciales pueden registrar
+  // abonos en efectivo: el aviso del formulario de OP tiene que reflejarlo.
+  const onCountChanged = (session: { id: string }) => {
+    queryClient.invalidateQueries({ queryKey: cashKeys.sessions.detail(session.id) });
+    queryClient.invalidateQueries({ queryKey: cashKeys.isOpen.all });
+  };
+
+  const startCount = useMutation({
+    mutationFn: (id: string) => cashRegisterApi.startCount(id),
+    onSuccess: onCountChanged,
+    onError: (error: any) => {
+      enqueueSnackbar(
+        error?.response?.data?.message || 'Error al iniciar el arqueo',
+        { variant: 'error' },
+      );
+    },
+  });
+
+  const cancelCount = useMutation({
+    mutationFn: (id: string) => cashRegisterApi.cancelCount(id),
+    onSuccess: (session) => {
+      onCountChanged(session);
+      enqueueSnackbar('Arqueo cancelado: la caja vuelve a recibir efectivo', {
+        variant: 'info',
+      });
+    },
+    onError: (error: any) => {
+      enqueueSnackbar(
+        error?.response?.data?.message || 'Error al cancelar el arqueo',
+        { variant: 'error' },
+      );
+    },
+  });
+
   // Movement mutations
   const createMovement = useMutation({
     mutationFn: (dto: CreateCashMovementDto) => cashRegisterApi.createMovement(dto),
@@ -292,6 +326,8 @@ export const useCashMutations = () => {
     deleteRegister,
     openSession,
     closeSession,
+    startCount,
+    cancelCount,
     createMovement,
     voidMovement,
   };

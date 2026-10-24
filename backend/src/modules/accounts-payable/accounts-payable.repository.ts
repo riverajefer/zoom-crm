@@ -88,8 +88,14 @@ export class AccountsPayableRepository {
       ...(expenseTypeId && { expenseTypeId }),
       ...(expenseSubcategoryId && { expenseSubcategoryId }),
       ...(supplierId && { supplierId }),
+      // El número de CP se busca por coincidencia parcial: «1146» encuentra
+      // «CP-2026-1146» sin que el usuario escriba el prefijo.
       ...(search && {
-        description: { contains: search, mode: 'insensitive' },
+        OR: [
+          { description: { contains: search, mode: 'insensitive' } },
+          { apNumber: { contains: search, mode: 'insensitive' } },
+          { supplier: { name: { contains: search, mode: 'insensitive' } } },
+        ],
       }),
       ...(dueDateFrom || dueDateTo
         ? {

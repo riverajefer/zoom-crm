@@ -297,7 +297,7 @@ export default function AccountsPayableListPage() {
         <Grid container spacing={2}>
           <Grid item xs={12} sm={6} md={3}>
             <TextField
-              label="Buscar por descripción"
+              label="Buscar por número, descripción o proveedor"
               size="small"
               fullWidth
               value={filters.search ?? ''}

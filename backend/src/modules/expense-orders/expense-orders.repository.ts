@@ -454,6 +454,25 @@ export class ExpenseOrdersRepository {
     });
   }
 
+  /**
+   * Pone el comprobante solo si el ítem sigue con el que se leyó
+   * (`expectedReceiptFileId`, nulo si no tenía): la condición va en el `where`
+   * para que dos personas cambiándolo a la vez no se pisen. Devuelve cuántas
+   * filas cambió (0 si otro lo cambió primero).
+   */
+  async attachItemReceipt(
+    id: string,
+    itemId: string,
+    receiptFileId: string,
+    expectedReceiptFileId: string | null,
+  ) {
+    const { count } = await this.prisma.expenseOrderItem.updateMany({
+      where: { id: itemId, expenseOrderId: id, receiptFileId: expectedReceiptFileId },
+      data: { receiptFileId },
+    });
+    return count;
+  }
+
   async delete(id: string) {
     return this.prisma.expenseOrder.delete({ where: { id } });
   }

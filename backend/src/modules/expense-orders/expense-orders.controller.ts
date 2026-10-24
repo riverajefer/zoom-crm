@@ -21,6 +21,7 @@ import {
 } from '@nestjs/swagger';
 import { ExpenseOrdersService } from './expense-orders.service';
 import {
+  AttachExpenseItemReceiptDto,
   CajaRejectExpenseOrderDto,
   CreateExpenseItemDto,
   CreateExpenseOrderDto,
@@ -173,6 +174,26 @@ export class ExpenseOrdersController {
     @Body() dto: RegisterExpenseElectronicInvoiceDto,
   ) {
     return this.service.registerElectronicInvoice(id, dto.electronicInvoiceNumber);
+  }
+
+  @Patch(':id/items/:itemId/receipt')
+  @RequirePermissions('update_expense_orders')
+  @ApiOperation({
+    summary:
+      'Adjuntar o reemplazar el comprobante de pago de un ítem (en cualquier estado, también en una OG pagada). No permite quitarlo',
+  })
+  @ApiParam({ name: 'id', description: 'ID de la OG' })
+  @ApiParam({ name: 'itemId', description: 'ID del ítem' })
+  @ApiResponse({ status: 200, description: 'Comprobante adjuntado correctamente' })
+  @ApiResponse({ status: 400, description: 'El archivo no existe o ya es el comprobante del ítem' })
+  @ApiResponse({ status: 404, description: 'OG o ítem no encontrado' })
+  @ApiResponse({ status: 409, description: 'Otro usuario cambió el comprobante al mismo tiempo' })
+  attachItemReceipt(
+    @Param('id') id: string,
+    @Param('itemId') itemId: string,
+    @Body() dto: AttachExpenseItemReceiptDto,
+  ) {
+    return this.service.attachItemReceipt(id, itemId, dto.receiptFileId);
   }
 
   @Delete(':id')

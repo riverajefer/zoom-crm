@@ -92,6 +92,18 @@ export const expenseOrdersApi = {
     return response.data;
   },
 
+  attachItemReceipt: async (
+    id: string,
+    itemId: string,
+    receiptFileId: string,
+  ): Promise<ExpenseOrder> => {
+    const response = await axiosInstance.patch<ExpenseOrder>(
+      `/expense-orders/${id}/items/${itemId}/receipt`,
+      { receiptFileId },
+    );
+    return response.data;
+  },
+
   delete: async (id: string): Promise<void> => {
     await axiosInstance.delete(`/expense-orders/${id}`);
   },

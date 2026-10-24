@@ -998,6 +998,50 @@ export class ExpenseOrdersService {
     return this.repository.registerElectronicInvoice(id, electronicInvoiceNumber);
   }
 
+  // ─── Comprobante de pago de un ítem ───────────────────────────────────────────
+  // Muchas OG se crean y se autorizan antes de tener el soporte del pago; este
+  // camino deja subirlo después, en cualquier estado, sin la autorización de
+  // edición que exige una OG pagada. También reemplaza uno ya adjunto (una foto
+  // borrosa, el soporte equivocado), pero nunca lo quita: el ítem siempre queda
+  // con un comprobante. El archivo anterior se conserva en el storage.
+  async attachItemReceipt(id: string, itemId: string, receiptFileId: string) {
+    const expenseOrder = await this.repository.findById(id);
+    if (!expenseOrder) {
+      throw new NotFoundException(`OG con id ${id} no encontrada`);
+    }
+
+    const item = expenseOrder.items.find((i) => i.id === itemId);
+    if (!item) {
+      throw new NotFoundException(`El ítem ${itemId} no pertenece a la OG ${expenseOrder.ogNumber}`);
+    }
+
+    if (item.receiptFileId === receiptFileId) {
+      throw new BadRequestException('Ese archivo ya es el comprobante de este ítem.');
+    }
+
+    const file = await this.prisma.uploadedFile.findFirst({
+      where: { id: receiptFileId, isDeleted: false },
+      select: { id: true },
+    });
+    if (!file) {
+      throw new BadRequestException('El archivo del comprobante no existe.');
+    }
+
+    const updated = await this.repository.attachItemReceipt(
+      id,
+      itemId,
+      receiptFileId,
+      item.receiptFileId ?? null,
+    );
+    if (updated === 0) {
+      throw new ConflictException(
+        'Otra persona acaba de cambiar el comprobante de este ítem. Recarga la página.',
+      );
+    }
+
+    return this.repository.findById(id);
+  }
+
   async remove(id: string) {
     const expenseOrder = await this.repository.findById(id);
     if (!expenseOrder) {

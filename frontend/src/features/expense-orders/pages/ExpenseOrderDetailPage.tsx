@@ -54,6 +54,7 @@ import {
   MarkEmailRead as MarkEmailReadIcon,
   Block as BlockIcon,
   DeleteOutline as DeleteOutlineIcon,
+  UploadFile as UploadFileIcon,
 } from '@mui/icons-material';
 import {
   computeExpenseTotals,
@@ -77,6 +78,7 @@ import { ExpenseOrderPdfButton } from '../components/ExpenseOrderPdfButton';
 import { CommentSection } from '../../comments';
 import { useExpenseOrder, expenseOrdersKeys, usePaidExpenseOrderEdit } from '../hooks';
 import { ExpenseOrderEditRequestDialog } from '../components/ExpenseOrderEditRequestDialog';
+import { AttachItemReceiptDialog } from '../components/AttachItemReceiptDialog';
 import { expenseOrdersApi } from '../../../api/expense-orders.api';
 import { useSuppliers } from '../../suppliers/hooks/useSuppliers';
 import { useProductionAreas } from '../../production-areas/hooks/useProductionAreas';
@@ -222,6 +224,13 @@ export const ExpenseOrderDetailPage = () => {
     fileId: string;
   }>({ open: false, url: '', mimeType: '', originalName: '', fileId: '' });
   const [loadingReceiptId, setLoadingReceiptId] = useState<string | null>(null);
+
+  // ── Attach missing receipt dialog ────────────────────────────────────────────
+  const [attachReceiptItem, setAttachReceiptItem] = useState<{
+    id: string;
+    name: string;
+    hasReceipt: boolean;
+  } | null>(null);
 
   // ── View reference image dialog ───────────────────────────────────────────────
   const [referenceDialog, setReferenceDialog] = useState<{
@@ -887,7 +896,8 @@ export const ExpenseOrderDetailPage = () => {
 
       <Grid container spacing={3}>
         {/* Left column */}
-        <Grid item xs={12} sm={12} md={8}>
+        {/* Sin OT asociada no hay columna derecha: ocupa todo el ancho. */}
+        <Grid item xs={12} sm={12} md={og.workOrder ? 8 : 12}>
           {/* General info */}
           <Card variant="outlined" sx={{ mb: 3 }}>
             <CardContent>
@@ -999,7 +1009,14 @@ export const ExpenseOrderDetailPage = () => {
                   </Button>
                 )}
               </Stack>
-              <Table size="small">
+              {/* El tema fija 16px de padding en toda celda y anula `size="small"`. */}
+              <Table
+                size="small"
+                sx={{
+                  '& .MuiTableCell-root': { py: 0.75, px: 1.25 },
+                  '& .MuiTableCell-head': { whiteSpace: 'nowrap', lineHeight: 1.4 },
+                }}
+              >
                 <TableHead>
                   <TableRow>
                     <TableCell>Ítem</TableCell>
@@ -1053,21 +1070,48 @@ export const ExpenseOrderDetailPage = () => {
                       </TableCell>
                       <TableCell align="center">
                         {item.receiptFileId ? (
-                          <Tooltip title="Ver comprobante">
-                            <span>
-                              <IconButton
-                                size="small"
-                                color="success"
-                                onClick={() => handleViewReceipt(item.receiptFileId!)}
-                                disabled={loadingReceiptId === item.receiptFileId}
-                              >
-                                {loadingReceiptId === item.receiptFileId ? (
-                                  <CircularProgress size={16} color="inherit" />
-                                ) : (
-                                  <VisibilityIcon fontSize="small" />
-                                )}
-                              </IconButton>
-                            </span>
+                          <Stack direction="row" spacing={0.5} justifyContent="center">
+                            <Tooltip title="Ver comprobante">
+                              <span>
+                                <IconButton
+                                  size="small"
+                                  color="success"
+                                  onClick={() => handleViewReceipt(item.receiptFileId!)}
+                                  disabled={loadingReceiptId === item.receiptFileId}
+                                >
+                                  {loadingReceiptId === item.receiptFileId ? (
+                                    <CircularProgress size={16} color="inherit" />
+                                  ) : (
+                                    <VisibilityIcon fontSize="small" />
+                                  )}
+                                </IconButton>
+                              </span>
+                            </Tooltip>
+                            {canUpdate && (
+                              <Tooltip title="Actualizar comprobante">
+                                <IconButton
+                                  size="small"
+                                  color="primary"
+                                  onClick={() =>
+                                    setAttachReceiptItem({ id: item.id, name: item.name, hasReceipt: true })
+                                  }
+                                >
+                                  <UploadFileIcon fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                            )}
+                          </Stack>
+                        ) : canUpdate ? (
+                          <Tooltip title="Adjuntar comprobante">
+                            <IconButton
+                              size="small"
+                              color="primary"
+                              onClick={() =>
+                                setAttachReceiptItem({ id: item.id, name: item.name, hasReceipt: false })
+                              }
+                            >
+                              <UploadFileIcon fontSize="small" />
+                            </IconButton>
                           </Tooltip>
                         ) : (
                           <Typography variant="caption" color="text.disabled">
@@ -1370,6 +1414,14 @@ export const ExpenseOrderDetailPage = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* ── Attach missing receipt dialog ───────────────────────────────────── */}
+      <AttachItemReceiptDialog
+        open={!!attachReceiptItem}
+        onClose={() => setAttachReceiptItem(null)}
+        expenseOrderId={og.id}
+        item={attachReceiptItem}
+      />
 
       {/* ── Electronic invoice dialog ────────────────────────────────────────── */}
       <Dialog open={invoiceDialogOpen} onClose={handleCloseInvoiceDialog} maxWidth="sm" fullWidth>

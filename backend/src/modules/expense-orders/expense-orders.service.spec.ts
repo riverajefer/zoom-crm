@@ -45,6 +45,7 @@ describe('ExpenseOrdersService', () => {
       addItem: jest.fn(),
       updateStatus: jest.fn(),
       claimCajaAuthorization: jest.fn().mockResolvedValue(true),
+      attachItemReceipt: jest.fn().mockResolvedValue(1),
       delete: jest.fn(),
     } as any;
 
@@ -88,6 +89,9 @@ describe('ExpenseOrdersService', () => {
       },
       expenseOrderEditRequest: {
         update: jest.fn(),
+      },
+      uploadedFile: {
+        findFirst: jest.fn().mockResolvedValue({ id: 'file-1' }),
       },
       // `remove` borra la CxP y la OG en una transacción; el mock ejecuta el
       // callback contra el mismo cliente simulado.
@@ -831,6 +835,73 @@ describe('ExpenseOrdersService', () => {
         'admin-1',
       );
       expect(accountsPayableService.refreshFromLivePayments).toHaveBeenCalledWith('ap-new');
+    });
+  });
+
+  describe('attachItemReceipt', () => {
+    const paidOg = (receiptFileId: string | null) => ({
+      id: 'og-1',
+      ogNumber: 'OG-001',
+      status: ExpenseOrderStatus.PAID,
+      items: [{ id: 'item-1', receiptFileId }],
+    });
+
+    it('adjunta el comprobante a un ítem de una OG pagada sin pedir autorización de edición', async () => {
+      repository.findById.mockResolvedValue(paidOg(null) as any);
+
+      await service.attachItemReceipt('og-1', 'item-1', 'file-1');
+
+      expect(repository.attachItemReceipt).toHaveBeenCalledWith('og-1', 'item-1', 'file-1', null);
+      expect(editRequestsService.findActiveApproval).not.toHaveBeenCalled();
+    });
+
+    it('reemplaza un comprobante existente condicionado al que se leyó', async () => {
+      repository.findById.mockResolvedValue(paidOg('old-file') as any);
+
+      await service.attachItemReceipt('og-1', 'item-1', 'file-1');
+
+      expect(repository.attachItemReceipt).toHaveBeenCalledWith(
+        'og-1',
+        'item-1',
+        'file-1',
+        'old-file',
+      );
+    });
+
+    it('rechaza poner el mismo archivo que ya tiene', async () => {
+      repository.findById.mockResolvedValue(paidOg('file-1') as any);
+
+      await expect(service.attachItemReceipt('og-1', 'item-1', 'file-1')).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(repository.attachItemReceipt).not.toHaveBeenCalled();
+    });
+
+    it('rechaza un ítem que no es de la OG', async () => {
+      repository.findById.mockResolvedValue(paidOg(null) as any);
+
+      await expect(service.attachItemReceipt('og-1', 'otro', 'file-1')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('rechaza un archivo que no existe', async () => {
+      repository.findById.mockResolvedValue(paidOg(null) as any);
+      (prisma.uploadedFile.findFirst as jest.Mock).mockResolvedValue(null);
+
+      await expect(service.attachItemReceipt('og-1', 'item-1', 'file-1')).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(repository.attachItemReceipt).not.toHaveBeenCalled();
+    });
+
+    it('avisa si otro usuario lo cambió al mismo tiempo', async () => {
+      repository.findById.mockResolvedValue(paidOg(null) as any);
+      repository.attachItemReceipt.mockResolvedValue(0);
+
+      await expect(service.attachItemReceipt('og-1', 'item-1', 'file-1')).rejects.toThrow(
+        ConflictException,
+      );
     });
   });
 

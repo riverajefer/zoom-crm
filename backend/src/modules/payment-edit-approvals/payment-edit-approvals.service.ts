@@ -8,6 +8,7 @@ import {
 import { PrismaService } from '../../database/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { WhatsappService } from '../whatsapp/whatsapp.service';
+import { countWhatsappDeliveries } from '../whatsapp/whatsapp-notification.util';
 import { WsEventsGateway } from '../ws-events/ws-events.gateway';
 import { StorageService } from '../storage/storage.service';
 import {
@@ -717,10 +718,9 @@ export class PaymentEditApprovalsService
         ),
       );
 
-      const fulfilled = results.filter((r) => r.status === 'fulfilled').length;
-      const rejected = results.filter((r) => r.status === 'rejected').length;
+      const { sent, failed } = countWhatsappDeliveries(results);
       this.logger.log(
-        `WhatsApp notifications for payment edit approval ${requestId}: ${fulfilled} sent, ${rejected} failed`,
+        `WhatsApp notifications for payment edit approval ${requestId}: ${sent} sent, ${failed} failed`,
       );
     } catch (error) {
       this.logger.error(

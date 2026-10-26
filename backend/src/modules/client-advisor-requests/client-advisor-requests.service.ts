@@ -10,6 +10,7 @@ import { PrismaService } from '../../database/prisma.service';
 import { createOrReturnTwin } from '../../common/utils/unique-violation.util';
 import { NotificationsService } from '../notifications/notifications.service';
 import { WhatsappService } from '../whatsapp/whatsapp.service';
+import { countWhatsappDeliveries } from '../whatsapp/whatsapp-notification.util';
 import {
   ApprovalRequestHandler,
   ApprovalRequestInfo,
@@ -505,11 +506,10 @@ export class ClientAdvisorRequestsService
         ),
       );
 
-      const fulfilled = results.filter((r) => r.status === 'fulfilled').length;
-      const rejected = results.filter((r) => r.status === 'rejected').length;
+      const { sent, failed } = countWhatsappDeliveries(results);
 
       this.logger.log(
-        `WhatsApp notifications for client advisor request ${requestId}: ${fulfilled} sent, ${rejected} failed`,
+        `WhatsApp notifications for client advisor request ${requestId}: ${sent} sent, ${failed} failed`,
       );
     } catch (error) {
       this.logger.error(

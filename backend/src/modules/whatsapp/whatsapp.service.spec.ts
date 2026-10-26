@@ -353,7 +353,7 @@ describe('WhatsappService', () => {
       jest.spyOn(service, 'sendTemplateMessage').mockResolvedValue('msg-btn-1');
       prismaService.whatsappActionContext.create.mockResolvedValue({});
 
-      await service.notificarSolicitudConBotones(
+      const sent = await service.notificarSolicitudConBotones(
         '3118322699', 'Juan', 'Vendedor', 'OP-100', 'Motivo', 'ord1', 'req1',
       );
 
@@ -368,16 +368,18 @@ describe('WhatsappService', () => {
           requestType: 'ORDER_EDIT', adminPhone: '573118322699',
         }),
       });
+      expect(sent).toBe(true);
     });
 
     it('should return early if sendTemplateMessage returns null', async () => {
       jest.spyOn(service, 'sendTemplateMessage').mockResolvedValue(null);
       prismaService.whatsappActionContext.create.mockResolvedValue({});
 
-      await service.notificarSolicitudConBotones(
+      const sent = await service.notificarSolicitudConBotones(
         '573000', 'J', 'V', 'OP-1', 'M', 'o1', 'r1',
       );
 
+      expect(sent).toBe(false);
       expect(prismaService.whatsappActionContext.create).not.toHaveBeenCalled();
     });
 
@@ -388,7 +390,7 @@ describe('WhatsappService', () => {
       const loggerSpy = jest.spyOn(service['logger'], 'error');
       await expect(
         service.notificarSolicitudConBotones('573000', 'J', 'V', 'OP-1', 'M', 'o1', 'r1'),
-      ).resolves.toBeUndefined();
+      ).resolves.toBe(true);
       expect(loggerSpy).toHaveBeenCalledWith(expect.stringContaining('unique constraint'));
     });
   });
@@ -404,7 +406,7 @@ describe('WhatsappService', () => {
       jest.spyOn(service, 'sendTemplateMessage').mockResolvedValue('msg-appr-1');
       prismaService.whatsappActionContext.create.mockResolvedValue({});
 
-      await service.sendApprovalNotification({
+      const sent = await service.sendApprovalNotification({
         telefono: '3118322699',
         requesterName: 'Ana',
         requesterRole: 'Manager',
@@ -425,18 +427,20 @@ describe('WhatsappService', () => {
           requestType: 'EXPENSE_ORDER_AUTH', adminPhone: '573118322699',
         }),
       });
+      expect(sent).toBe(true);
     });
 
     it('should return early if sendTemplateMessage returns null', async () => {
       jest.spyOn(service, 'sendTemplateMessage').mockResolvedValue(null);
       prismaService.whatsappActionContext.create.mockResolvedValue({});
 
-      await service.sendApprovalNotification({
+      const sent = await service.sendApprovalNotification({
         telefono: '573000', requesterName: 'X', requesterRole: 'R',
         actionDescription: 'D', reason: 'M', requestId: 'r1',
         requestType: 'EXPENSE_ORDER_AUTH' as any,
       });
 
+      expect(sent).toBe(false);
       expect(prismaService.whatsappActionContext.create).not.toHaveBeenCalled();
     });
 
@@ -451,7 +455,7 @@ describe('WhatsappService', () => {
           actionDescription: 'D', reason: 'M', requestId: 'r1',
           requestType: 'EXPENSE_ORDER_AUTH' as any,
         }),
-      ).resolves.toBeUndefined();
+      ).resolves.toBe(true);
       expect(loggerSpy).toHaveBeenCalledWith(expect.stringContaining('db error'));
     });
   });

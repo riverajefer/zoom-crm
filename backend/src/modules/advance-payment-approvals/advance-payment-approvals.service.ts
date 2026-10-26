@@ -9,6 +9,7 @@ import {
 import { PrismaService } from '../../database/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { WhatsappService } from '../whatsapp/whatsapp.service';
+import { countWhatsappDeliveries } from '../whatsapp/whatsapp-notification.util';
 import { WsEventsGateway } from '../ws-events/ws-events.gateway';
 import {
   ApprovalRequestHandler,
@@ -835,11 +836,10 @@ export class AdvancePaymentApprovalsService implements OnModuleInit, ApprovalReq
         ),
       );
 
-      const fulfilled = results.filter((r) => r.status === 'fulfilled').length;
-      const rejected = results.filter((r) => r.status === 'rejected').length;
+      const { sent, failed } = countWhatsappDeliveries(results);
 
       this.logger.log(
-        `WhatsApp notifications for advance payment approval ${requestId}: ${fulfilled} sent, ${rejected} failed`,
+        `WhatsApp notifications for advance payment approval ${requestId}: ${sent} sent, ${failed} failed`,
       );
     } catch (error) {
       this.logger.error(

@@ -361,6 +361,8 @@ export class WhatsappService {
    *
    * IMPORTANTE: Los templates con quick-reply NO requieren ventana activa de 24h,
    * a diferencia de los mensajes interactivos no-template.
+   *
+   * @returns true si Meta aceptó el mensaje; false si lo rechazó (no lanza)
    */
   async notificarSolicitudConBotones(
     telefono: string,
@@ -370,7 +372,7 @@ export class WhatsappService {
     motivo: string,
     orderId: string,
     requestId: string,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const normalizedPhone = this.normalizePhone(telefono);
 
     // Enviar template v2 que ya contiene los 3 botones
@@ -386,7 +388,7 @@ export class WhatsappService {
       this.logger.warn(
         `Could not save WhatsApp action context for request ${requestId}: no messageId returned`,
       );
-      return;
+      return false;
     }
 
     // Guardar contexto messageId → requestId para que el webhook lo resuelva
@@ -409,6 +411,7 @@ export class WhatsappService {
         `Failed to save WhatsApp action context for messageId=${messageId}: ${error.message}`,
       );
     }
+    return true;
   }
 
   /**
@@ -429,6 +432,8 @@ export class WhatsappService {
    *
    * Guarda WhatsappActionContext con requestType para que el webhook
    * despache al handler correcto vía ApprovalRequestRegistry.
+   *
+   * @returns true si Meta aceptó el mensaje; false si lo rechazó (no lanza)
    */
   async sendApprovalNotification(params: {
     telefono: string;
@@ -438,7 +443,7 @@ export class WhatsappService {
     reason: string;
     requestId: string;
     requestType: ApprovalRequestType;
-  }): Promise<void> {
+  }): Promise<boolean> {
     const normalizedPhone = this.normalizePhone(params.telefono);
 
     const messageId = await this.sendTemplateMessage(
@@ -459,7 +464,7 @@ export class WhatsappService {
       this.logger.warn(
         `Could not save WhatsApp action context for request ${params.requestId}: no messageId returned`,
       );
-      return;
+      return false;
     }
 
     try {
@@ -480,5 +485,6 @@ export class WhatsappService {
         `Failed to save WhatsApp action context for messageId=${messageId}: ${error.message}`,
       );
     }
+    return true;
   }
 }

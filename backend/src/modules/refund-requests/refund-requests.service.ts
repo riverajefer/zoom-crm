@@ -16,6 +16,7 @@ import {
 import { lockOrderForUpdate } from '../../common/utils/order-lock.util';
 import { NotificationsService } from '../notifications/notifications.service';
 import { WhatsappService } from '../whatsapp/whatsapp.service';
+import { countWhatsappDeliveries } from '../whatsapp/whatsapp-notification.util';
 import { WsEventsGateway } from '../ws-events/ws-events.gateway';
 import { ConsecutivesService } from '../consecutives/consecutives.service';
 import {
@@ -1439,11 +1440,10 @@ export class RefundRequestsService
         ),
       );
 
-      const fulfilled = results.filter((r) => r.status === 'fulfilled').length;
-      const rejected = results.filter((r) => r.status === 'rejected').length;
+      const { sent, failed } = countWhatsappDeliveries(results);
 
       this.logger.log(
-        `WhatsApp notifications for refund request ${requestId}: ${fulfilled} sent, ${rejected} failed`,
+        `WhatsApp notifications for refund request ${requestId}: ${sent} sent, ${failed} failed`,
       );
     } catch (error) {
       this.logger.error(

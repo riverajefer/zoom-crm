@@ -225,6 +225,32 @@ describe('ExpenseOrdersService', () => {
       expect(repository.updateStatus).not.toHaveBeenCalled();
     });
 
+    // OG-2026-0832: Jorge firmó como admin y también autorizó en Caja. Las dos
+    // firmas existen para que sean dos personas distintas.
+    it('no deja autorizar en Caja a quien firmó la OG como admin', async () => {
+      (repository.findById as jest.Mock).mockResolvedValue({
+        ...adminAuthorized,
+        authorizedById: 'admin-1',
+      });
+
+      await expect(
+        service.cajaAuthorize('og-1', { id: 'admin-1' } as any),
+      ).rejects.toThrow(ForbiddenException);
+      expect(repository.claimCajaAuthorization).not.toHaveBeenCalled();
+      expect(prisma.cashMovement.create).not.toHaveBeenCalled();
+    });
+
+    it('sí deja autorizar en Caja a un admin distinto del que firmó', async () => {
+      (repository.findById as jest.Mock).mockResolvedValue({
+        ...adminAuthorized,
+        authorizedById: 'admin-1',
+      });
+
+      await service.cajaAuthorize('og-1', { id: 'admin-2' } as any);
+
+      expect(repository.claimCajaAuthorization).toHaveBeenCalledWith('og-1', 'admin-2');
+    });
+
     // OG-2026-0832: Caja pagó la CP espejo y después se autorizó la OG; el
     // mismo gasto salió dos veces de caja y la CP quedó con saldo negativo.
     it('si la CP espejo ya se pagó desde Cuentas por Pagar, no crea egresos', async () => {

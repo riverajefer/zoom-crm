@@ -30,6 +30,7 @@ import { ExpenseOrderStatus } from '../../../types/expense-order.types';
 import type { ExpenseOrder } from '../../../types/expense-order.types';
 import { useSingleFlight } from '../../../hooks/useSingleFlight';
 import { LoadingButton } from '../../../components/common/LoadingButton';
+import { useAuthStore } from '../../../store/authStore';
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat('es-CO', {
@@ -47,6 +48,7 @@ const userName = (user?: { firstName?: string | null; lastName?: string | null; 
 const PendingOgAuthorizationsPanel: React.FC<{ hideWhenEmpty?: boolean }> = ({ hideWhenEmpty }) => {
   const queryClient = useQueryClient();
   const { enqueueSnackbar } = useSnackbar();
+  const currentUser = useAuthStore((state) => state.user);
 
   const [rejectTarget, setRejectTarget] = useState<ExpenseOrder | null>(null);
   const [rejectReason, setRejectReason] = useState('');
@@ -189,6 +191,8 @@ const PendingOgAuthorizationsPanel: React.FC<{ hideWhenEmpty?: boolean }> = ({ h
               const isRejecting =
                 cajaRejectMutation.isPending && cajaRejectMutation.variables?.id === og.id;
               const isBusy = cajaAuthorizeMutation.isPending || cajaRejectMutation.isPending;
+              // Quien firmó la OG como admin no la autoriza también en Caja.
+              const signedAsAdmin = !!og.authorizedById && og.authorizedById === currentUser?.id;
 
               return (
                 <Box
@@ -249,18 +253,29 @@ const PendingOgAuthorizationsPanel: React.FC<{ hideWhenEmpty?: boolean }> = ({ h
                     </Box>
 
                     <Stack spacing={0.5} sx={{ flexShrink: 0 }}>
-                      <LoadingButton
-                        loading={isAuthorizing}
-                        variant="contained"
-                        color="success"
-                        size="small"
-                        startIcon={<CheckCircleIcon />}
-                        onClick={() => handleAuthorize(og.id)}
-                        disabled={isBusy}
-                        sx={{ minWidth: 110, fontSize: '0.75rem' }}
+                      <Tooltip
+                        title={
+                          signedAsAdmin
+                            ? 'La firmaste como admin: la autorización de Caja la debe hacer otra persona'
+                            : ''
+                        }
+                        arrow
                       >
-                        {isAuthorizing ? 'Autorizando...' : 'Autorizar'}
-                      </LoadingButton>
+                        <span>
+                          <LoadingButton
+                            loading={isAuthorizing}
+                            variant="contained"
+                            color="success"
+                            size="small"
+                            startIcon={<CheckCircleIcon />}
+                            onClick={() => handleAuthorize(og.id)}
+                            disabled={isBusy || signedAsAdmin}
+                            sx={{ minWidth: 110, fontSize: '0.75rem' }}
+                          >
+                            {isAuthorizing ? 'Autorizando...' : 'Autorizar'}
+                          </LoadingButton>
+                        </span>
+                      </Tooltip>
                       <LoadingButton
                         loading={isRejecting}
                         variant="outlined"

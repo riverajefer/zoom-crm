@@ -175,7 +175,7 @@ export const ExpenseOrderDetailPage = () => {
   const navigate = useNavigate();
   const theme = useTheme();
   const { enqueueSnackbar } = useSnackbar();
-  const { hasPermission } = useAuthStore();
+  const { hasPermission, user: currentUser } = useAuthStore();
 
   const {
     expenseOrderQuery,
@@ -246,6 +246,10 @@ export const ExpenseOrderDetailPage = () => {
 
   const og = expenseOrderQuery.data;
   const paidEdit = usePaidExpenseOrderEdit(og);
+
+  // Quien firmó la OG como admin no puede autorizarla también en Caja: las dos
+  // firmas son para que sean dos personas. El backend lo rechaza igual.
+  const signedAsAdmin = !!og?.authorizedById && og.authorizedById === currentUser?.id;
 
   // Mismos estados que acepta el backend: mientras nadie haya firmado la OG.
   // Debe coincidir con `DELETABLE_STATUSES` del servicio y de la lista.
@@ -851,8 +855,12 @@ export const ExpenseOrderDetailPage = () => {
               secondaryLabel="Firma Caja"
               onClick={handleCajaAuthorize}
               color={theme.palette.success.main}
-              tooltip="Segunda firma Caja — registra el pago"
-              disabled={cajaAuthorizeMutation.isPending}
+              tooltip={
+                signedAsAdmin
+                  ? 'La firmaste como admin: la autorización de Caja la debe hacer otra persona'
+                  : 'Segunda firma Caja — registra el pago'
+              }
+              disabled={cajaAuthorizeMutation.isPending || signedAsAdmin}
             />
           )}
 

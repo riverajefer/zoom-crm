@@ -863,6 +863,16 @@ export class ExpenseOrdersService {
       );
     }
 
+    // Las dos firmas son para que una persona apruebe el gasto y otra entregue
+    // el dinero. El rol admin tiene también el permiso de Caja, y firmar los dos
+    // pasos anulaba el control (OG-2026-0832: 4 OG en 60 días, todas de admins).
+    // Un admin sí puede autorizar en Caja una OG que firmó otro admin.
+    if (expenseOrder.authorizedById === currentUser.id) {
+      throw new ForbiddenException(
+        `Firmaste la ${expenseOrder.ogNumber} como admin, así que la autorización de Caja la debe hacer otra persona.`,
+      );
+    }
+
     // La caja abierta se verifica ANTES de tocar el estado. Al revés, una OG sin
     // caja quedaba en AUTHORIZED sin pago ni movimientos, y como ya no estaba en
     // ADMIN_AUTHORIZED, Caja no podía volver a intentarlo.

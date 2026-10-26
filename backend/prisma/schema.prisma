@@ -1123,6 +1123,7 @@ enum NotificationType {
   EXPENSE_ORDER_AUTH_REQUEST_PENDING // Nueva solicitud de autorización de OG
   EXPENSE_ORDER_AUTH_REQUEST_APPROVED // Solicitud de autorización de OG aprobada
   EXPENSE_ORDER_AUTH_REQUEST_REJECTED // Solicitud de autorización de OG rechazada
+  EXPENSE_ORDER_PENDING_CAJA // OG con firma del admin, pendiente de autorización de Caja
   EXPENSE_ORDER_EDIT_REQUEST_PENDING // Nueva solicitud de edición de OG pagada
   EXPENSE_ORDER_EDIT_REQUEST_APPROVED // Edición de OG pagada aprobada
   EXPENSE_ORDER_EDIT_REQUEST_REJECTED // Edición de OG pagada rechazada

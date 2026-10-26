@@ -806,6 +806,79 @@ describe('AccountsPayableService', () => {
         ).rejects.toThrow(/Orden de Gasto/);
         expect(repository.createPayment).not.toHaveBeenCalled();
       });
+
+      // OG-2026-0832: Caja pagó la CP mientras la OG esperaba su firma, y
+      // después se autorizó la OG. El gasto salió dos veces.
+      it.each(['ADMIN_AUTHORIZED', 'AUTHORIZED'])(
+        'no deja pagar la CP mientras su OG está en %s',
+        async (status) => {
+          prisma.accountPayable.findUnique.mockResolvedValue({
+            expenseOrderId: 'og-1',
+            expenseOrder: { ogNumber: 'OG-2026-0832', status },
+          } as any);
+
+          await expect(service.assertPayableAmount(apStub(), 1000)).rejects.toThrow(
+            /OG-2026-0832, que ya está autorizada y espera a Caja/,
+          );
+        },
+      );
+
+      it('deja pagar la CP de una OG que todavía no tiene la firma del admin', async () => {
+        prisma.accountPayable.findUnique.mockResolvedValue({
+          expenseOrderId: 'og-1',
+          expenseOrder: { ogNumber: 'OG-2026-0832', status: 'CREATED' },
+        } as any);
+        prisma.cashMovement.findMany.mockResolvedValue([]);
+
+        await expect(service.assertPayableAmount(apStub(), 1000)).resolves.toBeUndefined();
+      });
+    });
+
+    describe('paidOutsideExpenseOrder', () => {
+      it('suma solo los abonos vivos que no reflejan egresos de la OG', async () => {
+        prisma.accountPayable.findUnique.mockResolvedValue({
+          id: 'ap-1',
+          apNumber: 'CP-2026-1176',
+          status: 'PAID',
+        } as any);
+        prisma.accountPayablePayment.findMany.mockResolvedValue([
+          { amount: new Prisma.Decimal(102300) },
+        ] as any);
+
+        const result = await service.paidOutsideExpenseOrder('og-1');
+
+        expect(result?.apNumber).toBe('CP-2026-1176');
+        expect(result?.amount.toNumber()).toBe(102300);
+        expect(prisma.accountPayablePayment.findMany).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: {
+              accountPayableId: 'ap-1',
+              isReversed: false,
+              OR: [
+                { cashMovementId: null },
+                { cashMovement: { referenceType: { not: 'EXPENSE_ORDER' } } },
+              ],
+            },
+          }),
+        );
+      });
+
+      it('devuelve null sin abonos o con la CP anulada', async () => {
+        prisma.accountPayable.findUnique.mockResolvedValue({
+          id: 'ap-1',
+          apNumber: 'CP-2026-1176',
+          status: 'PENDING',
+        } as any);
+        prisma.accountPayablePayment.findMany.mockResolvedValue([] as any);
+        await expect(service.paidOutsideExpenseOrder('og-1')).resolves.toBeNull();
+
+        prisma.accountPayable.findUnique.mockResolvedValue({
+          id: 'ap-1',
+          apNumber: 'CP-2026-1176',
+          status: 'CANCELLED',
+        } as any);
+        await expect(service.paidOutsideExpenseOrder('og-1')).resolves.toBeNull();
+      });
     });
 
     describe('refreshFromLivePayments', () => {

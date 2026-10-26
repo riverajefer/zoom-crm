@@ -6,6 +6,7 @@ import {
   withoutLocationScope,
 } from '../../common/utils/location-context';
 import { usersWorkingInLocationWhere } from '../../common/utils/location-support.util';
+import { ADMIN_ROLE_NAME, SUPPORT_ROLE_NAME } from '../../common/constants/roles.constants';
 
 export type NotificationTargetType =
   | 'ORDER'
@@ -256,12 +257,17 @@ export class NotificationsService {
    *
    * `excludeUserIds` deja por fuera a quien ya recibió el aviso por otro lado
    * (o a quien lo causó), para no duplicarlo.
+   *
+   * `excludeAdmins` deja por fuera a los roles con todos los permisos (`admin` y,
+   * en Zoom, `soporte`): sirve cuando el aviso es para quien ejecuta el paso
+   * (Caja) y no para quien lo acaba de firmar.
    */
   async notifyUsersWithPermission(
     permissionName: string,
     data: Omit<CreateNotificationDto, 'userId'>,
     scope?: { orderId?: string; locationId?: string },
     excludeUserIds: string[] = [],
+    options: { excludeAdmins?: boolean } = {},
   ): Promise<void> {
     const locationId = await this.resolveScopeLocation(scope);
     const users = await this.prisma.user.findMany({
@@ -273,6 +279,9 @@ export class NotificationsService {
               permission: { name: permissionName },
             },
           },
+          ...(options.excludeAdmins && {
+            name: { notIn: [ADMIN_ROLE_NAME, SUPPORT_ROLE_NAME] },
+          }),
         },
         ...(locationId && {
           OR: [

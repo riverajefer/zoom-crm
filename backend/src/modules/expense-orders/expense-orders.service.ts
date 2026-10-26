@@ -7,7 +7,7 @@ import {
   NotFoundException,
   forwardRef,
 } from '@nestjs/common';
-import { ExpenseOrderStatus, PaymentMethod, Prisma } from '../../generated/prisma';
+import { ExpenseOrderStatus, NotificationType, PaymentMethod, Prisma } from '../../generated/prisma';
 import { PrismaService } from '../../database/prisma.service';
 import { ConsecutivesService } from '../consecutives/consecutives.service';
 import { ExpenseOrdersRepository } from './expense-orders.repository';
@@ -24,6 +24,7 @@ import { startOfDay, endOfDay } from '../../common/utils/date-range.util';
 import { ExpenseOrderAuthRequestsService } from '../expense-order-auth-requests/expense-order-auth-requests.service';
 import { AccountsPayableService } from '../accounts-payable/accounts-payable.service';
 import { ExpenseOrderEditRequestsService } from '../expense-order-edit-requests/expense-order-edit-requests.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import {
   allocateExpenseTotalToItems,
   computeExpenseTotals,
@@ -78,6 +79,7 @@ export class ExpenseOrdersService {
     private readonly authRequestsService: ExpenseOrderAuthRequestsService,
     private readonly accountsPayableService: AccountsPayableService,
     private readonly editRequestsService: ExpenseOrderEditRequestsService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   /**
@@ -759,6 +761,8 @@ export class ExpenseOrdersService {
     // Solo Admin puede hacerlo directamente; no-admins necesitan solicitud aprobada.
     // No crea movimientos de caja.
     if (dto.status === ExpenseOrderStatus.ADMIN_AUTHORIZED) {
+      await this.assertNotPaidThroughAccountPayable(id, expenseOrder.ogNumber);
+
       const user = await this.prisma.user.findUnique({
         where: { id: currentUser.id },
         include: { role: true },
@@ -800,10 +804,48 @@ export class ExpenseOrdersService {
         authorizedById,
       );
 
+      // Sin este aviso Caja no se enteraba de que la OG la esperaba, y pagaba la
+      // CP espejo por su lado (OG-2026-0832). Los admins quedan por fuera: son
+      // quienes acaban de firmar. En Zoom solo le llega a la caja de la sede de
+      // la OG, que es la que paga (`findActiveCashSessionForLocation`).
+      await this.notificationsService.notifyUsersWithPermission(
+        'caja_authorize_expense_orders',
+        {
+          type: NotificationType.EXPENSE_ORDER_PENDING_CAJA,
+          title: 'OG pendiente de Caja',
+          message: `La ${expenseOrder.ogNumber} ya tiene la firma del admin y espera la autorización de Caja para el pago.`,
+          relatedId: id,
+          relatedType: 'ExpenseOrder',
+        },
+        { locationId: expenseOrder.locationId },
+        [],
+        { excludeAdmins: true },
+      );
+
       return this.repository.findById(id);
     }
 
     return this.repository.updateStatus(id, dto.status);
+  }
+
+  /**
+   * Una OG cuya CP espejo ya se pagó desde Cuentas por Pagar no puede seguir al
+   * pago por Caja: sus egresos sacarían el mismo gasto otra vez. Se revisa al
+   * firmar el admin y otra vez al firmar Caja, que es donde sale el dinero.
+   */
+  private async assertNotPaidThroughAccountPayable(expenseOrderId: string, ogNumber: string) {
+    const pagado = await this.accountsPayableService.paidOutsideExpenseOrder(expenseOrderId);
+    if (!pagado) return;
+
+    const monto = Number(pagado.amount).toLocaleString('es-CO', {
+      style: 'currency',
+      currency: 'COP',
+      maximumFractionDigits: 0,
+    });
+    throw new ConflictException(
+      `La ${ogNumber} ya se pagó desde Cuentas por Pagar (${pagado.apNumber}, ${monto}). ` +
+        `Autorizarla registraría el gasto dos veces en caja. Si ese pago fue un error, revírtelo desde la CP antes de autorizar.`,
+    );
   }
 
   // ─── Segunda firma Caja (endpoint dedicado /caja-authorize) ───────────────────
@@ -832,6 +874,8 @@ export class ExpenseOrdersService {
         'No hay una sesión de caja abierta. Abre la caja y vuelve a autorizar la OG.',
       );
     }
+
+    await this.assertNotPaidThroughAccountPayable(expenseOrder.id, expenseOrder.ogNumber);
 
     // Registrar autorización de Caja. La transición es condicionada: si otra
     // autorización simultánea ya la tomó, esta sale sin crear los egresos otra vez.

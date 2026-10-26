@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-import { AccountPayableStatus, Prisma } from '../../generated/prisma';
+import { AccountPayableStatus, ExpenseOrderStatus, Prisma } from '../../generated/prisma';
 import { PrismaService } from '../../database/prisma.service';
 import { ConsecutivesService } from '../consecutives/consecutives.service';
 import { StorageService } from '../storage/storage.service';
@@ -398,6 +398,66 @@ export class AccountsPayableService {
   }
 
   /**
+   * Lo pagado en la CP espejo de una OG por fuera de la autorización de Caja de
+   * esa OG: abonos vivos registrados desde Cuentas por Pagar, no los que
+   * `settleFromExpenseOrderMovements` refleja de los egresos de la OG.
+   *
+   * Es el otro lado de `paidThroughExpenseOrder`. Si la CP ya se pagó por aquí,
+   * autorizar la OG en Caja crea sus egresos y los refleja encima: el mismo
+   * gasto sale dos veces de caja y la CP queda con saldo negativo. Pasó 3 veces
+   * entre septiembre y octubre de 2026 (OG-0498, OG-0608 y OG-0832).
+   */
+  async paidOutsideExpenseOrder(
+    expenseOrderId: string,
+  ): Promise<{ apNumber: string; amount: Prisma.Decimal } | null> {
+    const ap = await this.prisma.accountPayable.findUnique({
+      where: { expenseOrderId },
+      select: { id: true, apNumber: true, status: true },
+    });
+    if (!ap || ap.status === AccountPayableStatus.CANCELLED) return null;
+
+    const pagos = await this.prisma.accountPayablePayment.findMany({
+      where: {
+        accountPayableId: ap.id,
+        isReversed: false,
+        OR: [
+          { cashMovementId: null },
+          { cashMovement: { referenceType: { not: 'EXPENSE_ORDER' } } },
+        ],
+      },
+      select: { amount: true },
+    });
+
+    const amount = pagos.reduce((sum, p) => sum.add(p.amount), new Prisma.Decimal(0));
+    return amount.greaterThan(0) ? { apNumber: ap.apNumber, amount } : null;
+  }
+
+  /**
+   * Una CP cuya OG ya tiene la firma del admin y espera a Caja no se paga desde
+   * Cuentas por Pagar: el dinero sale cuando Caja autoriza la OG. Pagarla aquí
+   * en ese momento es lo que dejó la OG-2026-0832 pagada dos veces: nadie le
+   * avisó a Caja que la OG la esperaba, se pagó la CP y después alguien
+   * autorizó la OG.
+   */
+  private async assertNotAwaitingCaja(ap: { id: string; apNumber: string }) {
+    const { expenseOrder } = (await this.prisma.accountPayable.findUnique({
+      where: { id: ap.id },
+      select: { expenseOrder: { select: { ogNumber: true, status: true } } },
+    })) ?? { expenseOrder: null };
+
+    if (
+      expenseOrder &&
+      (expenseOrder.status === ExpenseOrderStatus.ADMIN_AUTHORIZED ||
+        expenseOrder.status === ExpenseOrderStatus.AUTHORIZED)
+    ) {
+      throw new BadRequestException(
+        `La CP ${ap.apNumber} es de la ${expenseOrder.ogNumber}, que ya está autorizada y espera a Caja. ` +
+          `Págala autorizando la OG en Caja (Órdenes de Gasto), no desde Cuentas por Pagar.`,
+      );
+    }
+  }
+
+  /**
    * Verifica que el monto quepa en lo que realmente falta por pagar.
    *
    * El tope no es `balance`: hay que descontar también lo que salió por la OG y
@@ -406,6 +466,8 @@ export class AccountsPayableService {
    * conciliada, el tope es su saldo, que es el IVA o las retenciones pendientes.
    */
   async assertPayableAmount(ap: { id: string; apNumber: string; balance: unknown }, amount: number) {
+    await this.assertNotAwaitingCaja(ap);
+
     const balance = new Prisma.Decimal(ap.balance as never);
     const porOG = await this.paidThroughExpenseOrder(ap.id);
     const disponible = Prisma.Decimal.max(balance.sub(porOG), new Prisma.Decimal(0));

@@ -246,6 +246,32 @@ describe('AccountsPayablePaymentReversalRequestsService', () => {
       expect(Number(apUpdate.balance)).toBe(75000);
       expect(apUpdate.status).toBe('PARTIAL');
     });
+
+    // CP-2026-1176: pagada dos veces. Revertir el duplicado la deja saldada con
+    // el pago que queda; antes quedaba PARTIAL con saldo $0.
+    it('deja la CP pagada si el pago que queda la cubre completa', async () => {
+      prisma.accountPayablePaymentReversalRequest.findFirst.mockResolvedValue(
+        reversalStub({ status: ApPaymentReversalStatus.PENDING_CAJA }) as any,
+      );
+      prisma.accountPayablePaymentReversalRequest.update.mockResolvedValue({} as any);
+      prisma.accountPayablePayment.update.mockResolvedValue({} as any);
+      prisma.cashMovement.update.mockResolvedValue({} as any);
+      prisma.accountPayablePayment.findMany.mockResolvedValue([
+        { amount: new Prisma.Decimal(100000) },
+      ] as any);
+      prisma.accountPayable.findUniqueOrThrow.mockResolvedValue({
+        id: 'ap-1',
+        paidAmount: new Prisma.Decimal(200000),
+        totalAmount: new Prisma.Decimal(100000),
+      } as any);
+      prisma.accountPayable.update.mockResolvedValue({} as any);
+
+      await service.cajaApprove('rev-1', currentUser);
+
+      const apUpdate = prisma.accountPayable.update.mock.calls[0][0].data;
+      expect(Number(apUpdate.balance)).toBe(0);
+      expect(apUpdate.status).toBe('PAID');
+    });
   });
 
   describe('cajaReject', () => {

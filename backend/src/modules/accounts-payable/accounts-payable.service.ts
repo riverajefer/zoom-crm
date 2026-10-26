@@ -797,14 +797,18 @@ export class AccountsPayableService {
       const totalAmount = new Prisma.Decimal(ap.totalAmount);
       const balance = totalAmount.sub(paidAmount);
 
+      // Anular un pago duplicado deja la CP saldada con el que queda
+      // (CP-2026-1176): sin el caso PAID quedaba PARTIAL con saldo $0.
       await tx.accountPayable.update({
         where: { id },
         data: {
           paidAmount,
           balance,
-          status: paidAmount.lessThanOrEqualTo(0)
-            ? AccountPayableStatus.PENDING
-            : AccountPayableStatus.PARTIAL,
+          status: balance.lessThanOrEqualTo(0)
+            ? AccountPayableStatus.PAID
+            : paidAmount.lessThanOrEqualTo(0)
+              ? AccountPayableStatus.PENDING
+              : AccountPayableStatus.PARTIAL,
         },
       });
     });

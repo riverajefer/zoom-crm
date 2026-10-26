@@ -262,7 +262,12 @@ export class AccountsPayablePaymentReversalRequestsService {
         data: {
           paidAmount: newPaidAmount,
           balance: newBalance,
-          status: newPaidAmount.lessThanOrEqualTo(0) ? 'PENDING' : 'PARTIAL',
+          // Revertir un pago duplicado deja la CP saldada con el que queda.
+          status: newBalance.lessThanOrEqualTo(0)
+            ? 'PAID'
+            : newPaidAmount.lessThanOrEqualTo(0)
+              ? 'PENDING'
+              : 'PARTIAL',
         },
       });
     });

@@ -573,6 +573,22 @@ describe('AccountsPayableService', () => {
       );
     });
 
+    // CP-2026-1176: pagada dos veces. Al anular el duplicado, el pago que queda
+    // la cubre completa; antes quedaba PARTIAL con saldo $0.
+    it('deja la CP pagada si el pago que queda la cubre completa', async () => {
+      repository.findById!.mockResolvedValue(
+        apStub({ totalAmount: 102300, paidAmount: 204600, balance: -102300 }) as any,
+      );
+      repository.findPaymentById!.mockResolvedValue(pagoStub({ amount: new Prisma.Decimal(102300) }) as any);
+      conTransaccion([{ amount: new Prisma.Decimal(102300) }]);
+
+      await service.deletePayment('ap-1', 'pay-1', 'user-1');
+
+      const { data } = prisma.accountPayable.update.mock.calls[0][0] as any;
+      expect(data.status).toBe('PAID');
+      expect(data.balance.toNumber()).toBe(0);
+    });
+
     it('no toca la caja cuando el pago no tuvo movimiento', async () => {
       repository.findById!.mockResolvedValue(apStub({ totalAmount: 100000 }) as any);
       repository.findPaymentById!.mockResolvedValue(

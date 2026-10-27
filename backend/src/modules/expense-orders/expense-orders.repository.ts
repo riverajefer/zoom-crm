@@ -103,6 +103,7 @@ export class ExpenseOrdersRepository {
         bankEntity: true,
         receiptFileId: true,
         referenceFileId: true,
+        workOrderItemId: true,
         sortOrder: true,
         supplier: {
           select: { id: true, name: true, email: true },
@@ -242,6 +243,7 @@ export class ExpenseOrdersRepository {
       receiptFileId?: string;
       referenceFileId?: string;
       productionAreaIds?: string[];
+      workOrderItemId?: string | null;
       sortOrder: number;
     }>;
   }) {
@@ -265,6 +267,7 @@ export class ExpenseOrdersRepository {
             bankEntity: item.bankEntity,
             receiptFileId: item.receiptFileId,
             referenceFileId: item.referenceFileId,
+            workOrderItemId: item.workOrderItemId ?? null,
             sortOrder: item.sortOrder,
             productionAreas: item.productionAreaIds?.length
               ? {
@@ -305,6 +308,14 @@ export class ExpenseOrdersRepository {
     });
   }
 
+  /** Suelta las líneas de sus ítems de OT (la OG cambió o quitó su OT). */
+  async clearItemWorkOrderLinks(expenseOrderId: string) {
+    await this.prisma.expenseOrderItem.updateMany({
+      where: { expenseOrderId, workOrderItemId: { not: null } },
+      data: { workOrderItemId: null },
+    });
+  }
+
   /** Reemplaza los ítems de la OT a los que aplica la OG. Vacío = toda la OT. */
   async replaceWorkOrderItems(expenseOrderId: string, workOrderItemIds: string[]) {
     await this.prisma.$transaction([
@@ -329,6 +340,7 @@ export class ExpenseOrdersRepository {
       receiptFileId?: string;
       referenceFileId?: string;
       productionAreaIds?: string[];
+      workOrderItemId?: string | null;
       sortOrder: number;
     }>,
     // Para reemplazar los ítems dentro de una transacción del llamador, junto
@@ -353,6 +365,7 @@ export class ExpenseOrdersRepository {
           bankEntity: item.bankEntity,
           receiptFileId: item.receiptFileId,
           referenceFileId: item.referenceFileId,
+          workOrderItemId: item.workOrderItemId ?? null,
           sortOrder: item.sortOrder,
         })),
       });
@@ -393,6 +406,7 @@ export class ExpenseOrdersRepository {
       receiptFileId?: string;
       referenceFileId?: string;
       productionAreaIds?: string[];
+      workOrderItemId?: string | null;
       sortOrder: number;
     },
   ) {
@@ -409,6 +423,7 @@ export class ExpenseOrdersRepository {
         bankEntity: item.bankEntity,
         receiptFileId: item.receiptFileId,
         referenceFileId: item.referenceFileId,
+        workOrderItemId: item.workOrderItemId ?? null,
         sortOrder: item.sortOrder,
         productionAreas: item.productionAreaIds?.length
           ? {

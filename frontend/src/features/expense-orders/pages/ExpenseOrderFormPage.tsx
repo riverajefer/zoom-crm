@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useSnackbar } from 'notistack';
 import { useSingleFlight } from '../../../hooks/useSingleFlight';
@@ -26,6 +26,8 @@ import {
   Dialog,
   DialogContent,
   DialogActions,
+  Tooltip,
+  type Theme,
 } from '@mui/material';
 import {
   ArrowBack as ArrowBackIcon,
@@ -47,6 +49,7 @@ import {
   OpenInNew as OpenInNewIcon,
 } from '@mui/icons-material';
 import { PageHeader } from '../../../components/common/PageHeader';
+import { ConfirmDialog } from '../../../components/common/ConfirmDialog';
 import { BankSelector } from '../../../components/common/BankSelector';
 import { WithholdingsFields } from '../../../components/common/WithholdingsFields';
 import {
@@ -61,7 +64,8 @@ import {
 import { useExpenseOrders, useExpenseOrder, useExpenseTypes, usePaidExpenseOrderEdit } from '../hooks';
 import { useUsers } from '../../users/hooks/useUsers';
 import { useTimeMachines, useWorkOrder } from '../../work-orders/hooks';
-import type { WorkOrder } from '../../../types/work-order.types';
+import type { WorkOrder, WorkOrderItem } from '../../../types/work-order.types';
+import { getAliveQuantity } from '../../orders/utils/partialAnnulment';
 import { WorkOrderSearchAutocomplete } from '../components/WorkOrderSearchAutocomplete';
 import { useProductionAreas } from '../../production-areas/hooks/useProductionAreas';
 import { useSuppliers } from '../../suppliers/hooks/useSuppliers';
@@ -99,7 +103,12 @@ interface ExpenseItemForm {
   productionAreaIds: string[];
   receiptFileId: string;
   referenceFileId: string;
+  /** Ítem de la OT al que pertenece la línea. `null` = toda la OT. */
+  workOrderItemId: string | null;
 }
+
+/** Tope del «Nombre del gasto» (el backend valida lo mismo). */
+const EXPENSE_NAME_MAX = 200;
 
 const defaultItem = (): ExpenseItemForm => ({
   quantity: '1',
@@ -113,6 +122,7 @@ const defaultItem = (): ExpenseItemForm => ({
   productionAreaIds: [],
   receiptFileId: '',
   referenceFileId: '',
+  workOrderItemId: null,
 });
 
 // ─── Step config ──────────────────────────────────────────────────────────────
@@ -326,7 +336,11 @@ export const ExpenseOrderFormPage = () => {
       ? pickedWorkOrder
       : (resolvedWorkOrderQuery.data ?? null);
   const resolvingWorkOrder = needsWorkOrderLookup && resolvedWorkOrderQuery.isLoading;
-  const workOrderItemOptions = selectedWorkOrder?.items ?? [];
+  // Un ítem anulado por completo en la OP no se produce: no se ofrece (salvo
+  // que una OG vieja ya lo tenga).
+  const workOrderItemOptions = (selectedWorkOrder?.items ?? []).filter(
+    (woi) => getAliveQuantity(woi.orderItem) > 0 || workOrderItemIds.includes(woi.id),
+  );
   const selectedWorkOrderItemsLabel = workOrderItemOptions
     .filter((woi) => workOrderItemIds.includes(woi.id))
     .map((woi) => woi.productDescription)
@@ -360,22 +374,32 @@ export const ExpenseOrderFormPage = () => {
   }, [areaOrMachine, machineId, machines]);
 
   // ─── Área sugerida desde los ítems de la OT (solo al crear) ─────────────────
-  // La primera área activa del primer ítem marcado. Llena «Área encargada o
-  // máquina» y el área de cada ítem de gasto mientras el usuario no las haya
+  // La primera área activa del primer ítem marcado. Llena «Área encargada» y
+  // el área de las líneas de toda la OT mientras el usuario no las haya
   // cambiado a mano; si cambia la selección de ítems, la sugerencia se mueve.
+  // Las líneas de un ítem toman el área de su propio ítem al nacer.
+  const activeAreaIds = useMemo(
+    () =>
+      new Set(
+        (productionAreasQuery.data ?? [])
+          .filter((pa) => pa.isActive !== false)
+          .map((pa) => pa.id),
+      ),
+    [productionAreasQuery.data],
+  );
+  const firstActiveArea = useCallback(
+    (woi: WorkOrderItem | undefined) =>
+      woi?.productionAreas.find((pa) => activeAreaIds.has(pa.productionArea.id))?.productionArea ??
+      null,
+    [activeAreaIds],
+  );
   const suggestedArea = useMemo(() => {
-    const activeAreaIds = new Set(
-      (productionAreasQuery.data ?? [])
-        .filter((pa) => pa.isActive !== false)
-        .map((pa) => pa.id),
-    );
     for (const itemId of workOrderItemIds) {
-      const woi = selectedWorkOrder?.items.find((i) => i.id === itemId);
-      const match = woi?.productionAreas.find((pa) => activeAreaIds.has(pa.productionArea.id));
-      if (match) return match.productionArea;
+      const match = firstActiveArea(selectedWorkOrder?.items.find((i) => i.id === itemId));
+      if (match) return match;
     }
     return null;
-  }, [productionAreasQuery.data, selectedWorkOrder, workOrderItemIds]);
+  }, [firstActiveArea, selectedWorkOrder, workOrderItemIds]);
   const lastSuggestedAreaRef = useRef<{ id: string; name: string } | null>(null);
 
   useEffect(() => {
@@ -391,12 +415,91 @@ export const ExpenseOrderFormPage = () => {
     setItems((current) =>
       current.map((item) => {
         const untouched =
-          item.productionAreaIds.length === 0 ||
-          (item.productionAreaIds.length === 1 && item.productionAreaIds[0] === prev?.id);
+          !item.workOrderItemId &&
+          (item.productionAreaIds.length === 0 ||
+            (item.productionAreaIds.length === 1 && item.productionAreaIds[0] === prev?.id));
         return untouched ? { ...item, productionAreaIds: next ? [next.id] : [] } : item;
       }),
     );
   }, [isEditing, suggestedArea]);
+
+  /**
+   * Línea de gasto para un ítem de la OT: su nombre y su cantidad viva (sin lo
+   * anulado en la OP). Si la descripción no cabe en el nombre, va completa en
+   * «Descripción».
+   */
+  const buildLineForWorkOrderItem = useCallback(
+    (woi: WorkOrderItem): ExpenseItemForm => {
+      const description = woi.productDescription.trim();
+      const tooLong = description.length > EXPENSE_NAME_MAX;
+      const area = firstActiveArea(woi);
+      return {
+        ...defaultItem(),
+        name: tooLong ? description.slice(0, EXPENSE_NAME_MAX) : description,
+        description: tooLong ? description : '',
+        quantity: String(getAliveQuantity(woi.orderItem) || 1),
+        productionAreaIds: area ? [area.id] : [],
+        workOrderItemId: woi.id,
+      };
+    },
+    [firstActiveArea],
+  );
+
+  // Ítems a marcar cuando lleguen la OT y el catálogo de áreas: al elegir una
+  // OT al crear se marcan todos ('all'); el botón «Gasto» de un ítem de la OT
+  // manda solo ese ítem en la URL.
+  const pendingPrefillItemIdsRef = useRef<string[] | 'all' | null>(null);
+  useEffect(() => {
+    const pending = pendingPrefillItemIdsRef.current;
+    if (
+      !pending ||
+      !selectedWorkOrder ||
+      selectedWorkOrder.id !== workOrderId ||
+      !productionAreasQuery.data
+    ) {
+      return;
+    }
+    pendingPrefillItemIdsRef.current = null;
+    const source =
+      pending === 'all'
+        ? selectedWorkOrder.items.filter((woi) => getAliveQuantity(woi.orderItem) > 0)
+        : pending
+            .map((itemId) => selectedWorkOrder.items.find((i) => i.id === itemId))
+            .filter((woi): woi is WorkOrderItem => !!woi);
+    const lines = source.map(buildLineForWorkOrderItem);
+    if (!lines.length) return;
+
+    // Las líneas que ya tienen algo escrito se conservan; la línea en blanco
+    // con la que arranca el formulario se reemplaza.
+    const keep = items
+      .map((_, i) => i)
+      .filter((i) => {
+        const item = items[i];
+        return (
+          !!item.workOrderItemId ||
+          !!item.name.trim() ||
+          !!item.description.trim() ||
+          !!item.unitPrice ||
+          !!item.supplierId ||
+          !!item.receiptFileId ||
+          !!item.referenceFileId ||
+          !!receiptFiles[i] ||
+          !!referenceFiles[i]
+        );
+      });
+    setWorkOrderItemIds(lines.map((line) => line.workOrderItemId!));
+    setItems([...keep.map((i) => items[i]), ...lines]);
+    setReceiptFiles([...keep.map((i) => receiptFiles[i] ?? null), ...lines.map(() => null)]);
+    setReferenceFiles([...keep.map((i) => referenceFiles[i] ?? null), ...lines.map(() => null)]);
+  }, [
+    buildLineForWorkOrderItem,
+    items,
+    productionAreasQuery.data,
+    receiptFiles,
+    referenceFiles,
+    selectedWorkOrder,
+    workOrderId,
+  ]);
 
   // ─── Edit: load existing OG ──────────────────────────────────────────────────
   const { expenseOrderQuery } = useExpenseOrder(id);
@@ -445,6 +548,7 @@ export const ExpenseOrderFormPage = () => {
             productionAreaIds: item.productionAreas.map((pa) => pa.productionArea.id),
             receiptFileId: item.receiptFileId ?? '',
             referenceFileId: item.referenceFileId ?? '',
+            workOrderItemId: item.workOrderItemId ?? null,
           })),
         );
         // Initialize receiptFiles and referenceFiles arrays with nulls (no new files selected yet)
@@ -507,7 +611,9 @@ export const ExpenseOrderFormPage = () => {
     }
     setWorkOrderId(prefillWorkOrderId);
     // El botón «Gasto» de un ítem de la OT lo manda ya marcado.
-    setWorkOrderItemIds(queryParams.get('workOrderItemIds')?.split(',').filter(Boolean) ?? []);
+    // Sin ítems en la URL (botón general de la OT) se marcan todos.
+    const prefillItemIds = queryParams.get('workOrderItemIds')?.split(',').filter(Boolean);
+    pendingPrefillItemIdsRef.current = prefillItemIds?.length ? prefillItemIds : 'all';
     prefillAppliedRef.current = true;
   }, [expenseTypes, isEditing, location.search]);
 
@@ -546,9 +652,122 @@ export const ExpenseOrderFormPage = () => {
   };
 
   const removeItem = (index: number) => {
+    // Un ítem de la OT sin líneas deja de estar marcado: «un formulario por ítem».
+    const removedItemId = items[index]?.workOrderItemId;
+    if (
+      removedItemId &&
+      !items.some((item, i) => i !== index && item.workOrderItemId === removedItemId)
+    ) {
+      setWorkOrderItemIds((prev) => prev.filter((itemId) => itemId !== removedItemId));
+    }
     setItems((prev) => prev.filter((_, i) => i !== index));
     setReceiptFiles((prev) => prev.filter((_, i) => i !== index));
     setReferenceFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  // ─── Ítems de la OT → líneas de gasto ────────────────────────────────────────
+  // Marcar un ítem crea su línea; desmarcarlo quita sus líneas. Si alguna ya
+  // tiene datos (precio, proveedor, imágenes) se pide confirmación antes.
+  const [pendingWorkOrderItemIds, setPendingWorkOrderItemIds] = useState<string[] | null>(null);
+
+  const lineHasData = (index: number) => {
+    const item = items[index];
+    return (
+      !!item.unitPrice ||
+      !!item.supplierId ||
+      !!item.receiptFileId ||
+      !!item.referenceFileId ||
+      !!receiptFiles[index] ||
+      !!referenceFiles[index]
+    );
+  };
+
+  const isBlankLine = (index: number) =>
+    !items[index].workOrderItemId &&
+    !items[index].name.trim() &&
+    !items[index].description.trim() &&
+    !lineHasData(index);
+
+  const commitWorkOrderItemSelection = (nextIds: string[]) => {
+    const removed = new Set(workOrderItemIds.filter((itemId) => !nextIds.includes(itemId)));
+    const added = nextIds.filter((itemId) => !workOrderItemIds.includes(itemId));
+
+    let keep = items.map((_, i) => i).filter((i) => !removed.has(items[i].workOrderItemId ?? ''));
+    const addedLines = added
+      .map((itemId) => workOrderItemOptions.find((woi) => woi.id === itemId))
+      .filter((woi): woi is WorkOrderItem => !!woi)
+      .map(buildLineForWorkOrderItem);
+    // La línea en blanco con la que arranca el formulario se reemplaza.
+    if (addedLines.length && keep.length === 1 && isBlankLine(keep[0])) keep = [];
+
+    const nextItems = [...keep.map((i) => items[i]), ...addedLines];
+    const nextReceipts = [...keep.map((i) => receiptFiles[i] ?? null), ...addedLines.map(() => null)];
+    const nextReferences = [...keep.map((i) => referenceFiles[i] ?? null), ...addedLines.map(() => null)];
+    if (!nextItems.length) {
+      const suggested = lastSuggestedAreaRef.current;
+      nextItems.push({ ...defaultItem(), productionAreaIds: suggested ? [suggested.id] : [] });
+      nextReceipts.push(null);
+      nextReferences.push(null);
+    }
+    setWorkOrderItemIds(nextIds);
+    setItems(nextItems);
+    setReceiptFiles(nextReceipts);
+    setReferenceFiles(nextReferences);
+  };
+
+  const changeWorkOrderItemSelection = (nextIds: string[]) => {
+    const removedLines = items
+      .map((item, i) => (item.workOrderItemId && !nextIds.includes(item.workOrderItemId) ? i : -1))
+      .filter((i) => i >= 0);
+    if (removedLines.some(isItemLocked)) {
+      enqueueSnackbar('Ese ítem tiene una línea ya pagada: no se puede quitar', { variant: 'warning' });
+      return;
+    }
+    if (removedLines.some(lineHasData)) {
+      setPendingWorkOrderItemIds(nextIds);
+      return;
+    }
+    commitWorkOrderItemSelection(nextIds);
+  };
+
+  // Cambiar la OT suelta las líneas de sus ítems (los ítems son de la OT). Las
+  // que se armaron solas y nadie tocó se van; las que tienen datos quedan como
+  // gasto de toda la OT.
+  const detachLinesFromWorkOrder = () => {
+    const keep = items.map((_, i) => i).filter((i) => !items[i].workOrderItemId || lineHasData(i));
+    const nextItems: ExpenseItemForm[] = keep.map((i) => ({ ...items[i], workOrderItemId: null }));
+    const nextReceipts = keep.map((i) => receiptFiles[i] ?? null);
+    const nextReferences = keep.map((i) => referenceFiles[i] ?? null);
+    if (!nextItems.length) {
+      nextItems.push(defaultItem());
+      nextReceipts.push(null);
+      nextReferences.push(null);
+    }
+    setWorkOrderItemIds([]);
+    setItems(nextItems);
+    setReceiptFiles(nextReceipts);
+    setReferenceFiles(nextReferences);
+  };
+
+  /** Cambia el ítem de la OT de una línea; su área sigue al ítem si no se tocó. */
+  const changeLineWorkOrderItem = (index: number, nextItemId: string | null) => {
+    setItems((prev) =>
+      prev.map((item, i) => {
+        if (i !== index) return item;
+        const prevArea = firstActiveArea(workOrderItemOptions.find((w) => w.id === item.workOrderItemId));
+        const nextArea = nextItemId
+          ? firstActiveArea(workOrderItemOptions.find((w) => w.id === nextItemId))
+          : lastSuggestedAreaRef.current;
+        const areaUntouched =
+          item.productionAreaIds.length === 0 ||
+          (item.productionAreaIds.length === 1 && item.productionAreaIds[0] === prevArea?.id);
+        return {
+          ...item,
+          workOrderItemId: nextItemId,
+          productionAreaIds: areaUntouched ? (nextArea ? [nextArea.id] : []) : item.productionAreaIds,
+        };
+      }),
+    );
   };
 
   const updateItem = (index: number, field: keyof ExpenseItemForm, value: unknown) => {
@@ -703,6 +922,7 @@ export const ExpenseOrderFormPage = () => {
         : undefined,
       receiptFileId: resolvedReceiptIds[index],
       referenceFileId: resolvedReferenceIds[index],
+      workOrderItemId: workOrderId ? item.workOrderItemId : null,
     })) as CreateExpenseItemDto[],
   });
 
@@ -823,7 +1043,7 @@ export const ExpenseOrderFormPage = () => {
           setExpenseSubcategoryId('');
           if (newType !== 'producción') {
             setWorkOrderId('');
-            setWorkOrderItemIds([]);
+            detachLinesFromWorkOrder();
           }
         }}
         loading={loadingTypes}
@@ -850,28 +1070,10 @@ export const ExpenseOrderFormPage = () => {
           onChange={(wo) => {
             setPickedWorkOrder(wo);
             setWorkOrderId(wo?.id ?? '');
-            setWorkOrderItemIds([]);
+            detachLinesFromWorkOrder();
+            // Al crear, la OT nueva llega con todos sus ítems marcados.
+            pendingPrefillItemIdsRef.current = wo && !isEditing ? 'all' : null;
           }}
-        />
-      )}
-
-      {isProduccionType && selectedWorkOrder && (
-        <Autocomplete
-          multiple
-          options={workOrderItemOptions}
-          getOptionLabel={(woi) => woi.productDescription}
-          value={workOrderItemOptions.filter((woi) => workOrderItemIds.includes(woi.id))}
-          onChange={(_, val) => setWorkOrderItemIds(val.map((woi) => woi.id))}
-          isOptionEqualToValue={(option, val) => option.id === val.id}
-          disableCloseOnSelect
-          renderInput={(params) => (
-            <TextField
-              {...params}
-              label="Ítems de la OT a los que aplica el gasto"
-              placeholder={workOrderItemIds.length ? '' : 'Toda la OT'}
-              helperText="Déjalo vacío si el gasto es de toda la OT"
-            />
-          )}
         />
       )}
 
@@ -945,6 +1147,136 @@ export const ExpenseOrderFormPage = () => {
     </Stack>
   );
 
+  // Botón «+» junto a un select pequeño: misma altura que el campo (40 px).
+  const addButtonSx = {
+    width: 40,
+    height: 40,
+    flexShrink: 0,
+    border: 1,
+    borderRadius: 1,
+    borderColor: (t: Theme) => alpha(t.palette.primary.main, 0.5),
+  };
+
+  /**
+   * Una imagen de la línea de gasto en poco espacio: botón para adjuntar y
+   * zona para pegar en la misma fila; al elegir un archivo, miniatura y chip.
+   */
+  const renderImageField = ({
+    label,
+    file,
+    attachedLabel,
+    attachedColor,
+    locked,
+    onPick,
+    onPaste,
+    onClear,
+  }: {
+    label: string;
+    file: File | null | undefined;
+    attachedLabel: string | null;
+    attachedColor: 'success' | 'secondary';
+    locked: boolean;
+    onPick: () => void;
+    onPaste: (e: React.ClipboardEvent<HTMLDivElement>) => void;
+    onClear: () => void;
+  }) => (
+    <Box>
+      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5, fontWeight: 500 }}>
+        {label}
+      </Typography>
+      {!file && !attachedLabel && (
+        <Stack direction="row" spacing={1} alignItems="stretch">
+          <Button
+            variant="outlined"
+            startIcon={<AttachFileIcon />}
+            size="small"
+            onClick={onPick}
+            sx={{
+              textTransform: 'none',
+              flexShrink: 0,
+              height: 36,
+              minHeight: 0,
+              px: 1.5,
+              py: 0,
+              borderWidth: 1,
+              '&:hover': { borderWidth: 1 },
+            }}
+          >
+            Adjuntar
+          </Button>
+          <Box
+            onPaste={onPaste}
+            tabIndex={0}
+            sx={{
+              flex: 1,
+              minWidth: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 0.5,
+              px: 1,
+              border: '1px dashed',
+              borderColor: (t) => alpha(t.palette.text.primary, 0.25),
+              borderRadius: 1,
+              cursor: 'pointer',
+              transition: 'border-color 0.2s, background-color 0.2s',
+              '&:hover, &:focus': { borderColor: 'primary.main', bgcolor: 'action.hover' },
+            }}
+          >
+            <ImageIcon sx={{ fontSize: 16, color: 'text.disabled' }} />
+            <Typography variant="caption" color="text.secondary" noWrap>
+              o pega aquí (Ctrl+V / ⌘+V)
+            </Typography>
+          </Box>
+        </Stack>
+      )}
+      {file && (
+        <Stack direction="row" alignItems="center" spacing={1}>
+          <Box
+            component="img"
+            src={URL.createObjectURL(file)}
+            alt={`Vista previa: ${label}`}
+            sx={{ display: 'block', width: 48, height: 48, objectFit: 'cover', borderRadius: 1, border: 1, borderColor: 'divider', flexShrink: 0 }}
+            onLoad={(e) => URL.revokeObjectURL((e.target as HTMLImageElement).src)}
+          />
+          <Box sx={{ minWidth: 0 }}>
+            <Chip
+              icon={<ImageIcon />}
+              label={`${file.name} (${(file.size / 1024).toFixed(1)} KB)`}
+              color="primary"
+              variant="outlined"
+              size="small"
+              onDelete={onClear}
+              deleteIcon={<CloseIcon />}
+              sx={{ maxWidth: '100%' }}
+            />
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+              Se subirá al guardar
+            </Typography>
+          </Box>
+        </Stack>
+      )}
+      {!file && attachedLabel && (
+        <Stack direction="row" alignItems="center" spacing={1}>
+          <Chip
+            icon={<ImageIcon />}
+            label={attachedLabel}
+            color={attachedColor}
+            variant="outlined"
+            size="small"
+            onDelete={locked ? undefined : onClear}
+            deleteIcon={<CloseIcon />}
+          />
+          {!locked && (
+            <Button size="small" variant="text" startIcon={<AttachFileIcon />} onClick={onPick} sx={{ textTransform: 'none' }}>
+              Cambiar
+            </Button>
+          )}
+        </Stack>
+      )}
+    </Box>
+  );
+
   const renderStep3 = () => (
     <Stack spacing={3}>
       <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ xs: 'flex-start', sm: 'center' }} spacing={{ xs: 1, sm: 0 }}>
@@ -956,389 +1288,300 @@ export const ExpenseOrderFormPage = () => {
         </Button>
       </Stack>
 
-      {items.map((item, index) => (
+      {workOrderId && (
+        <Autocomplete
+          multiple
+          options={workOrderItemOptions}
+          getOptionLabel={(woi) => woi.productDescription}
+          value={workOrderItemOptions.filter((woi) => workOrderItemIds.includes(woi.id))}
+          onChange={(_, val) => changeWorkOrderItemSelection(val.map((woi) => woi.id))}
+          isOptionEqualToValue={(option, val) => option.id === val.id}
+          loading={resolvingWorkOrder}
+          disableCloseOnSelect
+          noOptionsText="La OT no tiene ítems para producir"
+          renderInput={(params) => (
+            <TextField
+              {...params}
+              label={`Ítems de la OT ${selectedWorkOrder?.workOrderNumber ?? ''}`.trim()}
+              placeholder={workOrderItemIds.length ? '' : 'Toda la OT'}
+              helperText="Cada ítem que marques crea su formulario de gasto con el nombre y la cantidad. Déjalo vacío si el gasto es de toda la OT"
+            />
+          )}
+        />
+      )}
+
+      {items.map((item, index) => {
+        const showLineWorkOrderItem = !!workOrderId && workOrderItemIds.length > 0;
+        const isTransfer = item.paymentMethod === PaymentMethod.TRANSFER;
+        return (
         <Card key={index} variant="outlined">
-          <CardContent>
-            <Stack spacing={2}>
-              <Stack direction="row" justifyContent="space-between" alignItems="center">
-                <Typography variant="subtitle1" fontWeight={600}>
+          <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+            <Stack spacing={1.5}>
+              <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={1}>
+                <Typography variant="subtitle2" fontWeight={700}>
                   Ítem {index + 1}
                 </Typography>
-                {items.length > 1 && !isItemLocked(index) && (
-                  <IconButton size="small" color="error" onClick={() => removeItem(index)}>
-                    <DeleteIcon fontSize="small" />
-                  </IconButton>
-                )}
-              </Stack>
-
-              <TextField
-                label="Nombre del gasto *"
-                value={item.name}
-                onChange={(e) => updateItem(index, 'name', e.target.value)}
-                inputProps={{ maxLength: 200 }}
-                fullWidth
-              />
-
-              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems="stretch">
-                <TextField
-                  label="Cantidad *"
-                  type="number"
-                  value={item.quantity}
-                  onChange={(e) => updateItem(index, 'quantity', e.target.value)}
-                  inputProps={{ min: 0.01, step: 0.01 }}
-                  sx={{ flex: 1 }}
-                />
-                <TextField
-                  label="Precio unitario *"
-                  value={item.unitPrice ? formatCurrencyInput(item.unitPrice) : ''}
-                  onChange={(e) => {
-                    updateItem(index, 'unitPrice', sanitizeCurrencyInput(e.target.value));
-                  }}
-                  InputProps={{
-                    startAdornment: <InputAdornment position="start">$</InputAdornment>,
-                  }}
-                  inputProps={{ style: { textAlign: 'right' } }}
-                  sx={{ flex: 1 }}
-                />
-
-                <Box
-                  sx={{
-                    px: 1.5,
-                    py: 0,
-                    borderRadius: 1.5,
-                    bgcolor: (theme) => alpha(theme.palette.primary.main, 0.08),
-                    minWidth: { xs: '100%', sm: 190 },
-                    display: 'flex',
-                    flexDirection: 'column',
-                    justifyContent: 'center',
-                  }}
-                >
-                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.25 }}>
-                    Total del ítem
-                  </Typography>
-                  <Typography variant="subtitle1" fontWeight={800} color="primary.main">
-                    {formatCurrency(
+                <Stack direction="row" alignItems="center" spacing={0.5}>
+                  <Chip
+                    size="small"
+                    color="primary"
+                    variant="outlined"
+                    label={formatCurrency(
                       (parseFloat(item.quantity) || 0) * parseCurrencyInput(item.unitPrice),
                     )}
-                  </Typography>
-                </Box>
+                    sx={{ fontWeight: 700 }}
+                  />
+                  {items.length > 1 && !isItemLocked(index) && (
+                    <IconButton
+                      size="small"
+                      color="error"
+                      onClick={() => removeItem(index)}
+                      aria-label={`Quitar ítem ${index + 1}`}
+                    >
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
+                  )}
+                </Stack>
               </Stack>
 
-              <TextField
-                label="Descripción"
-                value={item.description}
-                onChange={(e) => updateItem(index, 'description', e.target.value)}
-                multiline
-                rows={2}
-                placeholder="Detalle adicional del gasto..."
-              />
+              <Grid container spacing={1.5}>
+                {showLineWorkOrderItem && (
+                  <Grid item xs={12} md={5}>
+                    <Autocomplete
+                      size="small"
+                      options={workOrderItemOptions.filter((woi) => workOrderItemIds.includes(woi.id))}
+                      getOptionLabel={(woi) => woi.productDescription}
+                      value={workOrderItemOptions.find((woi) => woi.id === item.workOrderItemId) ?? null}
+                      onChange={(_, val) => changeLineWorkOrderItem(index, val?.id ?? null)}
+                      isOptionEqualToValue={(option, val) => option.id === val.id}
+                      disabled={isItemLocked(index)}
+                      renderInput={(params) => (
+                        <TextField {...params} label="Ítem de la OT" placeholder="Toda la OT" />
+                      )}
+                    />
+                  </Grid>
+                )}
 
-              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-                <TextField
-                  select
-                  label="Método de pago"
-                  value={item.paymentMethod}
-                  disabled={isPaymentLocked(index)}
-                  helperText={
-                    isPaymentLocked(index)
-                      ? 'Ya se pagó y la caja se cerró: no se puede cambiar'
-                      : isPaymentCorrectable(index)
-                        ? 'Caja abierta: corrige también el egreso'
-                        : undefined
-                  }
-                  onChange={(e) => {
-                    const method = e.target.value as PaymentMethod;
-                    updateItem(index, 'paymentMethod', method);
-                    if (method !== PaymentMethod.TRANSFER) {
-                      updateItem(index, 'bankEntity', null);
+                <Grid item xs={12} md={showLineWorkOrderItem ? 7 : 12}>
+                  <TextField
+                    size="small"
+                    label="Nombre del gasto *"
+                    value={item.name}
+                    onChange={(e) => updateItem(index, 'name', e.target.value)}
+                    inputProps={{ maxLength: EXPENSE_NAME_MAX }}
+                    fullWidth
+                  />
+                </Grid>
+
+                <Grid item xs={4} md={2}>
+                  <TextField
+                    size="small"
+                    label="Cantidad *"
+                    type="number"
+                    value={item.quantity}
+                    onChange={(e) => updateItem(index, 'quantity', e.target.value)}
+                    inputProps={{ min: 0.01, step: 0.01 }}
+                    fullWidth
+                  />
+                </Grid>
+
+                <Grid item xs={8} md={3}>
+                  <TextField
+                    size="small"
+                    label="Precio unitario *"
+                    value={item.unitPrice ? formatCurrencyInput(item.unitPrice) : ''}
+                    onChange={(e) => {
+                      updateItem(index, 'unitPrice', sanitizeCurrencyInput(e.target.value));
+                    }}
+                    InputProps={{
+                      startAdornment: <InputAdornment position="start">$</InputAdornment>,
+                    }}
+                    inputProps={{ style: { textAlign: 'right' } }}
+                    fullWidth
+                  />
+                </Grid>
+
+                <Grid item xs={isTransfer ? 6 : 12} md={isTransfer ? 3 : 7}>
+                  <TextField
+                    size="small"
+                    select
+                    label="Método de pago"
+                    value={item.paymentMethod}
+                    disabled={isPaymentLocked(index)}
+                    helperText={
+                      isPaymentLocked(index)
+                        ? 'Ya se pagó y la caja se cerró: no se puede cambiar'
+                        : isPaymentCorrectable(index)
+                          ? 'Caja abierta: corrige también el egreso'
+                          : undefined
                     }
-                  }}
-                  sx={{ flex: 1 }}
-                >
-                  {Object.entries(PAYMENT_METHOD_LABELS)
-                    // Un ítem pagado no pasa a crédito: el dinero ya salió.
-                    .filter(
-                      ([value]) =>
-                        !isItemLocked(index) ||
-                        value !== PaymentMethod.CREDIT ||
-                        value === item.paymentMethod,
-                    )
-                    .map(([value, label]) => (
-                      <MenuItem key={value} value={value}>
-                        {label}
-                      </MenuItem>
-                    ))}
-                </TextField>
+                    onChange={(e) => {
+                      const method = e.target.value as PaymentMethod;
+                      updateItem(index, 'paymentMethod', method);
+                      if (method !== PaymentMethod.TRANSFER) {
+                        updateItem(index, 'bankEntity', null);
+                      }
+                    }}
+                    fullWidth
+                  >
+                    {Object.entries(PAYMENT_METHOD_LABELS)
+                      // Un ítem pagado no pasa a crédito: el dinero ya salió.
+                      .filter(
+                        ([value]) =>
+                          !isItemLocked(index) ||
+                          value !== PaymentMethod.CREDIT ||
+                          value === item.paymentMethod,
+                      )
+                      .map(([value, label]) => (
+                        <MenuItem key={value} value={value}>
+                          {label}
+                        </MenuItem>
+                      ))}
+                  </TextField>
+                </Grid>
 
-                {item.paymentMethod === PaymentMethod.TRANSFER && (
-                  <Box sx={{ flex: 1 }}>
+                {isTransfer && (
+                  <Grid item xs={6} md={4}>
                     <BankSelector
                       value={item.bankEntity ?? null}
                       onChange={(val) => updateItem(index, 'bankEntity', val)}
                       disabled={isPaymentLocked(index)}
                     />
-                  </Box>
+                  </Grid>
                 )}
 
-                <Box sx={{ flex: 2, display: 'flex', gap: 1 }}>
-                  <Autocomplete
-                    options={suppliers.filter((s) => s.isActive !== false)}
-                    getOptionLabel={(s) => s.name}
-                    value={suppliers.find((s) => s.id === item.supplierId) ?? null}
-                    onChange={(_, val) => {
-                      updateItem(index, 'supplierId', val?.id ?? '');
-                      updateItem(index, 'supplierLabel', val?.name ?? '');
-                    }}
-                    loading={suppliersQuery.isLoading}
-                    renderInput={(params) => (
-                      <TextField
-                        {...params}
-                        label="Proveedor"
-                        placeholder="Buscar proveedor..."
-                      />
-                    )}
-                    sx={{ flexGrow: 1 }}
-                  />
-                  <Button
-                    variant="outlined"
-                    sx={{ minWidth: "120px" }}
-                    onClick={() => {
-                      setSupplierModalTargetIndex(index);
-                      setSupplierModalOpen(true);
-                    }}
-                    startIcon={<AddIcon />}
-                  >
-                    Nuevo
-                  </Button>
-                </Box>
-              </Stack>
-
-              <Box sx={{ display: 'flex', gap: 1 }}>
-                <Autocomplete
-                  options={productionAreas.filter((pa) => pa.isActive !== false)}
-                  getOptionLabel={(pa) => pa.name}
-                  value={
-                    productionAreas.find((pa) =>
-                      item.productionAreaIds.includes(pa.id),
-                    ) ?? null
-                  }
-                  onChange={(_, val) =>
-                    updateItem(index, 'productionAreaIds', val ? [val.id] : [])
-                  }
-                  isOptionEqualToValue={(option, val) => option.id === val.id}
-                  renderInput={(params) => (
-                    <TextField
-                      {...params}
-                      label="Área de producción"
-                      placeholder="Seleccionar área de producción..."
+                <Grid item xs={12} md={6}>
+                  <Stack direction="row" spacing={1} alignItems="flex-start">
+                    <Autocomplete
+                      size="small"
+                      options={suppliers.filter((s) => s.isActive !== false)}
+                      getOptionLabel={(s) => s.name}
+                      value={suppliers.find((s) => s.id === item.supplierId) ?? null}
+                      onChange={(_, val) => {
+                        updateItem(index, 'supplierId', val?.id ?? '');
+                        updateItem(index, 'supplierLabel', val?.name ?? '');
+                      }}
+                      loading={suppliersQuery.isLoading}
+                      renderInput={(params) => (
+                        <TextField {...params} label="Proveedor" placeholder="Buscar proveedor..." />
+                      )}
+                      sx={{ flexGrow: 1 }}
                     />
-                  )}
-                  sx={{ flexGrow: 1 }}
-                />
-                <Button
-                  variant="outlined"
-                  sx={{ minWidth: '120px' }}
-                  onClick={() => {
-                    setProductionAreaModalTargetIndex(index);
-                    setProductionAreaModalOpen(true);
-                  }}
-                  startIcon={<AddIcon />}
-                >
-                  Nuevo
-                </Button>
-              </Box>
+                    <Tooltip title="Nuevo proveedor">
+                      <IconButton
+                        color="primary"
+                        onClick={() => {
+                          setSupplierModalTargetIndex(index);
+                          setSupplierModalOpen(true);
+                        }}
+                        aria-label="Nuevo proveedor"
+                        sx={addButtonSx}
+                      >
+                        <AddIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  </Stack>
+                </Grid>
+
+                <Grid item xs={12} md={6}>
+                  <Stack direction="row" spacing={1} alignItems="flex-start">
+                    <Autocomplete
+                      size="small"
+                      options={productionAreas.filter((pa) => pa.isActive !== false)}
+                      getOptionLabel={(pa) => pa.name}
+                      value={
+                        productionAreas.find((pa) => item.productionAreaIds.includes(pa.id)) ?? null
+                      }
+                      onChange={(_, val) =>
+                        updateItem(index, 'productionAreaIds', val ? [val.id] : [])
+                      }
+                      isOptionEqualToValue={(option, val) => option.id === val.id}
+                      renderInput={(params) => (
+                        <TextField
+                          {...params}
+                          label="Área de producción"
+                          placeholder="Seleccionar área de producción..."
+                        />
+                      )}
+                      sx={{ flexGrow: 1 }}
+                    />
+                    <Tooltip title="Nueva área de producción">
+                      <IconButton
+                        color="primary"
+                        onClick={() => {
+                          setProductionAreaModalTargetIndex(index);
+                          setProductionAreaModalOpen(true);
+                        }}
+                        aria-label="Nueva área de producción"
+                        sx={addButtonSx}
+                      >
+                        <AddIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  </Stack>
+                </Grid>
+
+                <Grid item xs={12}>
+                  <TextField
+                    size="small"
+                    label="Descripción"
+                    value={item.description}
+                    onChange={(e) => updateItem(index, 'description', e.target.value)}
+                    multiline
+                    minRows={1}
+                    maxRows={4}
+                    placeholder="Detalle adicional del gasto..."
+                    fullWidth
+                  />
+                </Grid>
+              </Grid>
 
               {/* ── Imágenes ── */}
-              <Box>
-                <Divider sx={{ mb: 2 }}>
-                  <Typography variant="caption" color="text.secondary" sx={{ px: 1 }}>
-                    Imágenes
-                  </Typography>
-                </Divider>
-                <Grid container spacing={2}>
-                  {/* Comprobante de pago */}
-                  <Grid item xs={12} sm={6}>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1, fontWeight: 500 }}>
-                      Comprobante de pago
-                    </Typography>
-                    <input
-                      type="file"
-                      accept="image/jpeg,image/png,image/gif,image/webp"
-                      hidden
-                      ref={(el) => { fileInputRefs.current[index] = el; }}
-                      onChange={(e) => handleReceiptFileChange(index, e.target.files?.[0] ?? null)}
-                    />
-                    {!receiptFiles[index] && !item.receiptFileId && (
-                      <Stack spacing={1}>
-                        <Button
-                          variant="outlined"
-                          startIcon={<AttachFileIcon />}
-                          size="small"
-                          onClick={() => fileInputRefs.current[index]?.click()}
-                          sx={{ textTransform: 'none', alignSelf: 'flex-start' }}
-                        >
-                          Adjuntar imagen
-                        </Button>
-                        <Box
-                          onPaste={(e) => handlePasteForItem(index, e)}
-                          tabIndex={0}
-                          sx={{
-                            border: '2px dashed',
-                            borderColor: 'grey.300',
-                            borderRadius: 1,
-                            p: 2,
-                            textAlign: 'center',
-                            cursor: 'pointer',
-                            transition: 'border-color 0.2s, background-color 0.2s',
-                            '&:hover, &:focus': { borderColor: 'primary.main', bgcolor: 'action.hover' },
-                          }}
-                        >
-                          <ImageIcon sx={{ fontSize: 28, color: 'grey.400', mb: 0.5 }} />
-                          <Typography variant="caption" color="text.secondary" display="block">
-                            O pega una imagen aquí (Ctrl+V / ⌘+V)
-                          </Typography>
-                        </Box>
-                      </Stack>
-                    )}
-                    {receiptFiles[index] && (
-                      <Stack spacing={1.5}>
-                        <Box sx={{ width: 'fit-content', border: '1px solid', borderColor: 'grey.300', borderRadius: 1, overflow: 'hidden', bgcolor: 'grey.50' }}>
-                          <Box
-                            component="img"
-                            src={URL.createObjectURL(receiptFiles[index]!)}
-                            alt="Vista previa comprobante"
-                            sx={{ display: 'block', maxWidth: 200, maxHeight: 140, objectFit: 'contain' }}
-                            onLoad={(e) => URL.revokeObjectURL((e.target as HTMLImageElement).src)}
-                          />
-                        </Box>
-                        <Stack direction="row" alignItems="center" spacing={1}>
-                          <Chip
-                            icon={<ImageIcon />}
-                            label={`${receiptFiles[index]!.name} (${(receiptFiles[index]!.size / 1024).toFixed(1)} KB)`}
-                            color="primary"
-                            variant="outlined"
-                            size="small"
-                            onDelete={() => clearReceiptForItem(index)}
-                            deleteIcon={<CloseIcon />}
-                            sx={{ maxWidth: 240 }}
-                          />
-                          <Typography variant="caption" color="text.secondary">Se subirá al guardar</Typography>
-                        </Stack>
-                      </Stack>
-                    )}
-                    {!receiptFiles[index] && item.receiptFileId && (
-                      <Stack direction="row" alignItems="center" spacing={1}>
-                        <Chip
-                          icon={<ImageIcon />}
-                          label="Comprobante adjunto"
-                          color="success"
-                          variant="outlined"
-                          size="small"
-                          onDelete={isItemLocked(index) ? undefined : () => clearReceiptForItem(index)}
-                          deleteIcon={<CloseIcon />}
-                        />
-                        {!isItemLocked(index) && (
-                          <Button size="small" variant="text" startIcon={<AttachFileIcon />} onClick={() => fileInputRefs.current[index]?.click()} sx={{ textTransform: 'none' }}>
-                            Cambiar imagen
-                          </Button>
-                        )}
-                      </Stack>
-                    )}
-                  </Grid>
-
-                  {/* Imagen de referencia */}
-                  <Grid item xs={12} sm={6}>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1, fontWeight: 500 }}>
-                      Imagen de referencia
-                    </Typography>
-                    <input
-                      type="file"
-                      accept="image/jpeg,image/png,image/gif,image/webp"
-                      hidden
-                      ref={(el) => { referenceFileInputRefs.current[index] = el; }}
-                      onChange={(e) => handleReferenceFileChange(index, e.target.files?.[0] ?? null)}
-                    />
-                    {!referenceFiles[index] && !item.referenceFileId && (
-                      <Stack spacing={1}>
-                        <Button
-                          variant="outlined"
-                          startIcon={<AttachFileIcon />}
-                          size="small"
-                          onClick={() => referenceFileInputRefs.current[index]?.click()}
-                          sx={{ textTransform: 'none', alignSelf: 'flex-start' }}
-                        >
-                          Adjuntar imagen
-                        </Button>
-                        <Box
-                          onPaste={(e) => handlePasteReferenceForItem(index, e)}
-                          tabIndex={0}
-                          sx={{
-                            border: '2px dashed',
-                            borderColor: 'grey.300',
-                            borderRadius: 1,
-                            p: 2,
-                            textAlign: 'center',
-                            cursor: 'pointer',
-                            transition: 'border-color 0.2s, background-color 0.2s',
-                            '&:hover, &:focus': { borderColor: 'primary.main', bgcolor: 'action.hover' },
-                          }}
-                        >
-                          <ImageIcon sx={{ fontSize: 28, color: 'grey.400', mb: 0.5 }} />
-                          <Typography variant="caption" color="text.secondary" display="block">
-                            O pega una imagen aquí (Ctrl+V / ⌘+V)
-                          </Typography>
-                        </Box>
-                      </Stack>
-                    )}
-                    {referenceFiles[index] && (
-                      <Stack spacing={1.5}>
-                        <Box sx={{ width: 'fit-content', border: '1px solid', borderColor: 'grey.300', borderRadius: 1, overflow: 'hidden', bgcolor: 'grey.50' }}>
-                          <Box
-                            component="img"
-                            src={URL.createObjectURL(referenceFiles[index]!)}
-                            alt="Vista previa referencia"
-                            sx={{ display: 'block', maxWidth: 200, maxHeight: 140, objectFit: 'contain' }}
-                            onLoad={(e) => URL.revokeObjectURL((e.target as HTMLImageElement).src)}
-                          />
-                        </Box>
-                        <Stack direction="row" alignItems="center" spacing={1}>
-                          <Chip
-                            icon={<ImageIcon />}
-                            label={`${referenceFiles[index]!.name} (${(referenceFiles[index]!.size / 1024).toFixed(1)} KB)`}
-                            color="secondary"
-                            variant="outlined"
-                            size="small"
-                            onDelete={() => clearReferenceForItem(index)}
-                            deleteIcon={<CloseIcon />}
-                            sx={{ maxWidth: 240 }}
-                          />
-                          <Typography variant="caption" color="text.secondary">Se subirá al guardar</Typography>
-                        </Stack>
-                      </Stack>
-                    )}
-                    {!referenceFiles[index] && item.referenceFileId && (
-                      <Stack direction="row" alignItems="center" spacing={1}>
-                        <Chip
-                          icon={<ImageIcon />}
-                          label="Referencia adjunta"
-                          color="secondary"
-                          variant="outlined"
-                          size="small"
-                          onDelete={() => clearReferenceForItem(index)}
-                          deleteIcon={<CloseIcon />}
-                        />
-                        <Button size="small" variant="text" startIcon={<AttachFileIcon />} onClick={() => referenceFileInputRefs.current[index]?.click()} sx={{ textTransform: 'none' }}>
-                          Cambiar imagen
-                        </Button>
-                      </Stack>
-                    )}
-                  </Grid>
+              <Grid container spacing={1.5}>
+                <Grid item xs={12} sm={6}>
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/gif,image/webp"
+                    hidden
+                    ref={(el) => { fileInputRefs.current[index] = el; }}
+                    onChange={(e) => handleReceiptFileChange(index, e.target.files?.[0] ?? null)}
+                  />
+                  {renderImageField({
+                    label: 'Comprobante de pago',
+                    file: receiptFiles[index],
+                    attachedLabel: item.receiptFileId ? 'Comprobante adjunto' : null,
+                    attachedColor: 'success',
+                    locked: isItemLocked(index),
+                    onPick: () => fileInputRefs.current[index]?.click(),
+                    onPaste: (e) => handlePasteForItem(index, e),
+                    onClear: () => clearReceiptForItem(index),
+                  })}
                 </Grid>
-              </Box>
+                <Grid item xs={12} sm={6}>
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/gif,image/webp"
+                    hidden
+                    ref={(el) => { referenceFileInputRefs.current[index] = el; }}
+                    onChange={(e) => handleReferenceFileChange(index, e.target.files?.[0] ?? null)}
+                  />
+                  {renderImageField({
+                    label: 'Imagen de referencia',
+                    file: referenceFiles[index],
+                    attachedLabel: item.referenceFileId ? 'Referencia adjunta' : null,
+                    attachedColor: 'secondary',
+                    locked: false,
+                    onPick: () => referenceFileInputRefs.current[index]?.click(),
+                    onPaste: (e) => handlePasteReferenceForItem(index, e),
+                    onClear: () => clearReferenceForItem(index),
+                  })}
+                </Grid>
+              </Grid>
             </Stack>
           </CardContent>
         </Card>
-      ))}
+        );
+      })}
     </Stack>
   );
 
@@ -1900,6 +2143,18 @@ export const ExpenseOrderFormPage = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <ConfirmDialog
+        open={pendingWorkOrderItemIds !== null}
+        title="Quitar ítem de la OT"
+        message="El formulario de gasto de ese ítem ya tiene datos (precio, proveedor o imágenes). Si lo quitas, se borra. ¿Continuar?"
+        confirmText="Quitar"
+        onConfirm={() => {
+          if (pendingWorkOrderItemIds) commitWorkOrderItemSelection(pendingWorkOrderItemIds);
+          setPendingWorkOrderItemIds(null);
+        }}
+        onCancel={() => setPendingWorkOrderItemIds(null)}
+      />
     </Box>
   );
 };

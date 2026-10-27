@@ -43,6 +43,7 @@ describe('ExpenseOrdersService', () => {
       update: jest.fn(),
       replaceItems: jest.fn(),
       replaceWorkOrderItems: jest.fn(),
+      clearItemWorkOrderLinks: jest.fn(),
       addItem: jest.fn(),
       updateStatus: jest.fn(),
       claimCajaAuthorization: jest.fn().mockResolvedValue(true),
@@ -592,6 +593,57 @@ describe('ExpenseOrdersService', () => {
       await service.update('og-1', { workOrderId: 'ot-2' });
 
       expect(repository.replaceWorkOrderItems).toHaveBeenCalledWith('og-1', []);
+    });
+
+    it('valida también los ítems de OT de cada línea', async () => {
+      (prisma.workOrderItem.count as jest.Mock).mockResolvedValue(1);
+
+      await expect(
+        service.create(
+          {
+            ...createDto,
+            workOrderItemIds: ['woi-1'],
+            items: [
+              { ...createDto.items[0], workOrderItemId: 'woi-1' },
+              { ...createDto.items[0], workOrderItemId: 'de-otra-ot' },
+            ],
+          },
+          'user-1',
+        ),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.workOrderItem.count).toHaveBeenCalledWith({
+        where: { id: { in: ['woi-1', 'de-otra-ot'] }, workOrderId: 'ot-1' },
+      });
+    });
+
+    it('guarda el ítem de OT de cada línea', async () => {
+      (prisma.workOrderItem.count as jest.Mock).mockResolvedValue(1);
+
+      await service.create(
+        {
+          ...createDto,
+          workOrderItemIds: ['woi-1'],
+          items: [
+            { ...createDto.items[0], workOrderItemId: 'woi-1' },
+            { ...createDto.items[0], name: 'Transporte' },
+          ],
+        },
+        'user-1',
+      );
+
+      const { items } = (repository.create as jest.Mock).mock.calls[0][0];
+      expect(items.map((i: { workOrderItemId: string | null }) => i.workOrderItemId)).toEqual([
+        'woi-1',
+        null,
+      ]);
+    });
+
+    it('al cambiar la OT sin líneas nuevas suelta las líneas de sus ítems', async () => {
+      (repository.findById as jest.Mock).mockResolvedValue(draftOg);
+
+      await service.update('og-1', { workOrderId: 'ot-2' });
+
+      expect(repository.clearItemWorkOrderLinks).toHaveBeenCalledWith('og-1');
     });
 
     it('al quitar la OT borra los amarres', async () => {

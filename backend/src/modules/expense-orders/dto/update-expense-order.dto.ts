@@ -70,6 +70,13 @@ export class UpdateExpenseItemDto {
   @IsOptional()
   productionAreaIds?: string[];
 
+  @ApiPropertyOptional({
+    description: 'ID del ítem de la OT al que pertenece la línea (null = toda la OT)',
+  })
+  @IsUUID()
+  @IsOptional()
+  workOrderItemId?: string | null;
+
   @ApiPropertyOptional({ description: 'ID del archivo comprobante de pago' })
   @IsUUID()
   @IsOptional()

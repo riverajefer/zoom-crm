@@ -1567,6 +1567,7 @@ model WorkOrderItem {
   supplies        WorkOrderItemSupply[]
   timeEntries     WorkOrderTimeEntry[]
   expenseOrders   ExpenseOrderWorkOrderItem[]
+  expenseLines    ExpenseOrderItem[]
 
   @@index([workOrderId])
   @@index([orderItemId])
@@ -1802,6 +1803,8 @@ model ExpenseOrderItem {
   bankEntity      String?       @map("bank_entity") // Entidad bancaria de origen (solo transferencias)
   receiptFileId   String?       @map("receipt_file_id") // Comprobante de pago
   referenceFileId String?       @map("reference_file_id") // Imagen de referencia
+  // Ítem de la OT al que pertenece esta línea. Nulo = gasto de toda la OT.
+  workOrderItemId String?       @map("work_order_item_id")
 
   sortOrder Int      @default(0) @map("sort_order")
   createdAt DateTime @default(now()) @map("created_at")
@@ -1809,9 +1812,11 @@ model ExpenseOrderItem {
 
   expenseOrder    ExpenseOrder                     @relation(fields: [expenseOrderId], references: [id], onDelete: Cascade)
   supplier        Supplier?                        @relation(fields: [supplierId], references: [id])
+  workOrderItem   WorkOrderItem?                   @relation(fields: [workOrderItemId], references: [id], onDelete: SetNull)
   productionAreas ExpenseOrderItemProductionArea[]
 
   @@index([expenseOrderId])
+  @@index([workOrderItemId])
   @@map("expense_order_items")
 }
 

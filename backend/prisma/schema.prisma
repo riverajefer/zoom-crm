@@ -1445,6 +1445,7 @@ model Machine {
 
   productionArea ProductionArea?      @relation(fields: [productionAreaId], references: [id], onDelete: SetNull)
   timeEntries    WorkOrderTimeEntry[]
+  expenseOrders  ExpenseOrder[]
 
   @@index([productionAreaId])
   @@map("machines")
@@ -1714,7 +1715,10 @@ model ExpenseOrder {
   responsibleId        String?            @map("responsible_id") // Responsable (opcional)
   observations         String?
   areaOrMachine        String?            @map("area_or_machine")
-  applyIva             Boolean            @default(false) @map("apply_iva")
+  // Máquina opcional, de las del área elegida en `areaOrMachine` (lo filtra el
+  // formulario; la base no lo amarra porque el área se guarda por nombre).
+  machineId            String?            @map("machine_id")
+  applyIva            Boolean            @default(false) @map("apply_iva")
   ivaRate              Decimal            @default(0.19) @map("iva_rate")
   // Retenciones que la empresa le practica al proveedor: bajan lo que hay que
   // pagarle. Mismas bases que en la OP (retefuente/ReteICA sobre el subtotal,
@@ -1757,6 +1761,7 @@ model ExpenseOrder {
   expenseType        ExpenseType               @relation(fields: [expenseTypeId], references: [id])
   expenseSubcategory ExpenseSubcategory        @relation(fields: [expenseSubcategoryId], references: [id])
   workOrder          WorkOrder?                @relation(fields: [workOrderId], references: [id])
+  machine            Machine?                  @relation(fields: [machineId], references: [id], onDelete: SetNull)
   // La migración la creó con `RESTRICT`, no con el `SET NULL` que Prisma
   // asume por defecto en una relación opcional.
   authorizedTo       User?                     @relation("AuthorizedExpenseOrders", fields: [authorizedToId], references: [id], onDelete: Restrict)

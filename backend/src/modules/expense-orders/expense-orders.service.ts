@@ -108,6 +108,29 @@ export class ExpenseOrdersService {
   }
 
   /**
+   * La máquina es opcional, pero si hay área encargada no puede ser de otra
+   * área. Las máquinas sin área asignada valen para cualquiera: en PRD casi
+   * ninguna la tiene (2026-10). El área se guarda por nombre (`areaOrMachine`),
+   * así que se compara contra el nombre del área de la máquina.
+   */
+  private async assertMachineBelongsToArea(
+    machineId: string | null | undefined,
+    areaName: string | null | undefined,
+  ) {
+    if (!machineId) return;
+    const machine = await this.prisma.machine.findUnique({
+      where: { id: machineId },
+      select: { productionArea: { select: { name: true } } },
+    });
+    if (!machine) {
+      throw new NotFoundException(`Máquina con id ${machineId} no encontrada`);
+    }
+    if (areaName && machine.productionArea && machine.productionArea.name !== areaName) {
+      throw new BadRequestException('La máquina no pertenece al área encargada');
+    }
+  }
+
+  /**
    * Total a pagar de la OG: subtotal + IVA - retenciones. Se delega en el util
    * compartido para que la Cuenta por Pagar que nace de esta orden llegue
    * exactamente al mismo número.
@@ -167,6 +190,7 @@ export class ExpenseOrdersService {
       }
     }
     await this.assertWorkOrderItemsBelongTo(dto.workOrderId, dto.workOrderItemIds);
+    await this.assertMachineBelongsToArea(dto.machineId, dto.areaOrMachine);
 
     // Validate ExpenseType and Subcategory belong to each other
     const subcategory = await this.prisma.expenseSubcategory.findFirst({
@@ -218,6 +242,7 @@ export class ExpenseOrdersService {
           responsibleId: dto.responsibleId,
           observations: dto.observations,
           areaOrMachine: dto.areaOrMachine,
+          machineId: dto.machineId,
           applyIva: dto.applyIva ?? false,
           ivaRate: dto.ivaRate ?? 0.19,
           retefuenteRate: normalizeRate(dto.retefuenteRate).toNumber(),
@@ -613,6 +638,10 @@ export class ExpenseOrdersService {
     const nextWorkOrderId =
       dto.workOrderId === undefined ? currentWorkOrderId : dto.workOrderId;
     await this.assertWorkOrderItemsBelongTo(nextWorkOrderId, dto.workOrderItemIds);
+    await this.assertMachineBelongsToArea(
+      dto.machineId === undefined ? expenseOrder.machine?.id : dto.machineId,
+      dto.areaOrMachine === undefined ? expenseOrder.areaOrMachine : dto.areaOrMachine,
+    );
     // Los ítems son de la OT: si la OT cambia y no llegan ítems nuevos, los
     // viejos quedarían apuntando a otra OT.
     const nextWorkOrderItemIds =

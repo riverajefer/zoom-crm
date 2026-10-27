@@ -923,8 +923,14 @@ export const ExpenseOrderDetailPage = () => {
                 )}
                 {og.areaOrMachine && (
                   <Grid item xs={6} sm={3}>
-                    <Typography variant="caption" color="text.secondary">Área / Máquina</Typography>
+                    <Typography variant="caption" color="text.secondary">Área encargada</Typography>
                     <Typography variant="body2">{og.areaOrMachine}</Typography>
+                  </Grid>
+                )}
+                {og.machine && (
+                  <Grid item xs={6} sm={3}>
+                    <Typography variant="caption" color="text.secondary">Máquina</Typography>
+                    <Typography variant="body2">{og.machine.name}</Typography>
                   </Grid>
                 )}
                 <Grid item xs={6} sm={3}>

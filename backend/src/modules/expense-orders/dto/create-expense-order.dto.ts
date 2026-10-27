@@ -123,6 +123,11 @@ export class CreateExpenseOrderDto {
   @MaxLength(200)
   areaOrMachine?: string;
 
+  @ApiPropertyOptional({ description: 'ID de la máquina (opcional, del área encargada)' })
+  @IsUUID()
+  @IsOptional()
+  machineId?: string | null;
+
   @ApiPropertyOptional({ description: 'Aplicar IVA a la orden' })
   @IsBoolean()
   @IsOptional()

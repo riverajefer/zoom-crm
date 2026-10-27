@@ -60,7 +60,7 @@ import {
 } from '../../../utils/withholdings';
 import { useExpenseOrders, useExpenseOrder, useExpenseTypes, usePaidExpenseOrderEdit } from '../hooks';
 import { useUsers } from '../../users/hooks/useUsers';
-import { useWorkOrder } from '../../work-orders/hooks';
+import { useTimeMachines, useWorkOrder } from '../../work-orders/hooks';
 import type { WorkOrder } from '../../../types/work-order.types';
 import { WorkOrderSearchAutocomplete } from '../components/WorkOrderSearchAutocomplete';
 import { useProductionAreas } from '../../production-areas/hooks/useProductionAreas';
@@ -289,6 +289,7 @@ export const ExpenseOrderFormPage = () => {
   const [responsibleId, setResponsibleId] = useState('');
   const [observations, setObservations] = useState('');
   const [areaOrMachine, setAreaOrMachine] = useState('');
+  const [machineId, setMachineId] = useState('');
 
   // ─── IVA (opcional, nivel orden) ─────────────────────────────────────────────
   const [applyIva, setApplyIva] = useState(false);
@@ -336,6 +337,66 @@ export const ExpenseOrderFormPage = () => {
   const productionAreas = productionAreasQuery.data ?? [];
   const { suppliersQuery } = useSuppliers();
   const suppliers = suppliersQuery.data ?? [];
+  // Máquinas activas del área elegida y, debajo, las que no tienen área
+  // asignada (en PRD casi todas, 2026-10). El área se guarda por nombre.
+  const { data: machines, isLoading: loadingMachines } = useTimeMachines();
+  const areaMachines = useMemo(() => {
+    if (!areaOrMachine) return [];
+    const all = machines ?? [];
+    return [
+      ...all.filter((m) => m.productionArea?.name === areaOrMachine),
+      ...all.filter((m) => !m.productionArea),
+    ];
+  }, [areaOrMachine, machines]);
+
+  // Al cambiar el área, la máquina elegida deja de valer si es de otra área.
+  // Una máquina que ya no está activa (OG vieja) no aparece en la lista y se
+  // conserva tal cual.
+  useEffect(() => {
+    if (!machineId || !machines) return;
+    const machine = machines.find((m) => m.id === machineId);
+    const otherArea = !!machine?.productionArea && machine.productionArea.name !== areaOrMachine;
+    if (otherArea || (machine && !areaOrMachine)) setMachineId('');
+  }, [areaOrMachine, machineId, machines]);
+
+  // ─── Área sugerida desde los ítems de la OT (solo al crear) ─────────────────
+  // La primera área activa del primer ítem marcado. Llena «Área encargada o
+  // máquina» y el área de cada ítem de gasto mientras el usuario no las haya
+  // cambiado a mano; si cambia la selección de ítems, la sugerencia se mueve.
+  const suggestedArea = useMemo(() => {
+    const activeAreaIds = new Set(
+      (productionAreasQuery.data ?? [])
+        .filter((pa) => pa.isActive !== false)
+        .map((pa) => pa.id),
+    );
+    for (const itemId of workOrderItemIds) {
+      const woi = selectedWorkOrder?.items.find((i) => i.id === itemId);
+      const match = woi?.productionAreas.find((pa) => activeAreaIds.has(pa.productionArea.id));
+      if (match) return match.productionArea;
+    }
+    return null;
+  }, [productionAreasQuery.data, selectedWorkOrder, workOrderItemIds]);
+  const lastSuggestedAreaRef = useRef<{ id: string; name: string } | null>(null);
+
+  useEffect(() => {
+    if (isEditing) return;
+    const prev = lastSuggestedAreaRef.current;
+    if (prev?.id === suggestedArea?.id) return;
+    lastSuggestedAreaRef.current = suggestedArea;
+
+    const next = suggestedArea;
+    setAreaOrMachine((current) =>
+      !current || current === prev?.name ? next?.name ?? '' : current,
+    );
+    setItems((current) =>
+      current.map((item) => {
+        const untouched =
+          item.productionAreaIds.length === 0 ||
+          (item.productionAreaIds.length === 1 && item.productionAreaIds[0] === prev?.id);
+        return untouched ? { ...item, productionAreaIds: next ? [next.id] : [] } : item;
+      }),
+    );
+  }, [isEditing, suggestedArea]);
 
   // ─── Edit: load existing OG ──────────────────────────────────────────────────
   const { expenseOrderQuery } = useExpenseOrder(id);
@@ -364,6 +425,7 @@ export const ExpenseOrderFormPage = () => {
       setResponsibleId(existingOG.responsible?.id ?? '');
       setObservations(existingOG.observations ?? '');
       setAreaOrMachine(existingOG.areaOrMachine ?? '');
+      setMachineId(existingOG.machine?.id ?? '');
       setApplyIva(existingOG.applyIva ?? false);
       setIvaPercentage(
         existingOG.applyIva ? Math.round(Number(existingOG.ivaRate) * 100) : 19,
@@ -474,7 +536,11 @@ export const ExpenseOrderFormPage = () => {
 
   // ─── Item helpers ─────────────────────────────────────────────────────────────
   const addItem = () => {
-    setItems((prev) => [...prev, defaultItem()]);
+    const suggested = lastSuggestedAreaRef.current;
+    setItems((prev) => [
+      ...prev,
+      { ...defaultItem(), productionAreaIds: suggested ? [suggested.id] : [] },
+    ]);
     setReceiptFiles((prev) => [...prev, null]);
     setReferenceFiles((prev) => [...prev, null]);
   };
@@ -620,6 +686,7 @@ export const ExpenseOrderFormPage = () => {
     responsibleId: responsibleId || undefined,
     observations: observations || undefined,
     areaOrMachine: areaOrMachine || undefined,
+    machineId: machineId || null,
     applyIva,
     ivaRate: applyIva ? ivaPercentage / 100 : undefined,
     ...toWithholdingRates(applyIva ? withholdings : EMPTY_WITHHOLDINGS),
@@ -817,8 +884,28 @@ export const ExpenseOrderFormPage = () => {
         renderInput={(params) => (
           <TextField
             {...params}
-            label="Área encargada o máquina"
+            label="Área encargada"
             placeholder="Seleccionar área de producción..."
+          />
+        )}
+      />
+
+      <Autocomplete
+        options={areaMachines}
+        groupBy={(m) => (m.productionArea ? m.productionArea.name : 'Sin área asignada')}
+        getOptionLabel={(m) => m.name}
+        value={areaMachines.find((m) => m.id === machineId) ?? null}
+        onChange={(_, val) => setMachineId(val?.id ?? '')}
+        isOptionEqualToValue={(option, val) => option.id === val.id}
+        disabled={!areaOrMachine}
+        loading={loadingMachines}
+        noOptionsText="Esta área no tiene máquinas"
+        renderInput={(params) => (
+          <TextField
+            {...params}
+            label="Máquina (opcional)"
+            placeholder={areaOrMachine ? 'Seleccionar máquina...' : ''}
+            helperText={!areaOrMachine ? 'Elige primero el área encargada' : undefined}
           />
         )}
       />
@@ -1276,6 +1363,19 @@ export const ExpenseOrderFormPage = () => {
                 <Typography color="text.secondary">OT asociada:</Typography>
                 <Typography fontWeight={500}>
                   {selectedWorkOrder?.workOrderNumber ?? workOrderId}
+                </Typography>
+              </Stack>
+            )}
+
+            {areaOrMachine && (
+              <Stack direction="row" justifyContent="space-between" spacing={2}>
+                <Typography color="text.secondary" sx={{ flexShrink: 0 }}>
+                  Área encargada:
+                </Typography>
+                <Typography fontWeight={500} textAlign="right">
+                  {areaOrMachine}
+                  {machineId &&
+                    ` · ${(machines ?? []).find((m) => m.id === machineId)?.name ?? existingOG?.machine?.name ?? ''}`}
                 </Typography>
               </Stack>
             )}

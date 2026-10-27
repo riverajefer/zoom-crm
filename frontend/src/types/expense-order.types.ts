@@ -97,6 +97,7 @@ export interface ExpenseOrder extends LocatedDocument {
   status: ExpenseOrderStatus;
   observations?: string | null;
   areaOrMachine?: string | null;
+  machine?: { id: string; name: string } | null;
   applyIva: boolean;
   ivaRate: string;
   retefuenteRate: string;
@@ -246,6 +247,8 @@ export interface CreateExpenseOrderDto {
   responsibleId?: string;
   observations?: string;
   areaOrMachine?: string;
+  /** Opcional, de las del área encargada. `null` la quita. */
+  machineId?: string | null;
   applyIva?: boolean;
   ivaRate?: number;
   retefuenteRate?: number;
@@ -284,6 +287,8 @@ export interface UpdateExpenseOrderDto {
   responsibleId?: string | null;
   observations?: string;
   areaOrMachine?: string;
+  /** Opcional, de las del área encargada. `null` la quita. */
+  machineId?: string | null;
   applyIva?: boolean;
   ivaRate?: number;
   retefuenteRate?: number;

@@ -62,6 +62,9 @@ describe('ExpenseOrdersService', () => {
       workOrderItem: {
         count: jest.fn(),
       },
+      machine: {
+        findUnique: jest.fn(),
+      },
       expenseSubcategory: {
         findFirst: jest.fn(),
       },
@@ -618,6 +621,80 @@ describe('ExpenseOrdersService', () => {
         where: { id: { in: ['woi-de-ot-1'] }, workOrderId: 'ot-2' },
       });
       expect(repository.replaceWorkOrderItems).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('máquina', () => {
+    const createDto = {
+      expenseTypeId: 'type-id',
+      expenseSubcategoryId: 'sub-id',
+      areaOrMachine: 'Calandra y Sublimacion',
+      items: [{ quantity: 1, unitPrice: 10, name: 'Papel', paymentMethod: 'CASH' }],
+    } as any;
+
+    beforeEach(() => {
+      (prisma.expenseSubcategory.findFirst as jest.Mock).mockResolvedValue({ id: 'sub-id' });
+      (repository.create as jest.Mock).mockResolvedValue({ id: 'og-1', ogNumber: 'OG-001', items: [{ total: 10 }] });
+    });
+
+    it('crea la OG con una máquina del área encargada', async () => {
+      (prisma.machine.findUnique as jest.Mock).mockResolvedValue({
+        productionArea: { name: 'Calandra y Sublimacion' },
+      });
+
+      await service.create({ ...createDto, machineId: 'maq-1' }, 'user-1');
+
+      expect(repository.create).toHaveBeenCalledWith(expect.objectContaining({ machineId: 'maq-1' }));
+    });
+
+    it('rechaza una máquina de otra área', async () => {
+      (prisma.machine.findUnique as jest.Mock).mockResolvedValue({
+        productionArea: { name: 'Promocionales POP' },
+      });
+
+      await expect(service.create({ ...createDto, machineId: 'maq-1' }, 'user-1')).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(repository.create).not.toHaveBeenCalled();
+    });
+
+    it('acepta una máquina sin área asignada', async () => {
+      (prisma.machine.findUnique as jest.Mock).mockResolvedValue({ productionArea: null });
+
+      await service.create({ ...createDto, machineId: 'maq-1' }, 'user-1');
+
+      expect(repository.create).toHaveBeenCalledWith(expect.objectContaining({ machineId: 'maq-1' }));
+    });
+
+    it('rechaza una máquina que no existe', async () => {
+      (prisma.machine.findUnique as jest.Mock).mockResolvedValue(null);
+
+      await expect(service.create({ ...createDto, machineId: 'maq-x' }, 'user-1')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('sin máquina no la consulta', async () => {
+      await service.create(createDto, 'user-1');
+
+      expect(prisma.machine.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('al cambiar el área en una edición valida la máquina que ya tenía', async () => {
+      (repository.findById as jest.Mock).mockResolvedValue({
+        id: 'og-1',
+        status: ExpenseOrderStatus.DRAFT,
+        areaOrMachine: 'Calandra y Sublimacion',
+        machine: { id: 'maq-1' },
+      });
+      (prisma.machine.findUnique as jest.Mock).mockResolvedValue({
+        productionArea: { name: 'Calandra y Sublimacion' },
+      });
+
+      await expect(
+        service.update('og-1', { areaOrMachine: 'Promocionales POP' }),
+      ).rejects.toThrow(BadRequestException);
+      expect(repository.update).not.toHaveBeenCalled();
     });
   });
 

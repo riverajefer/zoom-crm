@@ -19,6 +19,7 @@ import {
   CircularProgress,
   Alert,
   useTheme,
+  alpha,
 } from '@mui/material';
 import {
   Edit as EditIcon,
@@ -346,10 +347,11 @@ export const WorkOrderDetailPage = () => {
             {/* Items / Productos */}
             <Card>
               <CardContent>
-                <Typography variant="h6" gutterBottom>
-                  Productos ({workOrder.items.length})
-                </Typography>
-                <Stack spacing={2} divider={<Divider />}>
+                <Stack direction="row" alignItems="center" spacing={1} mb={2}>
+                  <Typography variant="h6">Productos</Typography>
+                  <Chip label={workOrder.items.length} size="small" />
+                </Stack>
+                <Stack spacing={1.5}>
                   {workOrder.items.map((item, index) => {
                     const annulledQuantity =
                       parseFloat(item.orderItem.annulledQuantity ?? '0') || 0;
@@ -359,36 +361,100 @@ export const WorkOrderDetailPage = () => {
                     const itemExpenseOrders = expenseOrders.filter((eo) =>
                       eo.workOrderItems?.some((woi) => woi.workOrderItemId === item.id),
                     );
+                    // Casi siempre es la misma descripción del producto: repetirla es ruido.
                     // Se creó después que la OT (la OP lo sumó luego): el taller tiene
                     // que notarlo, porque aparece en una OT que quizá ya estaba en marcha.
                     const addedAfterCreation =
                       !!item.createdAt &&
                       new Date(item.createdAt).getTime() - new Date(workOrder.createdAt).getTime() >
                         60_000;
+                    const showOriginalDescription =
+                      item.orderItem.description.trim().toLowerCase() !==
+                      item.productDescription.trim().toLowerCase();
                     return (
-                    <Box key={item.id}>
-                      <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={1}>
-                        <Stack direction="row" alignItems="center" flexWrap="wrap" gap={1}>
-                          <Typography
-                            variant="subtitle1"
-                            fontWeight="bold"
-                            sx={
-                              fullyAnnulled
-                                ? { textDecoration: 'line-through', color: 'text.disabled' }
-                                : undefined
-                            }
-                          >
-                            Producto {index + 1}: {item.productDescription}
-                          </Typography>
+                    <Box
+                      key={item.id}
+                      sx={{
+                        border: 1,
+                        borderColor: 'divider',
+                        borderRadius: 2,
+                        p: { xs: 1.5, sm: 2 },
+                        bgcolor: alpha(theme.palette.primary.main, 0.03),
+                        opacity: fullyAnnulled ? 0.6 : 1,
+                      }}
+                    >
+                      <Stack direction="row" alignItems="flex-start" spacing={1.5}>
+                        <Box
+                          sx={{
+                            width: 28,
+                            height: 28,
+                            flexShrink: 0,
+                            borderRadius: 1,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            bgcolor: alpha(theme.palette.primary.main, 0.15),
+                            color: 'primary.main',
+                            fontWeight: 700,
+                            fontSize: '0.875rem',
+                          }}
+                        >
+                          {index + 1}
+                        </Box>
+                        <Box sx={{ flex: 1, minWidth: 0 }}>
+                          <Stack direction="row" alignItems="flex-start" justifyContent="space-between" gap={1}>
+                            <Typography
+                              variant="subtitle1"
+                              fontWeight={600}
+                              lineHeight={1.4}
+                              sx={{
+                                wordBreak: 'break-word',
+                                ...(fullyAnnulled && {
+                                  textDecoration: 'line-through',
+                                  color: 'text.disabled',
+                                }),
+                              }}
+                            >
+                              {item.productDescription}
+                            </Typography>
+                            {canCreateItemExpense && !fullyAnnulled && (
+                              <Button
+                                size="small"
+                                color="warning"
+                                startIcon={<ReceiptLongIcon />}
+                                onClick={() =>
+                                  navigate(
+                                    `${ROUTES.EXPENSE_ORDERS_CREATE}?workOrderId=${id}&workOrderItemIds=${item.id}`,
+                                  )
+                                }
+                                sx={{
+                                  flexShrink: 0,
+                                  minWidth: 0,
+                                  px: 1.25,
+                                  py: 0.25,
+                                  bgcolor: alpha(theme.palette.warning.main, 0.1),
+                                  '&:hover': { bgcolor: alpha(theme.palette.warning.main, 0.2) },
+                                  // En móvil solo el ícono: el texto le quitaba espacio al nombre.
+                                  '& .MuiButton-startIcon': { mr: { xs: 0, sm: 1 }, ml: { xs: 0, sm: -0.5 } },
+                                }}
+                                aria-label="Crear gasto de este producto"
+                              >
+                                <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
+                                  Gasto
+                                </Box>
+                              </Button>
+                            )}
+                          </Stack>
                           {addedAfterCreation && (
                             <Chip
                               label={`Agregado desde la OP · ${formatDate(item.createdAt)}`}
                               size="small"
                               color="info"
                               variant="outlined"
-                              sx={{ maxWidth: '100%' }}
+                              sx={{ mt: 0.5, maxWidth: '100%' }}
                             />
                           )}
+
                           {annulledQuantity > 0 && (
                             <Chip
                               label={
@@ -399,81 +465,106 @@ export const WorkOrderDetailPage = () => {
                               size="small"
                               color="error"
                               variant="outlined"
+                              sx={{ mt: 0.5 }}
                             />
                           )}
-                        </Stack>
-                        {canCreateItemExpense && !fullyAnnulled && (
-                          <Button
-                            size="small"
-                            color="warning"
-                            startIcon={<ReceiptLongIcon />}
-                            onClick={() =>
-                              navigate(
-                                `${ROUTES.EXPENSE_ORDERS_CREATE}?workOrderId=${id}&workOrderItemIds=${item.id}`,
-                              )
-                            }
-                          >
-                            Gasto
-                          </Button>
-                        )}
+
+                          <Stack direction="row" spacing={3} mt={1} flexWrap="wrap" useFlexGap>
+                            <Box>
+                              <Typography variant="caption" color="text.secondary">Cantidad</Typography>
+                              <Typography variant="body2" fontWeight={600}>
+                                {Number(item.orderItem.quantity)}
+                              </Typography>
+                            </Box>
+                            <Box>
+                              <Typography variant="caption" color="text.secondary">Precio unitario</Typography>
+                              <Typography variant="body2" fontWeight={600}>
+                                {formatCurrency(item.orderItem.unitPrice)}
+                              </Typography>
+                            </Box>
+                          </Stack>
+
+                          {showOriginalDescription && (
+                            <Typography variant="body2" color="text.secondary" mt={1}>
+                              Ítem original: {item.orderItem.description}
+                            </Typography>
+                          )}
+
+                          {(item.productionAreas.length > 0 ||
+                            item.supplies.length > 0 ||
+                            itemExpenseOrders.length > 0) && (
+                            <Stack
+                              direction={{ xs: 'column', sm: 'row' }}
+                              spacing={{ xs: 1.5, sm: 3 }}
+                              mt={1.5}
+                              pt={1.5}
+                              sx={{ borderTop: 1, borderColor: 'divider' }}
+                              flexWrap="wrap"
+                              useFlexGap
+                            >
+                              {item.productionAreas.length > 0 && (
+                                <Box>
+                                  <Typography variant="caption" color="text.secondary">Áreas de producción</Typography>
+                                  <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap mt={0.5}>
+                                    {item.productionAreas.map((pa) => (
+                                      <Chip key={pa.productionArea.id} label={pa.productionArea.name} size="small" />
+                                    ))}
+                                  </Stack>
+                                </Box>
+                              )}
+
+                              {item.supplies.length > 0 && (
+                                <Box>
+                                  <Typography variant="caption" color="text.secondary">Insumos</Typography>
+                                  <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap mt={0.5}>
+                                    {item.supplies.map((s) => (
+                                      <Chip
+                                        key={s.supply.id}
+                                        label={s.supply.sku ? `${s.supply.name} (${s.supply.sku})` : s.supply.name}
+                                        size="small"
+                                        variant="outlined"
+                                      />
+                                    ))}
+                                  </Stack>
+                                </Box>
+                              )}
+
+                              {itemExpenseOrders.length > 0 && (
+                                <Box>
+                                  <Typography variant="caption" color="text.secondary">Gastos (OG)</Typography>
+                                  <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap mt={0.5}>
+                                    {itemExpenseOrders.map((eo) => (
+                                      <Chip
+                                        key={eo.id}
+                                        icon={<ReceiptLongIcon />}
+                                        label={eo.ogNumber}
+                                        size="small"
+                                        color="warning"
+                                        variant="outlined"
+                                        clickable
+                                        onClick={() =>
+                                          navigate(ROUTES.EXPENSE_ORDERS_DETAIL.replace(':id', eo.id))
+                                        }
+                                      />
+                                    ))}
+                                  </Stack>
+                                </Box>
+                              )}
+                            </Stack>
+                          )}
+
+                          {item.observations && (
+                            <Typography
+                              variant="body2"
+                              color="text.secondary"
+                              mt={1.5}
+                              sx={{ pl: 1, borderLeft: 2, borderColor: 'divider', whiteSpace: 'pre-line' }}
+                            >
+                              {item.observations}
+                            </Typography>
+                          )}
+                        </Box>
                       </Stack>
-                      <Typography variant="body2" color="text.secondary" gutterBottom>
-                        Item original: {item.orderItem.description} · Cant: {item.orderItem.quantity} · Precio: {formatCurrency(item.orderItem.unitPrice)}
-                      </Typography>
-
-                      {item.productionAreas.length > 0 && (
-                        <Box mt={1}>
-                          <Typography variant="caption" color="text.secondary">Áreas de producción</Typography>
-                          <Stack direction="row" spacing={1} flexWrap="wrap" mt={0.5}>
-                            {item.productionAreas.map((pa) => (
-                              <Chip key={pa.productionArea.id} label={pa.productionArea.name} size="small" />
-                            ))}
-                          </Stack>
-                        </Box>
-                      )}
-
-                      {item.supplies.length > 0 && (
-                        <Box mt={1}>
-                          <Typography variant="caption" color="text.secondary">Insumos</Typography>
-                          <Stack direction="row" spacing={1} flexWrap="wrap" mt={0.5}>
-                            {item.supplies.map((s) => (
-                              <Chip
-                                key={s.supply.id}
-                                label={s.supply.sku ? `${s.supply.name} (${s.supply.sku})` : s.supply.name}
-                                size="small"
-                                variant="outlined"
-                              />
-                            ))}
-                          </Stack>
-                        </Box>
-                      )}
-
-                      {itemExpenseOrders.length > 0 && (
-                        <Box mt={1}>
-                          <Typography variant="caption" color="text.secondary">Gastos (OG)</Typography>
-                          <Stack direction="row" spacing={1} flexWrap="wrap" mt={0.5}>
-                            {itemExpenseOrders.map((eo) => (
-                              <Chip
-                                key={eo.id}
-                                label={eo.ogNumber}
-                                size="small"
-                                color="warning"
-                                variant="outlined"
-                                clickable
-                                onClick={() =>
-                                  navigate(ROUTES.EXPENSE_ORDERS_DETAIL.replace(':id', eo.id))
-                                }
-                              />
-                            ))}
-                          </Stack>
-                        </Box>
-                      )}
-
-                      {item.observations && (
-                        <Typography variant="body2" mt={1} color="text.secondary">
-                          Obs: {item.observations}
-                        </Typography>
-                      )}
                     </Box>
                     );
                   })}

@@ -93,6 +93,10 @@ export class WorkOrdersRepository {
             name: true,
           },
         },
+        // Vacío = gasto de toda la OT.
+        workOrderItems: {
+          select: { workOrderItemId: true },
+        },
       },
       orderBy: {
         createdAt: 'desc' as const,

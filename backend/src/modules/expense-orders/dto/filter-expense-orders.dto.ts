@@ -15,6 +15,11 @@ export class FilterExpenseOrdersDto {
   @IsOptional()
   workOrderId?: string;
 
+  @ApiPropertyOptional({ description: 'Filtrar por ID de ítem de OT asociado' })
+  @IsUUID()
+  @IsOptional()
+  workOrderItemId?: string;
+
   @ApiPropertyOptional({ description: 'Filtrar por ID de tipo de gasto' })
   @IsUUID()
   @IsOptional()

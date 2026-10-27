@@ -58,6 +58,13 @@ export class ExpenseOrdersRepository {
         },
       },
     },
+    // Ítems de la OT a los que aplica el gasto. Vacío = toda la OT.
+    workOrderItems: {
+      select: {
+        workOrderItem: { select: { id: true, productDescription: true } },
+      },
+      orderBy: { createdAt: 'asc' as const },
+    },
     authorizedTo: {
       select: { id: true, firstName: true, lastName: true, email: true },
     },
@@ -123,6 +130,7 @@ export class ExpenseOrdersRepository {
     const {
       status,
       workOrderId,
+      workOrderItemId,
       expenseTypeId,
       search,
       createdAtFrom,
@@ -137,6 +145,7 @@ export class ExpenseOrdersRepository {
 
     if (status) where.status = status;
     if (workOrderId) where.workOrderId = workOrderId;
+    if (workOrderItemId) where.workOrderItems = { some: { workOrderItemId } };
     if (expenseTypeId) where.expenseTypeId = expenseTypeId;
 
     if (createdAtFrom || createdAtTo) {
@@ -202,6 +211,7 @@ export class ExpenseOrdersRepository {
     expenseTypeId: string;
     expenseSubcategoryId: string;
     workOrderId?: string;
+    workOrderItemIds?: string[];
     authorizedToId?: string;
     responsibleId?: string;
     observations?: string;
@@ -233,11 +243,14 @@ export class ExpenseOrdersRepository {
       sortOrder: number;
     }>;
   }) {
-    const { items, ...orderData } = data;
+    const { items, workOrderItemIds, ...orderData } = data;
 
     return this.prisma.expenseOrder.create({
       data: {
         ...orderData,
+        workOrderItems: workOrderItemIds?.length
+          ? { create: workOrderItemIds.map((workOrderItemId) => ({ workOrderItemId })) }
+          : undefined,
         items: {
           create: items.map((item) => ({
             quantity: item.quantity,
@@ -287,6 +300,16 @@ export class ExpenseOrdersRepository {
       data,
       select: this.selectFields,
     });
+  }
+
+  /** Reemplaza los ítems de la OT a los que aplica la OG. Vacío = toda la OT. */
+  async replaceWorkOrderItems(expenseOrderId: string, workOrderItemIds: string[]) {
+    await this.prisma.$transaction([
+      this.prisma.expenseOrderWorkOrderItem.deleteMany({ where: { expenseOrderId } }),
+      this.prisma.expenseOrderWorkOrderItem.createMany({
+        data: workOrderItemIds.map((workOrderItemId) => ({ expenseOrderId, workOrderItemId })),
+      }),
+    ]);
   }
 
   async replaceItems(

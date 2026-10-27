@@ -1274,6 +1274,29 @@ export const ExpenseOrderDetailPage = () => {
                     </Button>
                   </Stack>
 
+                  <Box>
+                    <Typography variant="caption" color="text.secondary">Aplica a</Typography>
+                    {og.workOrderItems?.length ? (
+                      <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap mt={0.5}>
+                        {og.workOrderItems.map(({ workOrderItem }) => (
+                          <Chip
+                            key={workOrderItem.id}
+                            label={workOrderItem.productDescription}
+                            size="small"
+                            variant="outlined"
+                            sx={{
+                              maxWidth: '100%',
+                              height: 'auto',
+                              '& .MuiChip-label': { whiteSpace: 'normal', py: 0.25 },
+                            }}
+                          />
+                        ))}
+                      </Stack>
+                    ) : (
+                      <Typography variant="body2">Toda la OT</Typography>
+                    )}
+                  </Box>
+
                   {og.workOrder.advisor && (
                     <Stack direction="row" justifyContent="space-between" alignItems="center">
                       <Stack direction="row" spacing={0.5} alignItems="center">

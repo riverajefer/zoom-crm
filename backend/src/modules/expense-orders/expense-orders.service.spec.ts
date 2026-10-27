@@ -42,6 +42,7 @@ describe('ExpenseOrdersService', () => {
       create: jest.fn(),
       update: jest.fn(),
       replaceItems: jest.fn(),
+      replaceWorkOrderItems: jest.fn(),
       addItem: jest.fn(),
       updateStatus: jest.fn(),
       claimCajaAuthorization: jest.fn().mockResolvedValue(true),
@@ -57,6 +58,9 @@ describe('ExpenseOrdersService', () => {
     prisma = {
       workOrder: {
         findUnique: jest.fn(),
+      },
+      workOrderItem: {
+        count: jest.fn(),
       },
       expenseSubcategory: {
         findFirst: jest.fn(),
@@ -511,6 +515,109 @@ describe('ExpenseOrdersService', () => {
       await expect(service.create(dtoWithProductionArea, createdById)).rejects.toThrow(
         BadRequestException,
       );
+    });
+  });
+
+  describe('ítems de la OT', () => {
+    const createDto = {
+      expenseTypeId: 'type-id',
+      expenseSubcategoryId: 'sub-id',
+      workOrderId: 'ot-1',
+      items: [{ quantity: 1, unitPrice: 10, name: 'Sombrillas', paymentMethod: 'CASH' }],
+    } as any;
+
+    beforeEach(() => {
+      (prisma.workOrder.findUnique as jest.Mock).mockResolvedValue({ id: 'ot-1' });
+      (prisma.expenseSubcategory.findFirst as jest.Mock).mockResolvedValue({ id: 'sub-id' });
+      (repository.create as jest.Mock).mockResolvedValue({ id: 'og-1', ogNumber: 'OG-001', items: [{ total: 10 }] });
+    });
+
+    it('crea la OG amarrada a los ítems de su OT', async () => {
+      (prisma.workOrderItem.count as jest.Mock).mockResolvedValue(2);
+
+      await service.create({ ...createDto, workOrderItemIds: ['woi-1', 'woi-2'] }, 'user-1');
+
+      expect(prisma.workOrderItem.count).toHaveBeenCalledWith({
+        where: { id: { in: ['woi-1', 'woi-2'] }, workOrderId: 'ot-1' },
+      });
+      expect(repository.create).toHaveBeenCalledWith(
+        expect.objectContaining({ workOrderId: 'ot-1', workOrderItemIds: ['woi-1', 'woi-2'] }),
+      );
+    });
+
+    it('sin ítems es gasto de toda la OT y no consulta ítems', async () => {
+      await service.create(createDto, 'user-1');
+
+      expect(prisma.workOrderItem.count).not.toHaveBeenCalled();
+      expect(repository.create).toHaveBeenCalled();
+    });
+
+    it('rechaza ítems de otra OT', async () => {
+      (prisma.workOrderItem.count as jest.Mock).mockResolvedValue(1);
+
+      await expect(
+        service.create({ ...createDto, workOrderItemIds: ['woi-1', 'de-otra-ot'] }, 'user-1'),
+      ).rejects.toThrow(BadRequestException);
+      expect(repository.create).not.toHaveBeenCalled();
+    });
+
+    it('rechaza ítems sin OT asociada', async () => {
+      await expect(
+        service.create(
+          { ...createDto, workOrderId: undefined, workOrderItemIds: ['woi-1'] },
+          'user-1',
+        ),
+      ).rejects.toThrow(BadRequestException);
+      expect(repository.create).not.toHaveBeenCalled();
+    });
+
+    const draftOg = { id: 'og-1', status: ExpenseOrderStatus.DRAFT, workOrder: { id: 'ot-1' } };
+
+    it('al editar reemplaza los ítems y no los manda como campo escalar', async () => {
+      (repository.findById as jest.Mock).mockResolvedValue(draftOg);
+      (prisma.workOrderItem.count as jest.Mock).mockResolvedValue(1);
+
+      await service.update('og-1', { observations: 'x', workOrderItemIds: ['woi-2'] });
+
+      expect(repository.update).toHaveBeenCalledWith('og-1', { observations: 'x' });
+      expect(repository.replaceWorkOrderItems).toHaveBeenCalledWith('og-1', ['woi-2']);
+    });
+
+    it('al cambiar la OT sin ítems nuevos borra los amarres viejos', async () => {
+      (repository.findById as jest.Mock).mockResolvedValue(draftOg);
+
+      await service.update('og-1', { workOrderId: 'ot-2' });
+
+      expect(repository.replaceWorkOrderItems).toHaveBeenCalledWith('og-1', []);
+    });
+
+    it('al quitar la OT borra los amarres', async () => {
+      (repository.findById as jest.Mock).mockResolvedValue(draftOg);
+
+      await service.update('og-1', { workOrderId: null });
+
+      expect(repository.replaceWorkOrderItems).toHaveBeenCalledWith('og-1', []);
+    });
+
+    it('si no cambia la OT ni llegan ítems, no toca los amarres', async () => {
+      (repository.findById as jest.Mock).mockResolvedValue(draftOg);
+
+      await service.update('og-1', { workOrderId: 'ot-1', observations: 'x' });
+
+      expect(repository.replaceWorkOrderItems).not.toHaveBeenCalled();
+    });
+
+    it('al editar valida los ítems contra la OT nueva', async () => {
+      (repository.findById as jest.Mock).mockResolvedValue(draftOg);
+      (prisma.workOrderItem.count as jest.Mock).mockResolvedValue(0);
+
+      await expect(
+        service.update('og-1', { workOrderId: 'ot-2', workOrderItemIds: ['woi-de-ot-1'] }),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.workOrderItem.count).toHaveBeenCalledWith({
+        where: { id: { in: ['woi-de-ot-1'] }, workOrderId: 'ot-2' },
+      });
+      expect(repository.replaceWorkOrderItems).not.toHaveBeenCalled();
     });
   });
 

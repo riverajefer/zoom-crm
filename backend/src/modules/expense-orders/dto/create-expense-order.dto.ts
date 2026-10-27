@@ -13,6 +13,7 @@ import {
   Max,
   ValidateNested,
   ArrayMinSize,
+  ArrayUnique,
   MaxLength,
 } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -89,6 +90,17 @@ export class CreateExpenseOrderDto {
   @IsUUID()
   @IsOptional()
   workOrderId?: string;
+
+  @ApiPropertyOptional({
+    type: [String],
+    description:
+      'IDs de los ítems de la OT a los que aplica el gasto. Vacío = toda la OT. Requiere workOrderId',
+  })
+  @IsArray()
+  @ArrayUnique()
+  @IsUUID('all', { each: true })
+  @IsOptional()
+  workOrderItemIds?: string[];
 
   @ApiPropertyOptional({ description: 'ID del usuario al que se autoriza (opcional)' })
   @IsUUID()

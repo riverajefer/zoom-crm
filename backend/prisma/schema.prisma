@@ -1565,6 +1565,7 @@ model WorkOrderItem {
   productionAreas WorkOrderItemProductionArea[]
   supplies        WorkOrderItemSupply[]
   timeEntries     WorkOrderTimeEntry[]
+  expenseOrders   ExpenseOrderWorkOrderItem[]
 
   @@index([workOrderId])
   @@index([orderItemId])
@@ -1765,6 +1766,8 @@ model ExpenseOrder {
   cajaAuthorizedBy   User?                     @relation("CajaAuthorizedExpenseOrders", fields: [cajaAuthorizedById], references: [id])
   cajaRejectedBy     User?                     @relation("CajaRejectedExpenseOrders", fields: [cajaRejectedById], references: [id])
   items              ExpenseOrderItem[]
+  // Ítems de la OT a los que aplica el gasto. Vacío = gasto de toda la OT.
+  workOrderItems     ExpenseOrderWorkOrderItem[]
   authRequests       ExpenseOrderAuthRequest[]
   editRequests       ExpenseOrderEditRequest[]
   accountPayable     AccountPayable?
@@ -1817,6 +1820,23 @@ model ExpenseOrderItemProductionArea {
 
   @@id([expenseOrderItemId, productionAreaId])
   @@map("expense_order_item_production_areas")
+}
+
+// Ítems de la OT a los que aplica una OG. Los ítems deben ser de la misma OT
+// que `ExpenseOrder.workOrderId` (lo valida el service, no la base). Si se borra
+// el ítem de la OP, su ítem de OT se va en cascada y con él este amarre: la OG
+// sigue en la OT y, si se queda sin ítems, pasa a ser gasto de toda la OT.
+model ExpenseOrderWorkOrderItem {
+  expenseOrderId  String   @map("expense_order_id")
+  workOrderItemId String   @map("work_order_item_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  expenseOrder  ExpenseOrder  @relation(fields: [expenseOrderId], references: [id], onDelete: Cascade)
+  workOrderItem WorkOrderItem @relation(fields: [workOrderItemId], references: [id], onDelete: Cascade)
+
+  @@id([expenseOrderId, workOrderItemId])
+  @@index([workOrderItemId])
+  @@map("expense_order_work_order_items")
 }
 
 model ExpenseOrderAuthRequest {

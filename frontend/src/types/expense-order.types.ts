@@ -159,6 +159,10 @@ export interface ExpenseOrder extends LocatedDocument {
       };
     };
   } | null;
+  /** Ítems de la OT a los que aplica el gasto. Vacío = toda la OT. */
+  workOrderItems?: Array<{
+    workOrderItem: { id: string; productDescription: string };
+  }>;
   authorizedTo?: {
     id: string;
     firstName?: string | null;
@@ -236,6 +240,8 @@ export interface CreateExpenseOrderDto {
   expenseTypeId: string;
   expenseSubcategoryId: string;
   workOrderId?: string;
+  /** Vacío = gasto de toda la OT. */
+  workOrderItemIds?: string[];
   authorizedToId?: string;
   responsibleId?: string;
   observations?: string;
@@ -272,6 +278,8 @@ export interface UpdateExpenseOrderDto {
   expenseTypeId?: string;
   expenseSubcategoryId?: string;
   workOrderId?: string | null;
+  /** Reemplaza los actuales. Vacío = gasto de toda la OT. */
+  workOrderItemIds?: string[];
   authorizedToId?: string;
   responsibleId?: string | null;
   observations?: string;
@@ -291,6 +299,7 @@ export interface UpdateExpenseOrderStatusDto {
 export interface FilterExpenseOrdersDto {
   status?: ExpenseOrderStatus;
   workOrderId?: string;
+  workOrderItemId?: string;
   expenseTypeId?: string;
   search?: string;
   /** Fecha de creación desde (ISO 8601). */

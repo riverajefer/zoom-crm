@@ -281,6 +281,8 @@ export const ExpenseOrderFormPage = () => {
   const [expenseTypeId, setExpenseTypeId] = useState('');
   const [expenseSubcategoryId, setExpenseSubcategoryId] = useState('');
   const [workOrderId, setWorkOrderId] = useState('');
+  // Ítems de la OT a los que aplica el gasto. Vacío = toda la OT.
+  const [workOrderItemIds, setWorkOrderItemIds] = useState<string[]>([]);
 
   // ─── Step 2: Authorization ──────────────────────────────────────────────────
   const [authorizedToId, setAuthorizedToId] = useState('');
@@ -323,6 +325,11 @@ export const ExpenseOrderFormPage = () => {
       ? pickedWorkOrder
       : (resolvedWorkOrderQuery.data ?? null);
   const resolvingWorkOrder = needsWorkOrderLookup && resolvedWorkOrderQuery.isLoading;
+  const workOrderItemOptions = selectedWorkOrder?.items ?? [];
+  const selectedWorkOrderItemsLabel = workOrderItemOptions
+    .filter((woi) => workOrderItemIds.includes(woi.id))
+    .map((woi) => woi.productDescription)
+    .join(' · ');
   const { usersQuery } = useUsers();
   const users = usersQuery.data ?? [];
   const { productionAreasQuery } = useProductionAreas();
@@ -352,6 +359,7 @@ export const ExpenseOrderFormPage = () => {
       setExpenseTypeId(existingOG.expenseType.id);
       setExpenseSubcategoryId(existingOG.expenseSubcategory.id);
       setWorkOrderId(existingOG.workOrder?.id ?? '');
+      setWorkOrderItemIds(existingOG.workOrderItems?.map((woi) => woi.workOrderItem.id) ?? []);
       setAuthorizedToId(existingOG.authorizedTo?.id ?? '');
       setResponsibleId(existingOG.responsible?.id ?? '');
       setObservations(existingOG.observations ?? '');
@@ -436,6 +444,8 @@ export const ExpenseOrderFormPage = () => {
       setExpenseSubcategoryId(directCostSubcategory.id);
     }
     setWorkOrderId(prefillWorkOrderId);
+    // El botón «Gasto» de un ítem de la OT lo manda ya marcado.
+    setWorkOrderItemIds(queryParams.get('workOrderItemIds')?.split(',').filter(Boolean) ?? []);
     prefillAppliedRef.current = true;
   }, [expenseTypes, isEditing, location.search]);
 
@@ -605,6 +615,7 @@ export const ExpenseOrderFormPage = () => {
     expenseTypeId,
     expenseSubcategoryId,
     workOrderId: workOrderId || undefined,
+    workOrderItemIds: workOrderId ? workOrderItemIds : undefined,
     authorizedToId: authorizedToId || undefined,
     responsibleId: responsibleId || undefined,
     observations: observations || undefined,
@@ -745,6 +756,7 @@ export const ExpenseOrderFormPage = () => {
           setExpenseSubcategoryId('');
           if (newType !== 'producción') {
             setWorkOrderId('');
+            setWorkOrderItemIds([]);
           }
         }}
         loading={loadingTypes}
@@ -771,7 +783,28 @@ export const ExpenseOrderFormPage = () => {
           onChange={(wo) => {
             setPickedWorkOrder(wo);
             setWorkOrderId(wo?.id ?? '');
+            setWorkOrderItemIds([]);
           }}
+        />
+      )}
+
+      {isProduccionType && selectedWorkOrder && (
+        <Autocomplete
+          multiple
+          options={workOrderItemOptions}
+          getOptionLabel={(woi) => woi.productDescription}
+          value={workOrderItemOptions.filter((woi) => workOrderItemIds.includes(woi.id))}
+          onChange={(_, val) => setWorkOrderItemIds(val.map((woi) => woi.id))}
+          isOptionEqualToValue={(option, val) => option.id === val.id}
+          disableCloseOnSelect
+          renderInput={(params) => (
+            <TextField
+              {...params}
+              label="Ítems de la OT a los que aplica el gasto"
+              placeholder={workOrderItemIds.length ? '' : 'Toda la OT'}
+              helperText="Déjalo vacío si el gasto es de toda la OT"
+            />
+          )}
         />
       )}
 
@@ -1243,6 +1276,17 @@ export const ExpenseOrderFormPage = () => {
                 <Typography color="text.secondary">OT asociada:</Typography>
                 <Typography fontWeight={500}>
                   {selectedWorkOrder?.workOrderNumber ?? workOrderId}
+                </Typography>
+              </Stack>
+            )}
+
+            {workOrderId && (
+              <Stack direction="row" justifyContent="space-between" spacing={2}>
+                <Typography color="text.secondary" sx={{ flexShrink: 0 }}>
+                  Ítems de la OT:
+                </Typography>
+                <Typography fontWeight={500} textAlign="right">
+                  {workOrderItemIds.length ? selectedWorkOrderItemsLabel : 'Toda la OT'}
                 </Typography>
               </Stack>
             )}

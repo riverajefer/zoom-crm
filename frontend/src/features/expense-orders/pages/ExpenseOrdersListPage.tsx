@@ -47,7 +47,8 @@ const formatDate = (date: string): string =>
 
 // Se puede eliminar mientras nadie haya firmado la OG. Desde «Autorizada
 // (Admin)» en adelante ya hay aprobaciones y movimiento de caja detrás, así que
-// el backend la rechaza. Debe coincidir con `DELETABLE_STATUSES` del servicio.
+// el backend la rechaza; también si ya tuvo la firma y volvió a Creada
+// (`authorizedAt`). Debe coincidir con `remove` del servicio.
 const DELETABLE_STATUSES: ExpenseOrderStatus[] = [
   ExpenseOrderStatus.DRAFT,
   ExpenseOrderStatus.CREATED,
@@ -179,7 +180,7 @@ export const ExpenseOrdersListPage = () => {
           onView={() => handleView(row)}
           onEdit={canUpdate && row.status === ExpenseOrderStatus.DRAFT ? () => handleEdit(row) : undefined}
           onDelete={
-            canDelete && DELETABLE_STATUSES.includes(row.status)
+            canDelete && DELETABLE_STATUSES.includes(row.status) && !row.authorizedAt
               ? () => setConfirmDelete(row)
               : undefined
           }

@@ -27,6 +27,7 @@ import {
   CreateExpenseOrderDto,
   FilterExpenseOrdersDto,
   RegisterExpenseElectronicInvoiceDto,
+  ReturnExpenseOrderForCorrectionDto,
   UpdateExpenseOrderDto,
   UpdateExpenseOrderStatusDto,
 } from './dto';
@@ -160,6 +161,24 @@ export class ExpenseOrdersController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.service.cajaReject(id, dto, user);
+  }
+
+  // El permiso es el de editar OG; el servicio limita a quien la creó, Caja y admin.
+  @Patch(':id/return-for-correction')
+  @RequirePermissions('update_expense_orders')
+  @ApiOperation({ summary: 'Devolver a corrección una OG con firma del admin (vuelve a CREATED)' })
+  @ApiParam({ name: 'id', description: 'ID de la OG' })
+  @ApiResponse({ status: 200, description: 'OG devuelta a CREATED; necesita otra firma del admin' })
+  @ApiResponse({ status: 400, description: 'OG no está en estado ADMIN_AUTHORIZED' })
+  @ApiResponse({ status: 403, description: 'No es quien creó la OG, ni Caja, ni admin' })
+  @ApiResponse({ status: 404, description: 'OG no encontrada' })
+  @ApiResponse({ status: 409, description: 'Caja la autorizó en el mismo momento' })
+  returnForCorrection(
+    @Param('id') id: string,
+    @Body() dto: ReturnExpenseOrderForCorrectionDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.returnForCorrection(id, dto, user);
   }
 
   @Patch(':id/electronic-invoice')

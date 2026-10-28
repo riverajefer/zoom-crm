@@ -47,6 +47,7 @@ describe('ExpenseOrdersService', () => {
       addItem: jest.fn(),
       updateStatus: jest.fn(),
       claimCajaAuthorization: jest.fn().mockResolvedValue(true),
+      claimReturnForCorrection: jest.fn().mockResolvedValue(true),
       attachItemReceipt: jest.fn().mockResolvedValue(1),
       delete: jest.fn(),
     } as any;
@@ -129,6 +130,7 @@ describe('ExpenseOrdersService', () => {
     } as any;
 
     notificationsService = {
+      create: jest.fn().mockResolvedValue(undefined),
       notifyUsersWithPermission: jest.fn().mockResolvedValue(undefined),
     } as any;
 
@@ -802,15 +804,95 @@ describe('ExpenseOrdersService', () => {
       await expect(service.update('missing', updateDto)).rejects.toThrow(NotFoundException);
     });
 
-    it('should throw BadRequestException if expense order is not editable', async () => {
+    it('con la firma del admin no se edita y el mensaje dice cómo seguir', async () => {
       (repository.findById as jest.Mock).mockResolvedValue({
         id: 'order-1',
+        ogNumber: 'OG-2026-0888',
         status: ExpenseOrderStatus.ADMIN_AUTHORIZED,
       } as any);
 
       await expect(service.update('order-1', updateDto)).rejects.toThrow(
-        BadRequestException,
+        /Devolver a corrección/,
       );
+    });
+  });
+
+  describe('returnForCorrection', () => {
+    const adminAuthorized = {
+      id: 'og-1',
+      ogNumber: 'OG-2026-0888',
+      status: ExpenseOrderStatus.ADMIN_AUTHORIZED,
+      createdBy: { id: 'comercial-1' },
+      authorizedById: 'admin-1',
+    };
+    const dto = { reason: 'El ítem 3 no coincide con la factura' };
+    const userWithRole = (name: string, permissions: string[] = []) => ({
+      role: { name, permissions: permissions.map((p) => ({ permission: { name: p } })) },
+    });
+
+    beforeEach(() => {
+      (repository.findById as jest.Mock).mockResolvedValue(adminAuthorized);
+    });
+
+    it('quien la creó la devuelve a CREATED y se avisa al admin que firmó', async () => {
+      await service.returnForCorrection('og-1', dto, { id: 'comercial-1' } as any);
+
+      expect(repository.claimReturnForCorrection).toHaveBeenCalledWith(
+        'og-1',
+        'comercial-1',
+        dto.reason,
+      );
+      expect(prisma.user.findUnique).not.toHaveBeenCalled();
+      expect(notificationsService.create).toHaveBeenCalledTimes(1);
+      expect(notificationsService.create).toHaveBeenCalledWith(
+        expect.objectContaining({ userId: 'admin-1', relatedId: 'og-1' }),
+      );
+    });
+
+    it('Caja la devuelve y se avisa al admin y a quien la creó', async () => {
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue(
+        userWithRole('caja', ['caja_authorize_expense_orders']),
+      );
+
+      await service.returnForCorrection('og-1', dto, { id: 'caja-1' } as any);
+
+      expect(repository.claimReturnForCorrection).toHaveBeenCalled();
+      const notified = (notificationsService.create as jest.Mock).mock.calls.map(
+        ([n]) => n.userId,
+      );
+      expect(notified.sort()).toEqual(['admin-1', 'comercial-1']);
+    });
+
+    it('otro usuario sin permiso de Caja no puede devolverla', async () => {
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue(
+        userWithRole('Comercial', ['update_expense_orders']),
+      );
+
+      await expect(
+        service.returnForCorrection('og-1', dto, { id: 'otro-1' } as any),
+      ).rejects.toThrow(ForbiddenException);
+      expect(repository.claimReturnForCorrection).not.toHaveBeenCalled();
+    });
+
+    it('una OG pagada no se devuelve: se corrige con solicitud de edición', async () => {
+      (repository.findById as jest.Mock).mockResolvedValue({
+        ...adminAuthorized,
+        status: ExpenseOrderStatus.PAID,
+      });
+
+      await expect(
+        service.returnForCorrection('og-1', dto, { id: 'comercial-1' } as any),
+      ).rejects.toThrow(/solicita la edición/);
+      expect(repository.claimReturnForCorrection).not.toHaveBeenCalled();
+    });
+
+    it('si Caja la pagó en el mismo instante, no toca nada ni avisa', async () => {
+      (repository.claimReturnForCorrection as jest.Mock).mockResolvedValue(false);
+
+      await expect(
+        service.returnForCorrection('og-1', dto, { id: 'comercial-1' } as any),
+      ).rejects.toThrow(ConflictException);
+      expect(notificationsService.create).not.toHaveBeenCalled();
     });
   });
 
@@ -1168,6 +1250,21 @@ describe('ExpenseOrdersService', () => {
       expect((prisma as any).expenseOrder.delete).toHaveBeenCalledWith({
         where: { id: 'order-1' },
       });
+    });
+
+    it.each([
+      ['devuelta a corrección', ExpenseOrderStatus.CREATED],
+      ['rechazada por Caja y pasada a borrador', ExpenseOrderStatus.DRAFT],
+    ])('no elimina una OG que ya tuvo la firma del admin (%s)', async (_caso, status) => {
+      (repository.findById as jest.Mock).mockResolvedValue({
+        id: 'order-1',
+        ogNumber: 'OG-2026-0888',
+        status,
+        authorizedAt: new Date('2026-10-27T22:27:54Z'),
+      } as any);
+
+      await expect(service.remove('order-1')).rejects.toThrow(/ya tuvo la firma del admin/);
+      expect((prisma as any).expenseOrder.delete).not.toHaveBeenCalled();
     });
 
     it('should also delete the linked account payable when it has no payments', async () => {

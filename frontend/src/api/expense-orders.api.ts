@@ -81,6 +81,14 @@ export const expenseOrdersApi = {
     return response.data;
   },
 
+  returnForCorrection: async (id: string, reason: string): Promise<ExpenseOrder> => {
+    const response = await axiosInstance.patch<ExpenseOrder>(
+      `/expense-orders/${id}/return-for-correction`,
+      { reason },
+    );
+    return response.data;
+  },
+
   registerElectronicInvoice: async (
     id: string,
     electronicInvoiceNumber: string,

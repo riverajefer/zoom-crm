@@ -16,6 +16,7 @@ import {
   CreateExpenseItemDto,
   CreateExpenseOrderDto,
   FilterExpenseOrdersDto,
+  ReturnExpenseOrderForCorrectionDto,
   UpdateExpenseOrderDto,
   UpdateExpenseOrderStatusDto,
 } from './dto';
@@ -365,6 +366,14 @@ export class ExpenseOrdersService {
     }
 
     const isPaidEdit = expenseOrder.status === ExpenseOrderStatus.PAID;
+
+    // Lo más común es tener el formulario abierto mientras el admin firma
+    // (OG-2026-0888): el mensaje tiene que decir cómo seguir, no el estado.
+    if (expenseOrder.status === ExpenseOrderStatus.ADMIN_AUTHORIZED) {
+      throw new BadRequestException(
+        `El admin ya firmó la ${expenseOrder.ogNumber} y no se puede editar así. Si tiene un error, usa «Devolver a corrección» en el detalle de la OG antes de que Caja la pague.`,
+      );
+    }
 
     if (!isPaidEdit && !EDITABLE_STATUSES.includes(expenseOrder.status as ExpenseOrderStatus)) {
       throw new BadRequestException(
@@ -1081,6 +1090,89 @@ export class ExpenseOrdersService {
     });
   }
 
+  // ─── Devolver a corrección (endpoint dedicado /return-for-correction) ────────
+  // Una OG con la firma del admin no se edita: se firmó sobre esos valores. Si
+  // tiene un error, quien la creó o Caja la devuelven a CREATED con un motivo,
+  // se corrige y el admin vuelve a firmar. Solo antes de que Caja la pague.
+  async returnForCorrection(
+    id: string,
+    dto: ReturnExpenseOrderForCorrectionDto,
+    currentUser: AuthenticatedUser,
+  ) {
+    const expenseOrder = await this.repository.findById(id);
+    if (!expenseOrder) {
+      throw new NotFoundException(`OG con id ${id} no encontrada`);
+    }
+
+    if (expenseOrder.status !== ExpenseOrderStatus.ADMIN_AUTHORIZED) {
+      throw new BadRequestException(
+        expenseOrder.status === ExpenseOrderStatus.PAID ||
+          expenseOrder.status === ExpenseOrderStatus.AUTHORIZED
+          ? `La ${expenseOrder.ogNumber} ya la pagó Caja. Para corregirla, solicita la edición al administrador.`
+          : `Solo se devuelve a corrección una OG con la firma del admin. La ${expenseOrder.ogNumber} se puede editar directamente.`,
+      );
+    }
+
+    await this.assertCanReturnForCorrection(expenseOrder.createdBy.id, currentUser.id);
+
+    const claimed = await this.repository.claimReturnForCorrection(
+      id,
+      currentUser.id,
+      dto.reason.trim(),
+    );
+    if (!claimed) {
+      throw new ConflictException(
+        `La ${expenseOrder.ogNumber} cambió de estado mientras tanto (posiblemente Caja ya la pagó). Refresca la página.`,
+      );
+    }
+
+    // Avisa al admin que firmó (tendrá que volver a hacerlo) y a quien la creó
+    // (es quien la corrige). Quien la devolvió no se avisa a sí mismo.
+    const recipients = new Set(
+      [expenseOrder.authorizedById, expenseOrder.createdBy.id].filter(
+        (userId): userId is string => !!userId && userId !== currentUser.id,
+      ),
+    );
+    for (const userId of recipients) {
+      await this.notificationsService.create({
+        userId,
+        type: NotificationType.EXPENSE_ORDER_RETURNED_FOR_CORRECTION,
+        title: 'OG devuelta a corrección',
+        message: `La ${expenseOrder.ogNumber} se devolvió a corrección: «${dto.reason.trim()}». Necesita otra firma del admin.`,
+        relatedId: id,
+        relatedType: 'ExpenseOrder',
+      });
+    }
+
+    return this.repository.findById(id);
+  }
+
+  /** Quien creó la OG, Caja (la última en revisarla) o un admin. */
+  private async assertCanReturnForCorrection(createdById: string, userId: string) {
+    if (createdById === userId) return;
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        role: {
+          select: {
+            name: true,
+            permissions: { select: { permission: { select: { name: true } } } },
+          },
+        },
+      },
+    });
+    const isAdmin = user?.role?.name === 'admin';
+    const isCaja = user?.role?.permissions.some(
+      (rp) => rp.permission.name === 'caja_authorize_expense_orders',
+    );
+    if (!isAdmin && !isCaja) {
+      throw new ForbiddenException(
+        'Solo quien creó la OG o Caja pueden devolverla a corrección.',
+      );
+    }
+  }
+
   // ─── Factura electrónica ──────────────────────────────────────────────────────
   // Registra/actualiza el número de factura electrónica del proveedor asociado a la
   // compra. Disponible en cualquier OG ya creada (no en DRAFT).
@@ -1155,6 +1247,16 @@ export class ExpenseOrdersService {
     if (!DELETABLE_STATUSES.includes(expenseOrder.status as ExpenseOrderStatus)) {
       throw new BadRequestException(
         `Solo se pueden eliminar OGs en estado BORRADOR o CREADA. Estado actual: ${expenseOrder.status}`,
+      );
+    }
+
+    // Tampoco una que el admin ya firmó y volvió a CREATED (devuelta a
+    // corrección o rechazada por Caja): la firma es un hecho y la OG tiene que
+    // terminar corregida o pagada, no desaparecer. `authorizedAt` sobrevive al
+    // regreso a CREATED, incluso si después pasa a DRAFT.
+    if (expenseOrder.authorizedAt) {
+      throw new BadRequestException(
+        `La ${expenseOrder.ogNumber} ya tuvo la firma del admin y no se puede eliminar. Corrígela y solicita de nuevo la autorización.`,
       );
     }
 

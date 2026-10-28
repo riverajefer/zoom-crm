@@ -153,6 +153,23 @@ export const useExpenseOrder = (id?: string) => {
     },
   });
 
+  const returnForCorrectionMutation = useMutation({
+    mutationFn: ({ id: ogId, reason }: { id: string; reason: string }) =>
+      expenseOrdersApi.returnForCorrection(ogId, reason),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: expenseOrdersKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: expenseOrdersKeys.detail(variables.id) });
+      queryClient.invalidateQueries({ queryKey: ['expense-orders', 'pending-caja'] });
+      enqueueSnackbar('OG devuelta a corrección. Corrígela y solicita de nuevo la firma del admin.', {
+        variant: 'success',
+      });
+    },
+    onError: (error: any) => {
+      const message = error?.response?.data?.message || 'Error al devolver la OG a corrección';
+      enqueueSnackbar(message, { variant: 'error' });
+    },
+  });
+
   const deleteExpenseOrderMutation = useMutation({
     mutationFn: (ogId: string) => expenseOrdersApi.delete(ogId),
     onSuccess: (_, ogId) => {
@@ -174,6 +191,7 @@ export const useExpenseOrder = (id?: string) => {
     updateStatusMutation,
     addExpenseItemMutation,
     cajaAuthorizeMutation,
+    returnForCorrectionMutation,
     deleteExpenseOrderMutation,
   };
 };

@@ -91,6 +91,12 @@ export class ExpenseOrdersRepository {
     cajaRejectedBy: {
       select: { id: true, firstName: true, lastName: true, email: true },
     },
+    returnedForCorrectionById: true,
+    returnedForCorrectionAt: true,
+    returnedForCorrectionReason: true,
+    returnedForCorrectionBy: {
+      select: { id: true, firstName: true, lastName: true, email: true },
+    },
     items: {
       select: {
         id: true,
@@ -482,6 +488,28 @@ export class ExpenseOrdersRepository {
         status: ExpenseOrderStatus.AUTHORIZED,
         cajaAuthorizedById,
         cajaAuthorizedAt: new Date(),
+      },
+    });
+    return count === 1;
+  }
+
+  /**
+   * Devuelve la OG de ADMIN_AUTHORIZED a CREATED solo si sigue en ese estado, y
+   * dice si lo logró. Misma guarda que `claimCajaAuthorization`: si Caja la
+   * autoriza en el mismo instante, gana uno solo y el otro no toca nada.
+   */
+  async claimReturnForCorrection(
+    id: string,
+    returnedForCorrectionById: string,
+    reason: string,
+  ): Promise<boolean> {
+    const { count } = await this.prisma.expenseOrder.updateMany({
+      where: { id, status: ExpenseOrderStatus.ADMIN_AUTHORIZED },
+      data: {
+        status: ExpenseOrderStatus.CREATED,
+        returnedForCorrectionById,
+        returnedForCorrectionAt: new Date(),
+        returnedForCorrectionReason: reason,
       },
     });
     return count === 1;

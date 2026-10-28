@@ -55,6 +55,7 @@ import {
   Block as BlockIcon,
   DeleteOutline as DeleteOutlineIcon,
   UploadFile as UploadFileIcon,
+  Undo as UndoIcon,
 } from '@mui/icons-material';
 import {
   computeExpenseTotals,
@@ -184,6 +185,7 @@ export const ExpenseOrderDetailPage = () => {
     updateStatusMutation,
     addExpenseItemMutation,
     cajaAuthorizeMutation,
+    returnForCorrectionMutation,
     deleteExpenseOrderMutation,
   } = useExpenseOrder(id);
   const { suppliersQuery } = useSuppliers();
@@ -248,6 +250,10 @@ export const ExpenseOrderDetailPage = () => {
   const [invoiceLoading, setInvoiceLoading] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
+  // ── Devolver a corrección ─────────────────────────────────────────────────────
+  const [returnDialogOpen, setReturnDialogOpen] = useState(false);
+  const [returnReason, setReturnReason] = useState('');
+
   const canUpdate = hasPermission(PERMISSIONS.UPDATE_EXPENSE_ORDERS);
   const canApprove = hasPermission(PERMISSIONS.APPROVE_EXPENSE_ORDERS);
   const canCajaAuthorize = hasPermission(PERMISSIONS.CAJA_AUTHORIZE_EXPENSE_ORDERS);
@@ -261,10 +267,11 @@ export const ExpenseOrderDetailPage = () => {
   const signedAsAdmin = !!og?.authorizedById && og.authorizedById === currentUser?.id;
 
   // Mismos estados que acepta el backend: mientras nadie haya firmado la OG.
-  // Debe coincidir con `DELETABLE_STATUSES` del servicio y de la lista.
+  // Una que el admin ya firmó y volvió a Creada (devuelta a corrección o
+  // rechazada por Caja) tampoco. Debe coincidir con `remove` del servicio y con la lista.
   const isDeletable =
-    og?.status === ExpenseOrderStatus.DRAFT ||
-    og?.status === ExpenseOrderStatus.CREATED;
+    !og?.authorizedAt &&
+    (og?.status === ExpenseOrderStatus.DRAFT || og?.status === ExpenseOrderStatus.CREATED);
 
   // ── Cola de aprobación ("revisar y siguiente") ────────────────────────────────
   const queryClient = useQueryClient();
@@ -428,6 +435,13 @@ export const ExpenseOrderDetailPage = () => {
     parseFloat(itemForm.quantity) > 0 &&
     parseCurrencyInput(itemForm.unitPrice) > 0;
 
+  const handleReturnForCorrection = useSingleFlight(async () => {
+    if (!id || returnReason.trim().length < 5) return;
+    await returnForCorrectionMutation.mutateAsync({ id, reason: returnReason.trim() });
+    setReturnDialogOpen(false);
+    setReturnReason('');
+  });
+
   const handleDelete = useSingleFlight(async () => {
     if (!id) return;
     await deleteExpenseOrderMutation.mutateAsync(id);
@@ -565,6 +579,20 @@ export const ExpenseOrderDetailPage = () => {
   const isEditable =
     !isParentOrderAnulado &&
     (og.status === ExpenseOrderStatus.DRAFT || og.status === ExpenseOrderStatus.CREATED);
+  // Una OG con la firma del admin no se edita: se devuelve a corrección y el
+  // admin vuelve a firmar. Lo hace quien la creó o Caja (el backend lo revalida).
+  const isCreator = !!currentUser?.id && og.createdBy?.id === currentUser.id;
+  const canReturnForCorrection =
+    og.status === ExpenseOrderStatus.ADMIN_AUTHORIZED &&
+    !isParentOrderAnulado &&
+    canUpdate &&
+    (isCreator || canCajaAuthorize);
+  // En CREATED se muestra el motivo más reciente: el rechazo de Caja o la
+  // devolución a corrección.
+  const showReturnedBanner =
+    !!og.returnedForCorrectionReason &&
+    (!og.cajaRejectedAt ||
+      new Date(og.returnedForCorrectionAt ?? 0) > new Date(og.cajaRejectedAt));
   const canRegisterInvoice =
     !isParentOrderAnulado && canUpdate && og.status !== ExpenseOrderStatus.DRAFT;
 
@@ -652,6 +680,33 @@ export const ExpenseOrderDetailPage = () => {
         }
 
         if (og.status === ExpenseOrderStatus.CREATED) {
+          if (showReturnedBanner) {
+            return (
+              <Alert
+                severity="warning"
+                icon={<UndoIcon />}
+                sx={{ mt: 2, borderLeft: '4px solid', borderColor: 'warning.main' }}
+              >
+                <AlertTitle>Devuelta a corrección — se requiere nueva firma del admin</AlertTitle>
+                <Box sx={{ mb: 0.5 }}>
+                  <strong>Qué hay que corregir:</strong> {og.returnedForCorrectionReason}
+                </Box>
+                {og.returnedForCorrectionBy && (
+                  <Box sx={{ mb: 0.5 }}>
+                    <strong>Devuelta por:</strong> {userName(og.returnedForCorrectionBy)}
+                  </Box>
+                )}
+                {!canApprove && (
+                  <Box sx={{ mt: 0.5 }}>
+                    Usa <strong>Editar</strong> para corregirla y luego{' '}
+                    <strong>Solicitar Autorización</strong> para que el administrador la vuelva a
+                    firmar.
+                  </Box>
+                )}
+              </Alert>
+            );
+          }
+
           // Banner de rechazo por Caja (tiene prioridad sobre los demás en estado CREATED)
           if (og.cajaRejectionReason) {
             return (
@@ -724,9 +779,10 @@ export const ExpenseOrderDetailPage = () => {
             return (
               <Alert severity="success" icon={<PaymentsIcon />} sx={{ mt: 2 }}>
                 <AlertTitle>Requiere tu firma de Caja</AlertTitle>
-                El administrador ya aprobó esta OG. Haz clic en el botón{' '}
-                <strong>Autorizar (Firma Caja)</strong> para registrar el pago y descontarlo
-                automáticamente de la caja activa.
+                El administrador ya aprobó esta OG. Revisa que los valores coincidan con la
+                factura y haz clic en <strong>Autorizar (Firma Caja)</strong> para registrar el
+                pago y descontarlo automáticamente de la caja activa. Si algo no cuadra, usa{' '}
+                <strong>Devolver a corrección</strong> antes de pagar.
               </Alert>
             );
           }
@@ -735,7 +791,14 @@ export const ExpenseOrderDetailPage = () => {
               <AlertTitle>Esperando firma de Caja</AlertTitle>
               El administrador aprobó esta OG. Está pendiente de que el área de{' '}
               <strong>Caja</strong> dé la firma final para procesar el pago.
-              No se requiere ninguna acción de tu parte en este momento.
+              {canReturnForCorrection ? (
+                <>
+                  {' '}Si encontraste un error, usa <strong>Devolver a corrección</strong> antes de
+                  que Caja la pague.
+                </>
+              ) : (
+                ' No se requiere ninguna acción de tu parte en este momento.'
+              )}
             </Alert>
           );
         }
@@ -870,6 +933,18 @@ export const ExpenseOrderDetailPage = () => {
                   : 'Segunda firma Caja — registra el pago'
               }
               disabled={cajaAuthorizeMutation.isPending || signedAsAdmin}
+            />
+          )}
+
+          {canReturnForCorrection && (
+            <ToolbarButton
+              icon={<UndoIcon />}
+              label="Devolver"
+              secondaryLabel="a corrección"
+              onClick={() => setReturnDialogOpen(true)}
+              color={theme.palette.warning.main}
+              tooltip="Tiene un error: vuelve a «Creada» para corregirla y necesita otra firma del admin"
+              disabled={returnForCorrectionMutation.isPending || cajaAuthorizeMutation.isPending}
             />
           )}
 
@@ -1451,6 +1526,61 @@ export const ExpenseOrderDetailPage = () => {
         expenseOrderId={og.id}
         item={attachReceiptItem}
       />
+
+      {/* ── Devolver a corrección ─────────────────────────────────────────────── */}
+      <Dialog
+        open={returnDialogOpen}
+        onClose={() => !returnForCorrectionMutation.isPending && setReturnDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          <Stack direction="row" spacing={1} alignItems="center">
+            <UndoIcon color="warning" />
+            <span>Devolver {og.ogNumber} a corrección</span>
+          </Stack>
+        </DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <Typography variant="body2" color="text.secondary">
+              La OG vuelve a <strong>Creada</strong> para que se pueda editar. La firma del
+              administrador deja de valer: después de corregirla hay que solicitar su autorización
+              otra vez. Se le avisará al administrador
+              {isCreator ? '' : ' y a quien creó la OG'}.
+            </Typography>
+            <TextField
+              fullWidth
+              multiline
+              minRows={2}
+              label="¿Qué hay que corregir?"
+              value={returnReason}
+              onChange={(e) => setReturnReason(e.target.value)}
+              placeholder="Ej: el ítem 3 no coincide con el valor de la factura"
+              helperText="Mínimo 5 caracteres"
+              disabled={returnForCorrectionMutation.isPending}
+              autoFocus
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => setReturnDialogOpen(false)}
+            disabled={returnForCorrectionMutation.isPending}
+          >
+            Cancelar
+          </Button>
+          <LoadingButton
+            loading={returnForCorrectionMutation.isPending}
+            onClick={handleReturnForCorrection}
+            variant="contained"
+            color="warning"
+            disabled={returnReason.trim().length < 5}
+            startIcon={<UndoIcon />}
+          >
+            Devolver a corrección
+          </LoadingButton>
+        </DialogActions>
+      </Dialog>
 
       {/* ── Electronic invoice dialog ────────────────────────────────────────── */}
       <Dialog open={invoiceDialogOpen} onClose={handleCloseInvoiceDialog} maxWidth="sm" fullWidth>

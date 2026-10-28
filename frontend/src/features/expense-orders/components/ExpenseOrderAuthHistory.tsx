@@ -20,6 +20,7 @@ import {
   AdminPanelSettings as AdminPanelSettingsIcon,
   Payments as PaymentsIcon,
   Block as BlockIcon,
+  Undo as UndoIcon,
 } from '@mui/icons-material';
 import { expenseOrderAuthRequestsApi } from '../../../api/expense-order-auth-requests.api';
 import { expenseOrderEditRequestsApi } from '../../../api/expense-order-edit-requests.api';
@@ -39,7 +40,8 @@ type EventKind =
   | 'REQUEST_REJECTED'
   | 'ADMIN_AUTH'
   | 'CAJA_AUTH'
-  | 'CAJA_REJECT';
+  | 'CAJA_REJECT'
+  | 'RETURNED_FOR_CORRECTION';
 
 interface TimelineEvent {
   key: string;
@@ -118,6 +120,12 @@ const KIND_CONFIG: Record<
     color: 'error',
     icon: <BlockIcon fontSize="small" />,
     dotBg: '#c62828',
+  },
+  RETURNED_FOR_CORRECTION: {
+    label: 'Devuelta a corrección',
+    color: 'warning',
+    icon: <UndoIcon fontSize="small" />,
+    dotBg: '#e65100',
   },
 };
 
@@ -285,6 +293,20 @@ export const ExpenseOrderAuthHistory: React.FC<
         title: 'Rechazó la OG desde Caja.',
         detail: expenseOrder.cajaRejectionReason
           ? `Motivo: ${expenseOrder.cajaRejectionReason}`
+          : null,
+      });
+    }
+
+    // 5. Devuelta a corrección después de la firma del admin
+    if (expenseOrder.returnedForCorrectionBy && expenseOrder.returnedForCorrectionAt) {
+      list.push({
+        key: 'returned-for-correction',
+        timestamp: expenseOrder.returnedForCorrectionAt,
+        kind: 'RETURNED_FOR_CORRECTION',
+        user: expenseOrder.returnedForCorrectionBy,
+        title: 'Devolvió la OG a corrección: necesita otra firma del admin.',
+        detail: expenseOrder.returnedForCorrectionReason
+          ? `Motivo: ${expenseOrder.returnedForCorrectionReason}`
           : null,
       });
     }

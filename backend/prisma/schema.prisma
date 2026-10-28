@@ -66,6 +66,7 @@ model User {
   authorizedExpenseOrders                   ExpenseOrder[]                         @relation("AuthorizedExpenseOrders")
   cajaAuthorizedExpenseOrders               ExpenseOrder[]                         @relation("CajaAuthorizedExpenseOrders")
   cajaRejectedExpenseOrders                 ExpenseOrder[]                         @relation("CajaRejectedExpenseOrders")
+  returnedForCorrectionExpenseOrders        ExpenseOrder[]                         @relation("ReturnedForCorrectionExpenseOrders")
   responsibleExpenseOrders                  ExpenseOrder[]                         @relation("ResponsibleExpenseOrders")
   createdExpenseOrders                      ExpenseOrder[]                         @relation("CreatedExpenseOrders")
   approvedExpenseOrders                     ExpenseOrder[]                         @relation("ApprovedExpenseOrders")
@@ -1130,6 +1131,7 @@ enum NotificationType {
   EXPENSE_ORDER_AUTH_REQUEST_APPROVED // Solicitud de autorización de OG aprobada
   EXPENSE_ORDER_AUTH_REQUEST_REJECTED // Solicitud de autorización de OG rechazada
   EXPENSE_ORDER_PENDING_CAJA // OG con firma del admin, pendiente de autorización de Caja
+  EXPENSE_ORDER_RETURNED_FOR_CORRECTION // OG firmada por el admin que se devolvió a corrección
   EXPENSE_ORDER_EDIT_REQUEST_PENDING // Nueva solicitud de edición de OG pagada
   EXPENSE_ORDER_EDIT_REQUEST_APPROVED // Edición de OG pagada aprobada
   EXPENSE_ORDER_EDIT_REQUEST_REJECTED // Edición de OG pagada rechazada
@@ -1719,7 +1721,7 @@ model ExpenseOrder {
   // Máquina opcional, de las del área elegida en `areaOrMachine` (lo filtra el
   // formulario; la base no lo amarra porque el área se guarda por nombre).
   machineId            String?            @map("machine_id")
-  applyIva            Boolean            @default(false) @map("apply_iva")
+  applyIva             Boolean            @default(false) @map("apply_iva")
   ivaRate              Decimal            @default(0.19) @map("iva_rate")
   // Retenciones que la empresa le practica al proveedor: bajan lo que hay que
   // pagarle. Mismas bases que en la OP (retefuente/ReteICA sobre el subtotal,
@@ -1758,25 +1760,32 @@ model ExpenseOrder {
   cajaRejectedAt      DateTime? @map("caja_rejected_at")
   cajaRejectionReason String?   @map("caja_rejection_reason")
 
+  // Devuelta a corrección: quien la creó o Caja la saca de ADMIN_AUTHORIZED
+  // porque tiene un error. Vuelve a CREATED y necesita otra firma del admin.
+  returnedForCorrectionById   String?   @map("returned_for_correction_by_id")
+  returnedForCorrectionAt     DateTime? @map("returned_for_correction_at")
+  returnedForCorrectionReason String?   @map("returned_for_correction_reason")
+
   // Relaciones
-  expenseType        ExpenseType               @relation(fields: [expenseTypeId], references: [id])
-  expenseSubcategory ExpenseSubcategory        @relation(fields: [expenseSubcategoryId], references: [id])
-  workOrder          WorkOrder?                @relation(fields: [workOrderId], references: [id])
-  machine            Machine?                  @relation(fields: [machineId], references: [id], onDelete: SetNull)
+  expenseType             ExpenseType                 @relation(fields: [expenseTypeId], references: [id])
+  expenseSubcategory      ExpenseSubcategory          @relation(fields: [expenseSubcategoryId], references: [id])
+  workOrder               WorkOrder?                  @relation(fields: [workOrderId], references: [id])
+  machine                 Machine?                    @relation(fields: [machineId], references: [id], onDelete: SetNull)
   // La migración la creó con `RESTRICT`, no con el `SET NULL` que Prisma
   // asume por defecto en una relación opcional.
-  authorizedTo       User?                     @relation("AuthorizedExpenseOrders", fields: [authorizedToId], references: [id], onDelete: Restrict)
-  responsible        User?                     @relation("ResponsibleExpenseOrders", fields: [responsibleId], references: [id])
-  createdBy          User                      @relation("CreatedExpenseOrders", fields: [createdById], references: [id])
-  authorizedBy       User?                     @relation("ApprovedExpenseOrders", fields: [authorizedById], references: [id])
-  cajaAuthorizedBy   User?                     @relation("CajaAuthorizedExpenseOrders", fields: [cajaAuthorizedById], references: [id])
-  cajaRejectedBy     User?                     @relation("CajaRejectedExpenseOrders", fields: [cajaRejectedById], references: [id])
-  items              ExpenseOrderItem[]
+  authorizedTo            User?                       @relation("AuthorizedExpenseOrders", fields: [authorizedToId], references: [id], onDelete: Restrict)
+  responsible             User?                       @relation("ResponsibleExpenseOrders", fields: [responsibleId], references: [id])
+  createdBy               User                        @relation("CreatedExpenseOrders", fields: [createdById], references: [id])
+  authorizedBy            User?                       @relation("ApprovedExpenseOrders", fields: [authorizedById], references: [id])
+  cajaAuthorizedBy        User?                       @relation("CajaAuthorizedExpenseOrders", fields: [cajaAuthorizedById], references: [id])
+  cajaRejectedBy          User?                       @relation("CajaRejectedExpenseOrders", fields: [cajaRejectedById], references: [id])
+  returnedForCorrectionBy User?                       @relation("ReturnedForCorrectionExpenseOrders", fields: [returnedForCorrectionById], references: [id])
+  items                   ExpenseOrderItem[]
   // Ítems de la OT a los que aplica el gasto. Vacío = gasto de toda la OT.
-  workOrderItems     ExpenseOrderWorkOrderItem[]
-  authRequests       ExpenseOrderAuthRequest[]
-  editRequests       ExpenseOrderEditRequest[]
-  accountPayable     AccountPayable?
+  workOrderItems          ExpenseOrderWorkOrderItem[]
+  authRequests            ExpenseOrderAuthRequest[]
+  editRequests            ExpenseOrderEditRequest[]
+  accountPayable          AccountPayable?
 
   // Sede (solo Zoom, docs/PLAN_SEDES.md). La filtra la extensión location-scope.
   locationId String   @map("location_id")

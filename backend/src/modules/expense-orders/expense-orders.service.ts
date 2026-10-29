@@ -261,6 +261,7 @@ export class ExpenseOrdersService {
           authorizedToId: dto.authorizedToId,
           responsibleId: dto.responsibleId,
           observations: dto.observations,
+          comments: dto.comments,
           areaOrMachine: dto.areaOrMachine,
           machineId: dto.machineId,
           applyIva: dto.applyIva ?? false,

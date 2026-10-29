@@ -298,6 +298,8 @@ export const ExpenseOrderFormPage = () => {
   const [authorizedToId, setAuthorizedToId] = useState('');
   const [responsibleId, setResponsibleId] = useState('');
   const [observations, setObservations] = useState('');
+  // Paso 4: comentarios del cliente sobre la OG.
+  const [comments, setComments] = useState('');
   const [areaOrMachine, setAreaOrMachine] = useState('');
   const [machineId, setMachineId] = useState('');
 
@@ -527,6 +529,7 @@ export const ExpenseOrderFormPage = () => {
       setAuthorizedToId(existingOG.authorizedTo?.id ?? '');
       setResponsibleId(existingOG.responsible?.id ?? '');
       setObservations(existingOG.observations ?? '');
+      setComments(existingOG.comments ?? '');
       setAreaOrMachine(existingOG.areaOrMachine ?? '');
       setMachineId(existingOG.machine?.id ?? '');
       setApplyIva(existingOG.applyIva ?? false);
@@ -904,6 +907,8 @@ export const ExpenseOrderFormPage = () => {
     authorizedToId: authorizedToId || undefined,
     responsibleId: responsibleId || undefined,
     observations: observations || undefined,
+    // En edición se manda vacío para poder borrar el comentario.
+    comments: comments.trim() || (isEditing ? '' : undefined),
     areaOrMachine: areaOrMachine || undefined,
     machineId: machineId || null,
     applyIva,
@@ -1764,6 +1769,17 @@ export const ExpenseOrderFormPage = () => {
           </Stack>
         </CardContent>
       </Card>
+
+      <TextField
+        label="Comentarios (opcional)"
+        placeholder="Comentarios acerca de esta OG..."
+        value={comments}
+        onChange={(e) => setComments(e.target.value)}
+        multiline
+        minRows={3}
+        fullWidth
+        inputProps={{ maxLength: 2000 }}
+      />
 
       {!isStep1Valid && (
         <Alert severity="warning">Completa el paso 1: tipo y subcategoría de gasto.</Alert>

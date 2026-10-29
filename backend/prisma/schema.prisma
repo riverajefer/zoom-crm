@@ -1717,6 +1717,9 @@ model ExpenseOrder {
   authorizedToId       String?            @map("authorized_to_id") // Usuario autorizado (opcional)
   responsibleId        String?            @map("responsible_id") // Responsable (opcional)
   observations         String?
+  // Comentarios del cliente sobre la OG, que se dejan al confirmarla (paso 4
+  // del formulario). Aparte de `observations`, que es de la autorización.
+  comments             String?
   areaOrMachine        String?            @map("area_or_machine")
   // Máquina opcional, de las del área elegida en `areaOrMachine` (lo filtra el
   // formulario; la base no lo amarra porque el área se guarda por nombre).

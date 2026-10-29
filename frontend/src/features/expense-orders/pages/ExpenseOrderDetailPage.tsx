@@ -1062,6 +1062,16 @@ export const ExpenseOrderDetailPage = () => {
                   </Typography>
                 </>
               )}
+
+              {og.comments && (
+                <>
+                  <Divider sx={{ my: 2 }} />
+                  <Typography variant="caption" color="text.secondary">Comentarios</Typography>
+                  <Typography variant="body2" sx={{ mt: 0.5, whiteSpace: 'pre-line' }}>
+                    {og.comments}
+                  </Typography>
+                </>
+              )}
             </CardContent>
           </Card>
 

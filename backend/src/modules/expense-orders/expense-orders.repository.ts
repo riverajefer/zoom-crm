@@ -16,6 +16,7 @@ export class ExpenseOrdersRepository {
     location: { select: LOCATION_SUMMARY_SELECT },
     status: true,
     observations: true,
+    comments: true,
     areaOrMachine: true,
     machine: { select: { id: true, name: true } },
     applyIva: true,
@@ -223,6 +224,7 @@ export class ExpenseOrdersRepository {
     authorizedToId?: string;
     responsibleId?: string;
     observations?: string;
+    comments?: string;
     areaOrMachine?: string;
     machineId?: string | null;
     applyIva?: boolean;
@@ -298,6 +300,7 @@ export class ExpenseOrdersRepository {
       authorizedToId?: string;
       responsibleId?: string | null;
       observations?: string;
+      comments?: string;
       areaOrMachine?: string;
       machineId?: string | null;
       applyIva?: boolean;

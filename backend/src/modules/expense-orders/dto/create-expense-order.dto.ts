@@ -124,6 +124,12 @@ export class CreateExpenseOrderDto {
   @IsOptional()
   observations?: string;
 
+  @ApiPropertyOptional({ description: 'Comentarios sobre la OG' })
+  @IsString()
+  @IsOptional()
+  @MaxLength(2000)
+  comments?: string;
+
   @ApiPropertyOptional({ description: 'Área encargada o máquina' })
   @IsString()
   @IsOptional()

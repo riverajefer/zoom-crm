@@ -1140,15 +1140,36 @@ export const ExpenseOrderDetailPage = () => {
                         <strong>{formatCurrency(item.total)}</strong>
                       </TableCell>
                       <TableCell>
-                        <Chip
-                          label={PAYMENT_METHOD_LABELS[item.paymentMethod]}
-                          size="small"
-                          variant="outlined"
-                        />
-                        {item.paymentMethod === PaymentMethod.TRANSFER && item.bankEntity && (
-                          <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>
-                            {item.bankEntity}
-                          </Typography>
+                        {item.payments?.length ? (
+                          <Stack spacing={0.5} alignItems="flex-start">
+                            {item.payments.map((payment) => (
+                              <Box key={payment.id}>
+                                <Chip
+                                  label={`${PAYMENT_METHOD_LABELS[payment.paymentMethod]} ${formatCurrency(payment.amount)}`}
+                                  size="small"
+                                  variant="outlined"
+                                />
+                                {payment.bankEntity && (
+                                  <Typography variant="caption" color="text.secondary" display="block">
+                                    {payment.bankEntity}
+                                  </Typography>
+                                )}
+                              </Box>
+                            ))}
+                          </Stack>
+                        ) : (
+                          <>
+                            <Chip
+                              label={PAYMENT_METHOD_LABELS[item.paymentMethod]}
+                              size="small"
+                              variant="outlined"
+                            />
+                            {item.paymentMethod === PaymentMethod.TRANSFER && item.bankEntity && (
+                              <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>
+                                {item.bankEntity}
+                              </Typography>
+                            )}
+                          </>
                         )}
                       </TableCell>
                       <TableCell>{item.supplier?.name ?? '—'}</TableCell>

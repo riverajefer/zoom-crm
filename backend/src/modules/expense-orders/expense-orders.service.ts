@@ -15,6 +15,7 @@ import {
   CajaRejectExpenseOrderDto,
   CreateExpenseItemDto,
   CreateExpenseOrderDto,
+  ExpenseItemPaymentDto,
   FilterExpenseOrdersDto,
   ReturnExpenseOrderForCorrectionDto,
   UpdateExpenseOrderDto,
@@ -29,6 +30,8 @@ import { NotificationsService } from '../notifications/notifications.service';
 import {
   allocateExpenseTotalToItems,
   computeExpenseTotals,
+  ExpenseWithholdingRates,
+  findItemPaymentMismatch,
 } from '../../common/utils/expense-totals.util';
 import { normalizeRate } from '../../common/utils/rounding.util';
 import {
@@ -37,6 +40,16 @@ import {
 } from '../cash-session/active-cash-session.util';
 import { requireActiveLocationId } from '../../common/utils/location-context';
 import { paymentMovesCash } from '../../common/utils/payment-method.util';
+
+/** Una OG con muchos ítems genera un egreso y un consecutivo por cada uno. */
+const CAJA_AUTHORIZE_TX_TIMEOUT_MS = 20_000;
+
+/** Egreso que crea la autorización de Caja. `paymentId` = línea de un pago mixto. */
+interface CashOut {
+  amount: number | Prisma.Decimal;
+  paymentMethod: PaymentMethod;
+  paymentId: string | null;
+}
 
 /** Egreso de caja de un ítem pagado cuyo método hay que corregir. */
 interface PaymentCorrection {
@@ -86,6 +99,50 @@ function withLineWorkOrderItems(
     if (line.workOrderItemId) ids.add(line.workOrderItemId);
   }
   return ids.size ? [...ids] : workOrderItemIds;
+}
+
+/**
+ * Método de pago de un ítem tal como se guarda. Un pago mixto son dos líneas de
+ * métodos distintos; el ítem lleva el método de la primera para que lo que lee
+ * un solo método siga funcionando. El crédito no entra: no es dinero que salga.
+ */
+function itemPaymentFields(
+  item: {
+    paymentMethod?: PaymentMethod;
+    bankEntity?: string;
+    payments?: ExpenseItemPaymentDto[];
+  },
+  index: number,
+) {
+  const lines = item.payments ?? [];
+  if (lines.length === 0) {
+    return {
+      paymentMethod: item.paymentMethod ?? PaymentMethod.CASH,
+      bankEntity: item.bankEntity,
+    };
+  }
+
+  if (lines.length !== 2 || lines[0].paymentMethod === lines[1].paymentMethod) {
+    throw new BadRequestException(
+      `El pago mixto del ítem ${index + 1} debe tener dos métodos de pago distintos.`,
+    );
+  }
+  if (lines.some((line) => !paymentMovesCash(line.paymentMethod))) {
+    throw new BadRequestException(
+      `El pago mixto del ítem ${index + 1} no admite crédito: cada parte debe salir como dinero.`,
+    );
+  }
+
+  const payments = lines.map((line) => ({
+    paymentMethod: line.paymentMethod,
+    amount: line.amount,
+    bankEntity: line.paymentMethod === PaymentMethod.TRANSFER ? line.bankEntity ?? null : null,
+  }));
+  return {
+    paymentMethod: payments[0].paymentMethod,
+    bankEntity: payments[0].bankEntity ?? undefined,
+    payments,
+  };
 }
 
 @Injectable()
@@ -170,6 +227,19 @@ export class ExpenseOrdersService {
     }).total;
   }
 
+  /** Cada pago mixto tiene que sumar lo que su ítem paga del total de la OG. */
+  private assertItemPaymentsCoverShares(
+    items: Parameters<typeof findItemPaymentMismatch>[0],
+    rates: ExpenseWithholdingRates,
+  ) {
+    const mismatch = findItemPaymentMismatch(items, rates);
+    if (mismatch) {
+      throw new BadRequestException(
+        `El pago mixto del ítem ${mismatch.index + 1} suma ${formatMoney(mismatch.paid)} y a ese ítem le corresponden ${formatMoney(mismatch.expected)}. Ajusta la división del pago.`,
+      );
+    }
+  }
+
   async create(
     dto: CreateExpenseOrderDto,
     createdById: string,
@@ -232,14 +302,20 @@ export class ExpenseOrdersService {
       supplierId: item.supplierId,
       unitPrice: item.unitPrice,
       total: item.quantity * item.unitPrice,
-      paymentMethod: item.paymentMethod,
-      bankEntity: item.bankEntity,
+      ...itemPaymentFields(item, index),
       receiptFileId: item.receiptFileId,
       referenceFileId: item.referenceFileId,
       productionAreaIds: item.productionAreaIds,
       workOrderItemId: item.workOrderItemId ?? null,
       sortOrder: index,
     }));
+    this.assertItemPaymentsCoverShares(itemsData, {
+      applyIva: dto.applyIva ?? false,
+      ivaRate: dto.ivaRate ?? 0.19,
+      retefuenteRate: normalizeRate(dto.retefuenteRate).toNumber(),
+      reteICARate: normalizeRate(dto.reteICARate).toNumber(),
+      reteIVARate: dto.reteIVARate ?? 0,
+    });
 
     // Reintento en caso de colisión de consecutivo
     const maxAttempts = 3;
@@ -460,6 +536,7 @@ export class ExpenseOrdersService {
       paymentMethod: string;
       bankEntity: string | null;
       receiptFileId: string | null;
+      payments?: Array<{ paymentMethod: string; amount: unknown }>;
     }>,
     incoming: UpdateExpenseOrderDto['items'],
   ): Promise<PaymentCorrection[]> {
@@ -471,6 +548,14 @@ export class ExpenseOrdersService {
       );
     }
 
+    // La diferencia de una OG pagada se paga desde su CP, no con un pago mixto.
+    if (incoming.slice(existing.length).some((item) => item.payments?.length)) {
+      throw new BadRequestException(
+        'Un ítem agregado a una OG pagada no lleva pago mixto: la diferencia se paga desde su CP.',
+      );
+    }
+
+    const hasMixedPayment = existing.some((item) => item.payments?.length);
     const movements = await this.paidItemMovements(expenseOrderId);
     const correctable = this.paymentCorrectableCount(existing, movements);
     const corrections: PaymentCorrection[] = [];
@@ -489,7 +574,33 @@ export class ExpenseOrdersService {
         );
       }
 
+      const paidLines = item.payments ?? [];
+      const nextLines = next.payments ?? [];
+      const linesChanged =
+        nextLines.length > 0 &&
+        (nextLines.length !== paidLines.length ||
+          nextLines.some(
+            (line, lineIndex) =>
+              line.paymentMethod !== paidLines[lineIndex].paymentMethod ||
+              line.amount !== Number(paidLines[lineIndex].amount),
+          ));
+
+      if (linesChanged) {
+        throw new BadRequestException(
+          `El ítem ${index + 1} ya se pagó: no se puede cambiar la división de su pago.`,
+        );
+      }
+
+      // Las líneas ya pagadas se conservan tal cual: lo que diga el ítem no las toca.
+      if (paidLines.length > 0) return;
+
       if (!methodChanged && !bankChanged) return;
+
+      if (hasMixedPayment) {
+        throw new BadRequestException(
+          `El ítem ${index + 1} es de una OG con pago mixto ya pagada: no se puede cambiar su método de pago ni banco.`,
+        );
+      }
 
       if (index >= correctable) {
         throw new BadRequestException(
@@ -515,9 +626,10 @@ export class ExpenseOrdersService {
   }
 
   /**
-   * Egresos de caja que generó la autorización de Caja de la OG, uno por ítem y
-   * en el orden de los ítems: `cajaAuthorize` los crea en ese orden y es el
-   * único camino que escribe egresos con referencia a la OG.
+   * Egresos de caja que generó la autorización de Caja de la OG, en el orden de
+   * los ítems: `cajaAuthorize` los crea en ese orden y es el único camino que
+   * escribe egresos con referencia a la OG. Son uno por ítem, salvo con pago
+   * mixto, y por eso ahí no se empareja por posición.
    */
   private paidItemMovements(expenseOrderId: string) {
     return this.prisma.cashMovement.findMany({
@@ -541,14 +653,17 @@ export class ExpenseOrdersService {
    * Los ítems agregados al editar la OG ya pagada van al final y no tienen
    * egreso, así que hay a lo sumo un egreso por ítem. Si hay más egresos que
    * ítems (OG viejas, movimientos manuales), no se sabe cuál es de cuál y no se
-   * corrige nada. Todos salieron en la misma autorización, así que la caja
-   * está abierta para todos o para ninguno.
+   * corrige nada. Tampoco con pago mixto: un ítem tiene dos egresos y agregar
+   * otro ítem haría que la posición apuntara al egreso equivocado. Todos
+   * salieron en la misma autorización, así que la caja está abierta para todos
+   * o para ninguno.
    */
   private paymentCorrectableCount(
-    items: Array<{ paymentMethod: string }>,
+    items: Array<{ paymentMethod: string; payments?: unknown[] }>,
     movements: Array<{ paymentMethod: string; cashSession: { status: string } | null }>,
   ): number {
     if (movements.length === 0 || movements.length > items.length) return 0;
+    if (items.some((item) => item.payments?.length)) return 0;
 
     const consistent = movements.every(
       (movement, index) =>
@@ -693,6 +808,46 @@ export class ExpenseOrdersService {
 
     const { items, workOrderItemIds: _, ...scalarData } = dto;
 
+    // Se arma antes de escribir: un pago mixto inválido no deja la OG a medias.
+    const itemsData = items?.map((item, index) => {
+      // Lo pagado por líneas se conserva con su egreso (ver `assertPaidItemsKeepPayment`).
+      const paid = isPaidEdit ? expenseOrder.items[index] : undefined;
+      const payment = paid?.payments?.length
+        ? {
+            paymentMethod: paid.paymentMethod,
+            bankEntity: paid.bankEntity ?? undefined,
+            payments: paid.payments,
+          }
+        : itemPaymentFields(item, index);
+
+      return {
+        quantity: item.quantity ?? 1,
+        name: item.name ?? '',
+        description: item.description,
+        supplierId: item.supplierId,
+        unitPrice: item.unitPrice ?? 0,
+        total: (item.quantity ?? 1) * (item.unitPrice ?? 0),
+        ...payment,
+        receiptFileId: item.receiptFileId,
+        referenceFileId: item.referenceFileId,
+        productionAreaIds: item.productionAreaIds,
+        workOrderItemId: item.workOrderItemId ?? null,
+        sortOrder: index,
+      };
+    });
+
+    // En una OG pagada las líneas ya salieron de caja: si el total sube, la
+    // diferencia queda en la CP y esas líneas no tienen por qué sumarlo.
+    if (!isPaidEdit) {
+      this.assertItemPaymentsCoverShares(itemsData?.length ? itemsData : expenseOrder.items, {
+        applyIva: dto.applyIva ?? expenseOrder.applyIva,
+        ivaRate: dto.ivaRate ?? expenseOrder.ivaRate,
+        retefuenteRate: dto.retefuenteRate ?? expenseOrder.retefuenteRate,
+        reteICARate: dto.reteICARate ?? expenseOrder.reteICARate,
+        reteIVARate: dto.reteIVARate ?? expenseOrder.reteIVARate,
+      });
+    }
+
     // Update scalar fields
     if (Object.keys(scalarData).length > 0) {
       await this.repository.update(id, scalarData);
@@ -708,23 +863,7 @@ export class ExpenseOrdersService {
     }
 
     // Replace items if provided
-    if (items && items.length > 0) {
-      const itemsData = items.map((item, index) => ({
-        quantity: item.quantity ?? 1,
-        name: item.name ?? '',
-        description: item.description,
-        supplierId: item.supplierId,
-        unitPrice: item.unitPrice ?? 0,
-        total: (item.quantity ?? 1) * (item.unitPrice ?? 0),
-        paymentMethod: item.paymentMethod ?? 'CASH',
-        bankEntity: item.bankEntity,
-        receiptFileId: item.receiptFileId,
-        referenceFileId: item.referenceFileId,
-        productionAreaIds: item.productionAreaIds,
-      workOrderItemId: item.workOrderItemId ?? null,
-        sortOrder: index,
-      }));
-
+    if (itemsData && itemsData.length > 0) {
       if (paymentCorrections.length > 0) {
         // El ítem y su egreso cambian de método juntos o ninguno.
         await this.prisma.$transaction(async (tx) => {
@@ -817,6 +956,16 @@ export class ExpenseOrdersService {
     await this.assertWorkOrderItemsBelongTo(
       expenseOrder.workOrder?.id,
       dto.workOrderItemId ? [dto.workOrderItemId] : undefined,
+    );
+
+    if (dto.payments?.length) {
+      throw new BadRequestException('El pago mixto se define al editar la OG, no al agregar un ítem.');
+    }
+    // El reparto es proporcional, pero el redondeo a peso entero puede mover un
+    // peso entre ítems y dejar sin cuadrar un pago mixto que ya existía.
+    this.assertItemPaymentsCoverShares(
+      [...expenseOrder.items, { total: dto.quantity * dto.unitPrice }],
+      expenseOrder,
     );
 
     // Compute sortOrder as next after existing items
@@ -998,23 +1147,7 @@ export class ExpenseOrdersService {
         'No hay una sesión de caja abierta. Abre la caja y vuelve a autorizar la OG.',
       );
     }
-    for (const item of expenseOrder.items) {
-      assertCashSessionNotCounting(activeSession, item.paymentMethod || 'CASH');
-    }
 
-    await this.assertNotPaidThroughAccountPayable(expenseOrder.id, expenseOrder.ogNumber);
-
-    // Registrar autorización de Caja. La transición es condicionada: si otra
-    // autorización simultánea ya la tomó, esta sale sin crear los egresos otra vez.
-    const claimed = await this.repository.claimCajaAuthorization(id, currentUser.id);
-    if (!claimed) {
-      throw new ConflictException(
-        `La OG ${expenseOrder.ogNumber} ya fue autorizada por Caja. Refresca la página para ver el estado actual.`,
-      );
-    }
-
-    // Crear movimientos de caja + auto-transición a PAID.
-    //
     // Cada egreso lleva su parte del total a pagar (con IVA y menos
     // retenciones), no solo la base del ítem: es lo que Caja entrega al ver la
     // OG. Con la base, el cajón quedaba corto por el IVA en cada OG con IVA.
@@ -1027,27 +1160,77 @@ export class ExpenseOrdersService {
       expenseOrder,
     );
 
-    for (const [index, item] of expenseOrder.items.entries()) {
-      const receiptNumber = await this.consecutivesService.generateNumber(
-        'CASH_RECEIPT',
-        expenseOrder.locationId,
-      );
-      await this.prisma.cashMovement.create({
-        data: {
-          amount: itemAmounts[index],
-          movementType: 'EXPENSE',
-          paymentMethod: item.paymentMethod || 'CASH',
-          description: `Pago de ítem de Orden de Gasto ${expenseOrder.ogNumber}`,
-          receiptNumber,
-          cashSessionId: activeSession.id,
-          performedById: currentUser.id,
-          referenceType: 'EXPENSE_ORDER',
-          referenceId: expenseOrder.id,
-        },
-      });
+    // Un pago mixto genera un egreso por línea: el arqueo cuenta solo el
+    // efectivo, así que la transferencia no puede salir en el mismo egreso.
+    this.assertItemPaymentsCoverShares(expenseOrder.items, expenseOrder);
+    const cashOuts = expenseOrder.items.flatMap<CashOut>((item, index) =>
+      item.payments?.length
+        ? item.payments.map((payment) => ({
+            amount: payment.amount,
+            paymentMethod: payment.paymentMethod,
+            paymentId: payment.id,
+          }))
+        : [
+            {
+              amount: itemAmounts[index],
+              paymentMethod: item.paymentMethod || PaymentMethod.CASH,
+              paymentId: null,
+            },
+          ],
+    );
+
+    for (const cashOut of cashOuts) {
+      assertCashSessionNotCounting(activeSession, cashOut.paymentMethod);
     }
 
-    const paid = await this.repository.updateStatus(id, ExpenseOrderStatus.PAID);
+    await this.assertNotPaidThroughAccountPayable(expenseOrder.id, expenseOrder.ogNumber);
+
+    // Autorización, egresos y paso a PAID van juntos o no va ninguno: si fallaba
+    // a mitad, la OG quedaba con parte del dinero fuera y ya sin poder reintentar.
+    const paid = await this.prisma.$transaction(
+      async (tx) => {
+        // La transición es condicionada: si otra autorización simultánea ya la
+        // tomó, esta sale sin crear los egresos otra vez.
+        const claimed = await this.repository.claimCajaAuthorization(id, currentUser.id, tx);
+        if (!claimed) {
+          throw new ConflictException(
+            `La OG ${expenseOrder.ogNumber} ya fue autorizada por Caja. Refresca la página para ver el estado actual.`,
+          );
+        }
+
+        for (const cashOut of cashOuts) {
+          const receiptNumber = await this.consecutivesService.generateNumber(
+            'CASH_RECEIPT',
+            expenseOrder.locationId,
+          );
+          const movement = await tx.cashMovement.create({
+            data: {
+              amount: cashOut.amount,
+              movementType: 'EXPENSE',
+              paymentMethod: cashOut.paymentMethod,
+              description: cashOut.paymentId
+                ? `Pago mixto de ítem de Orden de Gasto ${expenseOrder.ogNumber}`
+                : `Pago de ítem de Orden de Gasto ${expenseOrder.ogNumber}`,
+              receiptNumber,
+              cashSessionId: activeSession.id,
+              performedById: currentUser.id,
+              referenceType: 'EXPENSE_ORDER',
+              referenceId: expenseOrder.id,
+            },
+          });
+
+          if (cashOut.paymentId) {
+            await tx.expenseOrderItemPayment.update({
+              where: { id: cashOut.paymentId },
+              data: { cashMovementId: movement.id },
+            });
+          }
+        }
+
+        return this.repository.updateStatus(id, ExpenseOrderStatus.PAID, undefined, tx);
+      },
+      { timeout: CAJA_AUTHORIZE_TX_TIMEOUT_MS },
+    );
 
     // Crear Cuenta por Pagar automáticamente si no existe una asociada. Con el
     // mismo total que los egresos de arriba; con la base, la CP nacía por debajo

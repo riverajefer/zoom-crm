@@ -21,6 +21,7 @@ import {
   FormControlLabel,
   Chip,
   Grid,
+  Switch,
   alpha,
   useTheme,
   Dialog,
@@ -54,6 +55,7 @@ import { BankSelector } from '../../../components/common/BankSelector';
 import { WithholdingsFields } from '../../../components/common/WithholdingsFields';
 import {
   EMPTY_WITHHOLDINGS,
+  allocateExpenseTotalToItems,
   computeExpenseTotals,
   getWithholdingPercentages,
   isWithholdingsSelectionEmpty,
@@ -88,6 +90,7 @@ import {
   type CreateExpenseOrderDto,
   type UpdateExpenseOrderDto,
 } from '../../../types/expense-order.types';
+import { itemPaymentLabel } from '../utils/itemPayment';
 
 // ─── Item form shape ──────────────────────────────────────────────────────────
 
@@ -100,6 +103,11 @@ interface ExpenseItemForm {
   unitPrice: string;
   paymentMethod: PaymentMethod;
   bankEntity: string | null;
+  /** Pago mixto: se digita lo del primer método y el segundo paga lo que falta. */
+  isMixedPayment: boolean;
+  firstPaymentAmount: string;
+  secondPaymentMethod: PaymentMethod;
+  secondBankEntity: string | null;
   productionAreaIds: string[];
   receiptFileId: string;
   referenceFileId: string;
@@ -119,11 +127,23 @@ const defaultItem = (): ExpenseItemForm => ({
   unitPrice: '',
   paymentMethod: PaymentMethod.CASH,
   bankEntity: null,
+  isMixedPayment: false,
+  firstPaymentAmount: '',
+  secondPaymentMethod: PaymentMethod.TRANSFER,
+  secondBankEntity: null,
   productionAreaIds: [],
   receiptFileId: '',
   referenceFileId: '',
   workOrderItemId: null,
 });
+
+/** El crédito no es dinero que salga: no puede ser parte de un pago mixto. */
+const MIXED_PAYMENT_METHODS = Object.values(PaymentMethod).filter(
+  (method) => method !== PaymentMethod.CREDIT,
+);
+
+const otherPaymentMethod = (method: PaymentMethod) =>
+  method === PaymentMethod.TRANSFER ? PaymentMethod.CASH : PaymentMethod.TRANSFER;
 
 // ─── Step config ──────────────────────────────────────────────────────────────
 
@@ -519,6 +539,8 @@ export const ExpenseOrderFormPage = () => {
     isItemLocked(index) && index >= correctableItemCount;
   const isPaymentCorrectable = (index: number) =>
     isItemLocked(index) && index < correctableItemCount;
+  const paidWithMixedPayment =
+    lockedItemCount > 0 && !!existingOG?.items.some((item) => item.payments?.length);
 
   useEffect(() => {
     if (existingOG) {
@@ -548,6 +570,13 @@ export const ExpenseOrderFormPage = () => {
             unitPrice: toCurrencyInputValue(item.unitPrice),
             paymentMethod: item.paymentMethod,
             bankEntity: item.bankEntity ?? null,
+            isMixedPayment: !!item.payments?.length,
+            firstPaymentAmount: item.payments?.length
+              ? toCurrencyInputValue(item.payments[0].amount)
+              : '',
+            secondPaymentMethod:
+              item.payments?.[1]?.paymentMethod ?? otherPaymentMethod(item.paymentMethod),
+            secondBankEntity: item.payments?.[1]?.bankEntity ?? null,
             productionAreaIds: item.productionAreas.map((pa) => pa.productionArea.id),
             receiptFileId: item.receiptFileId ?? '',
             referenceFileId: item.referenceFileId ?? '',
@@ -637,6 +666,16 @@ export const ExpenseOrderFormPage = () => {
   const withholdingPercentages = getWithholdingPercentages(withholdings);
   const ivaAmount = totals.ivaAmount;
   const grandTotal = totals.total;
+  // Lo que paga cada ítem del total, con IVA y retenciones: es lo que Caja
+  // entrega y lo que tiene que sumar un pago mixto.
+  const itemShares = useMemo(
+    () =>
+      allocateExpenseTotalToItems(
+        items.map((item) => (parseFloat(item.quantity) || 0) * parseCurrencyInput(item.unitPrice)),
+        grandTotal,
+      ),
+    [grandTotal, items],
+  );
   const hasWithholdings =
     totals.retefuenteAmount > 0 || totals.reteICAAmount > 0 || totals.reteIVAAmount > 0;
   const withholdingsError = isWithholdingsSelectionEmpty(withholdings)
@@ -777,6 +816,57 @@ export const ExpenseOrderFormPage = () => {
     setItems((prev) => prev.map((item, i) => (i === index ? { ...item, [field]: value } : item)));
   };
 
+  const toggleMixedPayment = (index: number, isMixedPayment: boolean) => {
+    setItems((prev) =>
+      prev.map((item, i) => {
+        if (i !== index) return item;
+        const paymentMethod =
+          isMixedPayment && item.paymentMethod === PaymentMethod.CREDIT
+            ? PaymentMethod.CASH
+            : item.paymentMethod;
+        return {
+          ...item,
+          isMixedPayment,
+          paymentMethod,
+          firstPaymentAmount: '',
+          secondPaymentMethod: otherPaymentMethod(paymentMethod),
+          secondBankEntity: null,
+        };
+      }),
+    );
+  };
+
+  const changePaymentMethod = (index: number, paymentMethod: PaymentMethod) => {
+    setItems((prev) =>
+      prev.map((item, i) => {
+        if (i !== index) return item;
+        // Si toma el método de la segunda línea, la segunda pasa a otro: un
+        // pago mixto son dos métodos distintos.
+        const secondCollides = item.secondPaymentMethod === paymentMethod;
+        return {
+          ...item,
+          paymentMethod,
+          bankEntity: paymentMethod === PaymentMethod.TRANSFER ? item.bankEntity : null,
+          secondPaymentMethod: secondCollides
+            ? otherPaymentMethod(paymentMethod)
+            : item.secondPaymentMethod,
+          secondBankEntity: secondCollides ? null : item.secondBankEntity,
+        };
+      }),
+    );
+  };
+
+  /** Lo que queda para el segundo método. Negativo o cero si no alcanza. */
+  const secondPaymentAmount = (index: number) =>
+    itemShares[index] - parseCurrencyInput(items[index].firstPaymentAmount);
+
+  const isMixedPaymentValid = (index: number) =>
+    parseCurrencyInput(items[index].firstPaymentAmount) > 0 && secondPaymentAmount(index) > 0;
+
+  const mixedPaymentIndexes = items
+    .map((_, index) => index)
+    .filter((index) => items[index].isMixedPayment && !isItemLocked(index));
+
   const setReceiptFileForItem = (index: number, file: File | null) => {
     setReceiptFiles((prev) => prev.map((f, i) => (i === index ? file : f)));
   };
@@ -856,10 +946,11 @@ export const ExpenseOrderFormPage = () => {
   // El empleado "Se autoriza a" es opcional; el paso de autorización no bloquea.
   const isStep2Valid = true;
   const isStep3Valid = items.every(
-    (item) =>
+    (item, index) =>
       item.name.trim() &&
       parseFloat(item.quantity) > 0 &&
-      parseCurrencyInput(item.unitPrice) > 0,
+      parseCurrencyInput(item.unitPrice) > 0 &&
+      (!item.isMixedPayment || isItemLocked(index) || isMixedPaymentValid(index)),
   );
 
   // ─── Submit ───────────────────────────────────────────────────────────────────
@@ -922,6 +1013,26 @@ export const ExpenseOrderFormPage = () => {
       unitPrice: parseCurrencyInput(item.unitPrice),
       paymentMethod: item.paymentMethod,
       bankEntity: item.paymentMethod === PaymentMethod.TRANSFER ? item.bankEntity ?? null : null,
+      // Lo ya pagado no viaja: el backend conserva esas líneas con su egreso.
+      payments:
+        item.isMixedPayment && !isItemLocked(index)
+          ? [
+              {
+                paymentMethod: item.paymentMethod,
+                amount: parseCurrencyInput(item.firstPaymentAmount),
+                bankEntity:
+                  item.paymentMethod === PaymentMethod.TRANSFER ? item.bankEntity ?? null : null,
+              },
+              {
+                paymentMethod: item.secondPaymentMethod,
+                amount: secondPaymentAmount(index),
+                bankEntity:
+                  item.secondPaymentMethod === PaymentMethod.TRANSFER
+                    ? item.secondBankEntity ?? null
+                    : null,
+              },
+            ]
+          : undefined,
       productionAreaIds: item.productionAreaIds.length
         ? item.productionAreaIds
         : undefined,
@@ -1414,28 +1525,25 @@ export const ExpenseOrderFormPage = () => {
                     value={item.paymentMethod}
                     disabled={isPaymentLocked(index)}
                     helperText={
-                      isPaymentLocked(index)
-                        ? 'Ya se pagó y la caja se cerró: no se puede cambiar'
-                        : isPaymentCorrectable(index)
-                          ? 'Caja abierta: corrige también el egreso'
-                          : undefined
+                      paidWithMixedPayment && isPaymentLocked(index)
+                        ? 'OG con pago mixto ya pagada: no se puede cambiar'
+                        : isPaymentLocked(index)
+                          ? 'Ya se pagó y la caja se cerró: no se puede cambiar'
+                          : isPaymentCorrectable(index)
+                            ? 'Caja abierta: corrige también el egreso'
+                            : undefined
                     }
-                    onChange={(e) => {
-                      const method = e.target.value as PaymentMethod;
-                      updateItem(index, 'paymentMethod', method);
-                      if (method !== PaymentMethod.TRANSFER) {
-                        updateItem(index, 'bankEntity', null);
-                      }
-                    }}
+                    onChange={(e) => changePaymentMethod(index, e.target.value as PaymentMethod)}
                     fullWidth
                   >
                     {Object.entries(PAYMENT_METHOD_LABELS)
                       // Un ítem pagado no pasa a crédito: el dinero ya salió.
+                      // Un pago mixto tampoco lo admite: no es dinero que salga.
                       .filter(
                         ([value]) =>
-                          !isItemLocked(index) ||
                           value !== PaymentMethod.CREDIT ||
-                          value === item.paymentMethod,
+                          value === item.paymentMethod ||
+                          (!isItemLocked(index) && !item.isMixedPayment),
                       )
                       .map(([value, label]) => (
                         <MenuItem key={value} value={value}>
@@ -1453,6 +1561,92 @@ export const ExpenseOrderFormPage = () => {
                       disabled={isPaymentLocked(index)}
                     />
                   </Grid>
+                )}
+
+                {/* ── Pago mixto ── La OG pagada no se divide: la diferencia va a su CP. */}
+                {!paidEdit.isPaid && (
+                  <Grid item xs={12}>
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          size="small"
+                          checked={item.isMixedPayment}
+                          onChange={(e) => toggleMixedPayment(index, e.target.checked)}
+                        />
+                      }
+                      label={<Typography variant="body2">Pago mixto</Typography>}
+                    />
+                  </Grid>
+                )}
+
+                {item.isMixedPayment && isItemLocked(index) && existingOG?.items[index] && (
+                  <Grid item xs={12}>
+                    <Typography variant="body2" color="text.secondary">
+                      Pago mixto: {itemPaymentLabel(existingOG.items[index])}
+                    </Typography>
+                  </Grid>
+                )}
+
+                {item.isMixedPayment && !isItemLocked(index) && (
+                  <>
+                    <Grid item xs={12} sm={6} md={3}>
+                      <TextField
+                        size="small"
+                        label={`Monto en ${PAYMENT_METHOD_LABELS[item.paymentMethod]} *`}
+                        value={item.firstPaymentAmount ? formatCurrencyInput(item.firstPaymentAmount) : ''}
+                        onChange={(e) =>
+                          updateItem(index, 'firstPaymentAmount', sanitizeCurrencyInput(e.target.value))
+                        }
+                        error={!!item.firstPaymentAmount && !isMixedPaymentValid(index)}
+                        helperText={`Este ítem paga ${formatCurrency(itemShares[index])}`}
+                        InputProps={{
+                          startAdornment: <InputAdornment position="start">$</InputAdornment>,
+                        }}
+                        inputProps={{ style: { textAlign: 'right' } }}
+                        fullWidth
+                      />
+                    </Grid>
+                    <Grid item xs={12} sm={6} md={3}>
+                      <TextField
+                        size="small"
+                        select
+                        label="Segundo método *"
+                        value={item.secondPaymentMethod}
+                        onChange={(e) => {
+                          updateItem(index, 'secondPaymentMethod', e.target.value);
+                          updateItem(index, 'secondBankEntity', null);
+                        }}
+                        fullWidth
+                      >
+                        {MIXED_PAYMENT_METHODS.filter((method) => method !== item.paymentMethod).map(
+                          (method) => (
+                            <MenuItem key={method} value={method}>
+                              {PAYMENT_METHOD_LABELS[method]}
+                            </MenuItem>
+                          ),
+                        )}
+                      </TextField>
+                    </Grid>
+                    <Grid item xs={12} sm={6} md={3}>
+                      <TextField
+                        size="small"
+                        label={`Monto en ${PAYMENT_METHOD_LABELS[item.secondPaymentMethod]}`}
+                        value={formatCurrency(Math.max(secondPaymentAmount(index), 0))}
+                        helperText="Lo que falta para completar el ítem"
+                        disabled
+                        inputProps={{ style: { textAlign: 'right' } }}
+                        fullWidth
+                      />
+                    </Grid>
+                    {item.secondPaymentMethod === PaymentMethod.TRANSFER && (
+                      <Grid item xs={12} sm={6} md={3}>
+                        <BankSelector
+                          value={item.secondBankEntity ?? null}
+                          onChange={(val) => updateItem(index, 'secondBankEntity', val)}
+                        />
+                      </Grid>
+                    )}
+                  </>
                 )}
 
                 <Grid item xs={12} md={6}>
@@ -1766,6 +1960,31 @@ export const ExpenseOrderFormPage = () => {
                 {formatCurrency(grandTotal)}
               </Typography>
             </Stack>
+
+            {/* El IVA y las retenciones se definen aquí y mueven lo que falta por
+                pagar: la división se confirma con el total final. */}
+            {mixedPaymentIndexes.map((index) => (
+              <Stack key={index} direction="row" justifyContent="space-between" spacing={2}>
+                <Typography color="text.secondary" sx={{ flexShrink: 0 }}>
+                  Pago mixto ítem {index + 1}:
+                </Typography>
+                <Typography fontWeight={500} textAlign="right">
+                  {itemPaymentLabel({
+                    paymentMethod: items[index].paymentMethod,
+                    payments: [
+                      {
+                        paymentMethod: items[index].paymentMethod,
+                        amount: items[index].firstPaymentAmount,
+                      },
+                      {
+                        paymentMethod: items[index].secondPaymentMethod,
+                        amount: String(Math.max(secondPaymentAmount(index), 0)),
+                      },
+                    ],
+                  })}
+                </Typography>
+              </Stack>
+            ))}
           </Stack>
         </CardContent>
       </Card>
@@ -1789,7 +2008,8 @@ export const ExpenseOrderFormPage = () => {
       )}
       {!isStep3Valid && (
         <Alert severity="warning">
-          Completa el paso 3: todos los ítems deben tener nombre, cantidad y precio unitario.
+          Completa el paso 3: todos los ítems deben tener nombre, cantidad y precio unitario, y en
+          un pago mixto el primer monto debe ser menor que lo que paga el ítem.
         </Alert>
       )}
 

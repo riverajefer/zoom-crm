@@ -517,7 +517,14 @@ export class AccountsPayableService {
         isVoided: false,
         accountPayablePayment: { is: null },
       },
-      select: { id: true, amount: true, paymentMethod: true, createdAt: true, performedById: true },
+      select: {
+        id: true,
+        amount: true,
+        paymentMethod: true,
+        createdAt: true,
+        performedById: true,
+        expenseOrderItemPayment: { select: { bankEntity: true } },
+      },
       orderBy: { createdAt: 'asc' },
     });
 
@@ -530,6 +537,7 @@ export class AccountsPayableService {
             accountPayableId: ap.id,
             amount: mov.amount,
             paymentMethod: mov.paymentMethod,
+            bankEntity: mov.expenseOrderItemPayment?.bankEntity,
             paymentDate: mov.createdAt,
             notes: 'Pago registrado en la autorización de Caja de la Orden de Gasto',
             registeredById: mov.performedById || registeredById,

@@ -156,6 +156,10 @@ export class AccountsPayableRepository {
                 unitPrice: true,
                 total: true,
                 paymentMethod: true,
+                payments: {
+                  select: { id: true, paymentMethod: true, amount: true },
+                  orderBy: { sortOrder: 'asc' },
+                },
               },
               orderBy: { sortOrder: 'asc' },
             },

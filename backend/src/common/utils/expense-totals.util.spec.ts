@@ -1,4 +1,38 @@
-import { allocateExpenseTotalToItems, computeExpenseTotals } from './expense-totals.util';
+import {
+  allocateExpenseTotalToItems,
+  computeExpenseTotals,
+  findItemPaymentMismatch,
+} from './expense-totals.util';
+
+describe('findItemPaymentMismatch', () => {
+  const rates = { applyIva: true, ivaRate: 0.19 };
+
+  it('compara contra la parte del ítem con IVA, no contra su base', () => {
+    const items = [
+      { total: 100000, payments: [{ amount: 100000 }, { amount: 19000 }] },
+      { total: 50000 },
+    ];
+
+    expect(findItemPaymentMismatch(items, rates)).toBeNull();
+  });
+
+  it('señala el ítem que no cuadra y cuánto le corresponde', () => {
+    const items = [
+      { total: 50000 },
+      { total: 100000, payments: [{ amount: 50000 }, { amount: 50000 }] },
+    ];
+
+    expect(findItemPaymentMismatch(items, rates)).toEqual({
+      index: 1,
+      paid: 100000,
+      expected: 119000,
+    });
+  });
+
+  it('ignora los ítems de un solo método', () => {
+    expect(findItemPaymentMismatch([{ total: 1 }, { total: 2, payments: [] }], rates)).toBeNull();
+  });
+});
 
 describe('computeExpenseTotals', () => {
   it('devuelve el subtotal cuando no hay IVA ni retenciones', () => {

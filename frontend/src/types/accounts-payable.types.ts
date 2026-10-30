@@ -153,6 +153,8 @@ export interface AccountPayable {
       unitPrice: string;
       total: string;
       paymentMethod?: string | null;
+      /** Pago mixto. Vacío = todo por `paymentMethod`. */
+      payments?: Array<{ id: string; paymentMethod: string; amount: string }>;
     }>;
   } | null;
   createdBy: {

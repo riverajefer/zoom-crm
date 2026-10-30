@@ -2,7 +2,8 @@ import jsPDF from 'jspdf';
 import logo from '../../../assets/logo-dark.webp';
 import axiosInstance from '../../../api/axios';
 import type { ExpenseOrder } from '../../../types/expense-order.types';
-import { EXPENSE_ORDER_STATUS_CONFIG, PAYMENT_METHOD_LABELS } from '../../../types/expense-order.types';
+import { EXPENSE_ORDER_STATUS_CONFIG } from '../../../types/expense-order.types';
+import { itemPaymentLabel } from './itemPayment';
 import {
   COMPANY_INFO,
   pdfContactLines,
@@ -401,7 +402,7 @@ function drawItemsTable(doc: jsPDF, y: number, expenseOrder: ExpenseOrder): numb
     const qtyText = String(item.quantity);
     const unitPriceText = formatCurrency(item.unitPrice);
     const totalText = formatCurrency(item.total);
-    const methodText = PAYMENT_METHOD_LABELS[item.paymentMethod] ?? item.paymentMethod;
+    const methodText = itemPaymentLabel(item);
     const supplierText = item.supplier?.name ?? '-';
     const areasText = item.productionAreas.length > 0
       ? item.productionAreas.map((a) => a.productionArea.name).join(', ')
@@ -412,6 +413,7 @@ function drawItemsTable(doc: jsPDF, y: number, expenseOrder: ExpenseOrder): numb
 
     const nameLines = calcLineCount(doc, nameText, colWidths[1] - 4);
     const descLines = calcLineCount(doc, descText, colWidths[2] - 4);
+    const methodLines = calcLineCount(doc, methodText, colWidths[6] - 4);
     const supplierLines = calcLineCount(doc, supplierText, colWidths[7] - 4);
     const areasLines = calcLineCount(doc, areasText, colWidths[8] - 4);
 
@@ -419,6 +421,7 @@ function drawItemsTable(doc: jsPDF, y: number, expenseOrder: ExpenseOrder): numb
       minHeight,
       nameLines * lineH + 2,
       descLines * lineH + 2,
+      methodLines * lineH + 2,
       supplierLines * lineH + 2,
       areasLines * lineH + 2,
     );
@@ -490,8 +493,13 @@ function drawItemsTable(doc: jsPDF, y: number, expenseOrder: ExpenseOrder): numb
     drawMultilineRight(totalText, 5, cx);
     cx += colWidths[5];
 
-    // Método pago (center)
-    doc.text(methodText, cx + colWidths[6] / 2, numTextY, { align: 'center' });
+    // Método pago (center). Un pago mixto ocupa varias líneas.
+    const methodTextLines: string[] = doc.splitTextToSize(methodText, colWidths[6] - 4);
+    const methodStartY =
+      y + (dynamicRowHeight - methodTextLines.length * lineH) / 2 + lineH * 0.7;
+    methodTextLines.forEach((line, li) => {
+      doc.text(line, cx + colWidths[6] / 2, methodStartY + li * lineH, { align: 'center' });
+    });
     cx += colWidths[6];
 
     // Proveedor (left)

@@ -96,3 +96,30 @@ export function allocateExpenseTotalToItems(
 
   return shares;
 }
+
+/** Parte mínima de un ítem para comprobar su pago mixto. */
+interface ItemWithPayments {
+  total: unknown;
+  payments?: Array<{ amount: unknown }> | null;
+}
+
+/**
+ * Primer ítem cuyo pago mixto no suma su parte del total a pagar, o `null` si
+ * todos cuadran. Si no cuadra, Caja entregaría otra cifra que la que dice la OG.
+ */
+export function findItemPaymentMismatch(
+  items: ItemWithPayments[],
+  rates: ExpenseWithholdingRates,
+): { index: number; paid: number; expected: number } | null {
+  const shares = allocateExpenseTotalToItems(
+    items.map((item) => Number(item.total)),
+    rates,
+  );
+
+  for (const [index, item] of items.entries()) {
+    if (!item.payments?.length) continue;
+    const paid = item.payments.reduce((sum, payment) => sum + Number(payment.amount), 0);
+    if (paid !== shares[index]) return { index, paid, expected: shares[index] };
+  }
+  return null;
+}

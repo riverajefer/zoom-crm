@@ -1826,10 +1826,33 @@ model ExpenseOrderItem {
   supplier        Supplier?                        @relation(fields: [supplierId], references: [id])
   workOrderItem   WorkOrderItem?                   @relation(fields: [workOrderItemId], references: [id], onDelete: SetNull)
   productionAreas ExpenseOrderItemProductionArea[]
+  // Pago mixto: dos líneas con su método y monto. Vacío = todo por `paymentMethod`.
+  payments        ExpenseOrderItemPayment[]
 
   @@index([expenseOrderId])
   @@index([workOrderItemId])
   @@map("expense_order_items")
+}
+
+// Línea de un pago mixto. `amount` es dinero real (con IVA y menos retenciones):
+// las líneas del ítem suman su parte del total a pagar, y cada una genera su
+// propio egreso de caja al autorizar, para que el arqueo cuente solo el efectivo.
+model ExpenseOrderItemPayment {
+  id                 String        @id @default(uuid())
+  expenseOrderItemId String        @map("expense_order_item_id")
+  paymentMethod      PaymentMethod @map("payment_method")
+  amount             Decimal       @db.Decimal(12, 2)
+  bankEntity         String?       @map("bank_entity") // Entidad bancaria de origen (solo transferencias)
+  cashMovementId     String?       @unique @map("cash_movement_id") // Egreso que la pagó
+  sortOrder          Int           @default(0) @map("sort_order")
+  createdAt          DateTime      @default(now()) @map("created_at")
+  updatedAt          DateTime      @updatedAt @map("updated_at")
+
+  expenseOrderItem ExpenseOrderItem @relation(fields: [expenseOrderItemId], references: [id], onDelete: Cascade)
+  cashMovement     CashMovement?    @relation(fields: [cashMovementId], references: [id])
+
+  @@index([expenseOrderItemId])
+  @@map("expense_order_item_payments")
 }
 
 model ExpenseOrderItemProductionArea {
@@ -2699,31 +2722,31 @@ model CashRegister {
 }
 
 model CashSession {
-  id             String            @id @default(uuid())
-  cashRegisterId String            @map("cash_register_id")
-  openedById     String            @map("opened_by_id")
-  closedById     String?           @map("closed_by_id")
-  status         CashSessionStatus @default(OPEN)
-  openingAmount  Decimal           @map("opening_amount")
-  closingAmount  Decimal?          @map("closing_amount")
-  systemBalance  Decimal?          @map("system_balance")
-  discrepancy    Decimal?
-  notes          String?
-  openedAt       DateTime          @default(now()) @map("opened_at")
-  closedAt       DateTime?         @map("closed_at")
+  id               String            @id @default(uuid())
+  cashRegisterId   String            @map("cash_register_id")
+  openedById       String            @map("opened_by_id")
+  closedById       String?           @map("closed_by_id")
+  status           CashSessionStatus @default(OPEN)
+  openingAmount    Decimal           @map("opening_amount")
+  closingAmount    Decimal?          @map("closing_amount")
+  systemBalance    Decimal?          @map("system_balance")
+  discrepancy      Decimal?
+  notes            String?
+  openedAt         DateTime          @default(now()) @map("opened_at")
+  closedAt         DateTime?         @map("closed_at")
   /// Arqueo de cierre en curso: desde aquí y hasta cerrar o cancelar, la
   /// sesión no acepta movimientos en efectivo (ver `assertCashSessionNotCounting`).
-  countStartedAt   DateTime?       @map("count_started_at")
-  countStartedById String?         @map("count_started_by_id")
-  createdAt      DateTime          @default(now()) @map("created_at")
-  updatedAt      DateTime          @updatedAt @map("updated_at")
+  countStartedAt   DateTime?         @map("count_started_at")
+  countStartedById String?           @map("count_started_by_id")
+  createdAt        DateTime          @default(now()) @map("created_at")
+  updatedAt        DateTime          @updatedAt @map("updated_at")
 
-  cashRegister  CashRegister            @relation(fields: [cashRegisterId], references: [id])
-  openedBy      User                    @relation("OpenedCashSessions", fields: [openedById], references: [id])
-  closedBy      User?                   @relation("ClosedCashSessions", fields: [closedById], references: [id])
-  countStartedBy User?                  @relation("CountStartedCashSessions", fields: [countStartedById], references: [id])
-  denominations CashDenominationCount[]
-  movements     CashMovement[]
+  cashRegister   CashRegister            @relation(fields: [cashRegisterId], references: [id])
+  openedBy       User                    @relation("OpenedCashSessions", fields: [openedById], references: [id])
+  closedBy       User?                   @relation("ClosedCashSessions", fields: [closedById], references: [id])
+  countStartedBy User?                   @relation("CountStartedCashSessions", fields: [countStartedById], references: [id])
+  denominations  CashDenominationCount[]
+  movements      CashMovement[]
 
   @@index([cashRegisterId, status])
   @@index([openedById])
@@ -2766,15 +2789,16 @@ model CashMovement {
   createdAt         DateTime         @default(now()) @map("created_at")
   updatedAt         DateTime         @updatedAt @map("updated_at")
 
-  cashSession           CashSession               @relation(fields: [cashSessionId], references: [id])
-  performedBy           User                      @relation("PerformedCashMovements", fields: [performedById], references: [id])
-  voidedBy              User?                     @relation("VoidedCashMovements", fields: [voidedById], references: [id])
-  counterMovement       CashMovement?             @relation("CounterMovement", fields: [counterMovementId], references: [id])
-  originalMovement      CashMovement?             @relation("CounterMovement")
-  linkedPayment         Payment?
-  voidRequests          CashMovementVoidRequest[]
-  refundRequest         RefundRequest?
-  accountPayablePayment AccountPayablePayment?
+  cashSession             CashSession               @relation(fields: [cashSessionId], references: [id])
+  performedBy             User                      @relation("PerformedCashMovements", fields: [performedById], references: [id])
+  voidedBy                User?                     @relation("VoidedCashMovements", fields: [voidedById], references: [id])
+  counterMovement         CashMovement?             @relation("CounterMovement", fields: [counterMovementId], references: [id])
+  originalMovement        CashMovement?             @relation("CounterMovement")
+  linkedPayment           Payment?
+  voidRequests            CashMovementVoidRequest[]
+  refundRequest           RefundRequest?
+  accountPayablePayment   AccountPayablePayment?
+  expenseOrderItemPayment ExpenseOrderItemPayment?
 
   @@index([cashSessionId])
   @@index([performedById])

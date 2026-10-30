@@ -71,6 +71,15 @@ export interface ExpenseOrderItemProductionArea {
   };
 }
 
+/** Línea de un pago mixto: `amount` es dinero real, con IVA y menos retenciones. */
+export interface ExpenseOrderItemPayment {
+  id: string;
+  paymentMethod: PaymentMethod;
+  amount: string;
+  bankEntity?: string | null;
+  cashMovementId?: string | null;
+}
+
 export interface ExpenseOrderItem {
   id: string;
   quantity: string;
@@ -80,6 +89,8 @@ export interface ExpenseOrderItem {
   total: string;
   paymentMethod: PaymentMethod;
   bankEntity?: string | null;
+  /** Pago mixto. Vacío = todo por `paymentMethod`. */
+  payments?: ExpenseOrderItemPayment[];
   receiptFileId?: string | null;
   referenceFileId?: string | null;
   /** Ítem de la OT al que pertenece la línea. Nulo = toda la OT. */
@@ -244,6 +255,12 @@ export interface CreateExpenseItemDto {
   unitPrice: number;
   paymentMethod: PaymentMethod;
   bankEntity?: string | null;
+  /** Pago mixto: dos líneas que suman la parte del ítem en el total a pagar. */
+  payments?: Array<{
+    paymentMethod: PaymentMethod;
+    amount: number;
+    bankEntity?: string | null;
+  }>;
   productionAreaIds?: string[];
   /** Ítem de la OT al que pertenece la línea. `null` = toda la OT. */
   workOrderItemId?: string | null;

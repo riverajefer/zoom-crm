@@ -6,7 +6,7 @@ import type {
   ExpenseOrder,
   ExpenseOrderItem,
 } from '../../../types/expense-order.types';
-import { PAYMENT_METHOD_LABELS } from '../../../types/expense-order.types';
+import { itemPaymentLabel } from './itemPayment';
 import type { ExportColumn } from '../../../utils/excelExport';
 
 /** Fila de la hoja de detalle: un ítem junto a su orden padre. */
@@ -66,8 +66,7 @@ export const EXPENSE_ORDER_ITEM_EXPORT_COLUMNS: ExportColumn<ExpenseOrderItemRow
       key: 'paymentMethod',
       label: 'Método de Pago',
       defaultVisible: true,
-      getValue: ({ item }) =>
-        PAYMENT_METHOD_LABELS[item.paymentMethod] ?? item.paymentMethod,
+      getValue: ({ item }) => itemPaymentLabel(item),
     },
     {
       key: 'supplier',

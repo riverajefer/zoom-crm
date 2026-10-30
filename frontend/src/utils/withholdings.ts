@@ -131,6 +131,29 @@ export function computeExpenseTotals(subtotal: number, input: ExpenseTotalsInput
   };
 }
 
+/**
+ * Reparte el total a pagar entre los ítems, igual que
+ * `allocateExpenseTotalToItems` del backend: el pago mixto de cada ítem tiene
+ * que sumar exactamente esta parte, o el backend lo rechaza.
+ */
+export function allocateExpenseTotalToItems(itemSubtotals: number[], total: number): number[] {
+  const subtotal = itemSubtotals.reduce((sum, value) => sum + value, 0);
+  if (subtotal === 0) return itemSubtotals.map(() => 0);
+
+  const raw = itemSubtotals.map((value) => (total * value) / subtotal);
+  const shares = raw.map((value) => Math.floor(value));
+  let remainder = total - shares.reduce((sum, value) => sum + value, 0);
+
+  const byRemainder = raw
+    .map((value, index) => ({ index, fraction: value - Math.floor(value) }))
+    .sort((a, b) => b.fraction - a.fraction || a.index - b.index);
+  for (let i = 0; remainder > 0; i = (i + 1) % byRemainder.length, remainder--) {
+    shares[byRemainder[i].index] += 1;
+  }
+
+  return shares;
+}
+
 /** Tasas en decimal (0.025) listas para enviar al backend. */
 export function toWithholdingRates(value: WithholdingsValue): {
   retefuenteRate: number;

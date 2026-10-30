@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   EMPTY_WITHHOLDINGS,
+  allocateExpenseTotalToItems,
   computeExpenseTotals,
   getWithholdingPercentages,
   isWithholdingsSelectionEmpty,
@@ -107,5 +108,22 @@ describe('toWithholdingRates', () => {
     expect(
       toWithholdingRates(withholdings({ apply: true, retefuente: '2.5', reteIVA: '15' })),
     ).toEqual({ retefuenteRate: 0.025, reteICARate: 0, reteIVARate: 0.15 });
+  });
+});
+
+describe('allocateExpenseTotalToItems', () => {
+  it('reparte en proporción a la base', () => {
+    expect(allocateExpenseTotalToItems([100000, 50000], 178500)).toEqual([119000, 59500]);
+  });
+
+  // Los mismos valores que el spec del backend: si difieren, el pago mixto se rechaza.
+  it('el peso de redondeo cae en el primero y la suma da exacto el total', () => {
+    const shares = allocateExpenseTotalToItems([33333, 33333], 79333);
+
+    expect(shares).toEqual([39667, 39666]);
+  });
+
+  it('sin base devuelve ceros', () => {
+    expect(allocateExpenseTotalToItems([0, 0], 0)).toEqual([0, 0]);
   });
 });

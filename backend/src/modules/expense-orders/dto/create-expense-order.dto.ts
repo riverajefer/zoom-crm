@@ -13,11 +13,32 @@ import {
   Max,
   ValidateNested,
   ArrayMinSize,
+  ArrayMaxSize,
   ArrayUnique,
   MaxLength,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { PaymentMethod } from '../../../generated/prisma';
+
+/** Línea de un pago mixto: el monto es dinero real, con IVA y menos retenciones. */
+export class ExpenseItemPaymentDto {
+  @ApiProperty({ enum: PaymentMethod, description: 'Método de esta parte del pago' })
+  @IsEnum(PaymentMethod)
+  paymentMethod: PaymentMethod;
+
+  @ApiProperty({ example: 50000, description: 'Monto que sale por este método' })
+  @IsNumber()
+  @IsPositive()
+  amount: number;
+
+  @ApiPropertyOptional({
+    description: 'Entidad bancaria de origen (solo aplica a transferencias)',
+    example: 'Bancolombia',
+  })
+  @IsString()
+  @IsOptional()
+  bankEntity?: string | null;
+}
 
 export class CreateExpenseItemDto {
   @ApiProperty({ example: 2, description: 'Cantidad' })
@@ -57,6 +78,18 @@ export class CreateExpenseItemDto {
   @IsString()
   @IsOptional()
   bankEntity?: string;
+
+  @ApiPropertyOptional({
+    type: [ExpenseItemPaymentDto],
+    description:
+      'Pago mixto: dos líneas que suman la parte del ítem en el total a pagar. Vacío = todo por paymentMethod',
+  })
+  @IsArray()
+  @ArrayMaxSize(2)
+  @ValidateNested({ each: true })
+  @IsOptional()
+  @Type(() => ExpenseItemPaymentDto)
+  payments?: ExpenseItemPaymentDto[];
 
   @ApiPropertyOptional({ type: [String], description: 'IDs de áreas de producción del ítem' })
   @IsArray()

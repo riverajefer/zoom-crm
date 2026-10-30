@@ -17,8 +17,8 @@ import { formatCurrency, formatDate } from '../../../utils/formatters';
 import {
   ExpenseOrderStatus,
   EXPENSE_ORDER_STATUS_CONFIG,
-  PAYMENT_METHOD_LABELS,
 } from '../../../types/expense-order.types';
+import { itemPaymentLabel } from '../../expense-orders/utils/itemPayment';
 import type { AccountPayable } from '../../../types/accounts-payable.types';
 
 interface Props {
@@ -146,7 +146,7 @@ export const ExpenseOrderInfoSection: React.FC<Props> = ({ expenseOrder }) => {
                     </TableCell>
                     <TableCell>
                       {item.paymentMethod
-                        ? PAYMENT_METHOD_LABELS[item.paymentMethod as keyof typeof PAYMENT_METHOD_LABELS] ?? item.paymentMethod
+                        ? itemPaymentLabel({ ...item, paymentMethod: item.paymentMethod })
                         : '—'}
                     </TableCell>
                   </TableRow>

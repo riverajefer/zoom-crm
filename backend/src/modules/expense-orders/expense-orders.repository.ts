@@ -1,9 +1,17 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
-import { ExpenseOrderStatus, Prisma } from '../../generated/prisma';
+import { ExpenseOrderStatus, PaymentMethod, Prisma } from '../../generated/prisma';
 import { FilterExpenseOrdersDto } from './dto';
 import { clampPageSize, MAX_PAGE_SIZE } from '../../common/dto/pagination.dto';
 import { LOCATION_SUMMARY_SELECT } from '../../common/constants/location-select';
+
+/** Línea de pago mixto de un ítem. En una OG pagada trae el egreso que la pagó. */
+export interface ExpenseItemPaymentData {
+  paymentMethod: PaymentMethod;
+  amount: number | Prisma.Decimal;
+  bankEntity?: string | null;
+  cashMovementId?: string | null;
+}
 
 @Injectable()
 export class ExpenseOrdersRepository {
@@ -119,6 +127,16 @@ export class ExpenseOrdersRepository {
           select: {
             productionArea: { select: { id: true, name: true } },
           },
+        },
+        payments: {
+          select: {
+            id: true,
+            paymentMethod: true,
+            amount: true,
+            bankEntity: true,
+            cashMovementId: true,
+          },
+          orderBy: { sortOrder: 'asc' as const },
         },
       },
       orderBy: { sortOrder: 'asc' as const },
@@ -253,6 +271,7 @@ export class ExpenseOrdersRepository {
       productionAreaIds?: string[];
       workOrderItemId?: string | null;
       sortOrder: number;
+      payments?: ExpenseItemPaymentData[];
     }>;
   }) {
     const { items, workOrderItemIds, ...orderData } = data;
@@ -281,6 +300,16 @@ export class ExpenseOrdersRepository {
               ? {
                   create: item.productionAreaIds.map((productionAreaId) => ({
                     productionAreaId,
+                  })),
+                }
+              : undefined,
+            payments: item.payments?.length
+              ? {
+                  create: item.payments.map((payment, sortOrder) => ({
+                    paymentMethod: payment.paymentMethod,
+                    amount: payment.amount,
+                    bankEntity: payment.bankEntity,
+                    sortOrder,
                   })),
                 }
               : undefined,
@@ -351,6 +380,7 @@ export class ExpenseOrdersRepository {
       productionAreaIds?: string[];
       workOrderItemId?: string | null;
       sortOrder: number;
+      payments?: ExpenseItemPaymentData[];
     }>,
     // Para reemplazar los ítems dentro de una transacción del llamador, junto
     // con otras escrituras que deben salir o fallar con ellos.
@@ -392,6 +422,22 @@ export class ExpenseOrdersRepository {
             data: areaIds.map((productionAreaId) => ({
               expenseOrderItemId: createdItems[i].id,
               productionAreaId,
+            })),
+          });
+        }
+
+        // Las líneas de pago mueren con el ítem: se recrean con su egreso, o la
+        // OG pagada perdería el vínculo con lo que salió de caja.
+        const payments = items[i]?.payments;
+        if (payments?.length) {
+          await tx.expenseOrderItemPayment.createMany({
+            data: payments.map((payment, sortOrder) => ({
+              expenseOrderItemId: createdItems[i].id,
+              paymentMethod: payment.paymentMethod,
+              amount: payment.amount,
+              bankEntity: payment.bankEntity,
+              cashMovementId: payment.cashMovementId,
+              sortOrder,
             })),
           });
         }
@@ -459,8 +505,9 @@ export class ExpenseOrdersRepository {
       cajaRejectedAt?: Date;
       cajaRejectionReason?: string;
     },
+    tx: Prisma.TransactionClient = this.prisma,
   ) {
-    return this.prisma.expenseOrder.update({
+    return tx.expenseOrder.update({
       where: { id },
       data: {
         status,
@@ -484,8 +531,12 @@ export class ExpenseOrdersRepository {
    * simple las dos leían ADMIN_AUTHORIZED y creaban los egresos de caja dos
    * veces. La segunda ahora encuentra la OG ya autorizada y no toca nada.
    */
-  async claimCajaAuthorization(id: string, cajaAuthorizedById: string): Promise<boolean> {
-    const { count } = await this.prisma.expenseOrder.updateMany({
+  async claimCajaAuthorization(
+    id: string,
+    cajaAuthorizedById: string,
+    tx: Prisma.TransactionClient = this.prisma,
+  ): Promise<boolean> {
+    const { count } = await tx.expenseOrder.updateMany({
       where: { id, status: ExpenseOrderStatus.ADMIN_AUTHORIZED },
       data: {
         status: ExpenseOrderStatus.AUTHORIZED,

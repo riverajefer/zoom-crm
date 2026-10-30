@@ -11,11 +11,13 @@ import {
   Min,
   Max,
   ValidateNested,
+  ArrayMaxSize,
   ArrayUnique,
   MaxLength,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { PaymentMethod } from '../../../generated/prisma';
+import { ExpenseItemPaymentDto } from './create-expense-order.dto';
 
 export class UpdateExpenseItemDto {
   @ApiPropertyOptional({ description: 'ID del ítem (para actualizar existente)' })
@@ -63,6 +65,18 @@ export class UpdateExpenseItemDto {
   @IsString()
   @IsOptional()
   bankEntity?: string;
+
+  @ApiPropertyOptional({
+    type: [ExpenseItemPaymentDto],
+    description:
+      'Pago mixto: dos líneas que suman la parte del ítem en el total a pagar. Vacío = todo por paymentMethod',
+  })
+  @IsArray()
+  @ArrayMaxSize(2)
+  @ValidateNested({ each: true })
+  @IsOptional()
+  @Type(() => ExpenseItemPaymentDto)
+  payments?: ExpenseItemPaymentDto[];
 
   @ApiPropertyOptional({ type: [String], description: 'IDs de áreas de producción' })
   @IsArray()

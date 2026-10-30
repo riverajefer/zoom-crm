@@ -178,13 +178,92 @@ describe('ExpenseOrdersService', () => {
     it('crea un egreso por ítem, deja la OG pagada y concilia su CP', async () => {
       await service.cajaAuthorize('og-1', currentUser);
 
-      expect(repository.claimCajaAuthorization).toHaveBeenCalledWith('og-1', 'caja-1');
+      expect(repository.claimCajaAuthorization).toHaveBeenCalledWith('og-1', 'caja-1', prisma);
       expect(prisma.cashMovement.create).toHaveBeenCalledTimes(2);
-      expect(repository.updateStatus).toHaveBeenCalledWith('og-1', ExpenseOrderStatus.PAID);
+      expect(repository.updateStatus).toHaveBeenCalledWith(
+        'og-1',
+        ExpenseOrderStatus.PAID,
+        undefined,
+        prisma,
+      );
       expect(accountsPayableService.settleFromExpenseOrderMovements).toHaveBeenCalledWith(
         'og-1',
         'caja-1',
       );
+    });
+
+    describe('pago mixto', () => {
+      // $119.000 con IVA: Caja entrega $70.000 en efectivo y gira $49.000.
+      const mixedOg = {
+        ...adminAuthorized,
+        applyIva: true,
+        ivaRate: 0.19,
+        items: [
+          {
+            total: 100000,
+            paymentMethod: 'TRANSFER',
+            payments: [
+              { id: 'line-1', paymentMethod: 'TRANSFER', amount: 49000 },
+              { id: 'line-2', paymentMethod: 'CASH', amount: 70000 },
+            ],
+          },
+        ],
+      };
+
+      beforeEach(() => {
+        (repository.findById as jest.Mock).mockResolvedValue(mixedOg);
+        (prisma as any).expenseOrderItemPayment = { update: jest.fn() };
+        (prisma.cashMovement.create as jest.Mock)
+          .mockResolvedValueOnce({ id: 'mov-1' })
+          .mockResolvedValueOnce({ id: 'mov-2' });
+      });
+
+      it('crea un egreso por línea, con su método y monto, y lo amarra a la línea', async () => {
+        await service.cajaAuthorize('og-1', currentUser);
+
+        const created = (prisma.cashMovement.create as jest.Mock).mock.calls.map(
+          ([{ data }]) => [data.paymentMethod, data.amount],
+        );
+        expect(created).toEqual([
+          ['TRANSFER', 49000],
+          ['CASH', 70000],
+        ]);
+        expect((prisma as any).expenseOrderItemPayment.update).toHaveBeenCalledWith({
+          where: { id: 'line-2' },
+          data: { cashMovementId: 'mov-2' },
+        });
+      });
+
+      it('durante el arqueo se bloquea por la línea en efectivo, aunque sea la segunda', async () => {
+        (prisma.cashSession.findMany as jest.Mock).mockResolvedValue([
+          { id: 'session-1', cashRegisterId: 'cr-1', countStartedAt: new Date() },
+        ]);
+
+        await expect(service.cajaAuthorize('og-1', currentUser)).rejects.toThrow(/arqueo de cierre/);
+        expect(repository.claimCajaAuthorization).not.toHaveBeenCalled();
+      });
+
+      it('si las líneas no suman la parte del ítem, no paga nada', async () => {
+        (repository.findById as jest.Mock).mockResolvedValue({ ...mixedOg, applyIva: false });
+
+        await expect(service.cajaAuthorize('og-1', currentUser)).rejects.toThrow(/pago mixto/);
+        expect(repository.claimCajaAuthorization).not.toHaveBeenCalled();
+        expect(prisma.cashMovement.create).not.toHaveBeenCalled();
+      });
+
+      it('un egreso que falla tumba toda la autorización dentro de la transacción', async () => {
+        (prisma.cashMovement.create as jest.Mock)
+          .mockReset()
+          .mockResolvedValueOnce({ id: 'mov-1' })
+          .mockRejectedValueOnce(new Error('consecutivo duplicado'));
+
+        await expect(service.cajaAuthorize('og-1', currentUser)).rejects.toThrow(
+          'consecutivo duplicado',
+        );
+        expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+        expect(repository.updateStatus).not.toHaveBeenCalled();
+        expect(accountsPayableService.settleFromExpenseOrderMovements).not.toHaveBeenCalled();
+      });
     });
 
     // Caja entrega el total que muestra la OG. Con la base del ítem, cada OG
@@ -284,7 +363,7 @@ describe('ExpenseOrdersService', () => {
 
       await service.cajaAuthorize('og-1', { id: 'admin-2' } as any);
 
-      expect(repository.claimCajaAuthorization).toHaveBeenCalledWith('og-1', 'admin-2');
+      expect(repository.claimCajaAuthorization).toHaveBeenCalledWith('og-1', 'admin-2', prisma);
     });
 
     // OG-2026-0832: Caja pagó la CP espejo y después se autorizó la OG; el
@@ -577,7 +656,7 @@ describe('ExpenseOrdersService', () => {
       expect(repository.create).not.toHaveBeenCalled();
     });
 
-    const draftOg = { id: 'og-1', status: ExpenseOrderStatus.DRAFT, workOrder: { id: 'ot-1' } };
+    const draftOg = { id: 'og-1', status: ExpenseOrderStatus.DRAFT, workOrder: { id: 'ot-1' }, items: [] };
 
     it('al editar reemplaza los ítems y no los manda como campo escalar', async () => {
       (repository.findById as jest.Mock).mockResolvedValue(draftOg);
@@ -790,12 +869,115 @@ describe('ExpenseOrdersService', () => {
       (repository.findById as jest.Mock).mockResolvedValue({
         id: 'order-1',
         status: ExpenseOrderStatus.DRAFT,
+        items: [],
       } as any);
       (repository.update as jest.Mock).mockResolvedValue(true as any);
 
       await service.update('order-1', updateDto);
 
       expect(repository.update).toHaveBeenCalledWith('order-1', updateDto);
+    });
+
+    describe('pago mixto', () => {
+      const mixedItem = {
+        quantity: 1,
+        unitPrice: 100000,
+        paymentMethod: 'CASH' as any,
+        payments: [
+          { paymentMethod: 'CASH' as any, amount: 70000 },
+          { paymentMethod: 'TRANSFER' as any, amount: 30000, bankEntity: 'Bancolombia' },
+        ],
+      };
+      const draftMixed = {
+        id: 'order-1',
+        status: ExpenseOrderStatus.DRAFT,
+        expenseType: { id: 'type-id' },
+        expenseSubcategory: { id: 'sub-id' },
+        items: [{ total: 100000, payments: mixedItem.payments }],
+      };
+
+      beforeEach(() => {
+        (repository.findById as jest.Mock).mockResolvedValue(draftMixed);
+      });
+
+      it('guarda las líneas y el ítem lleva el método de la primera', async () => {
+        await service.update('order-1', { items: [{ ...mixedItem, paymentMethod: 'TRANSFER' as any }] });
+
+        const [, [saved]] = (repository.replaceItems as jest.Mock).mock.calls[0];
+        expect(saved.paymentMethod).toBe('CASH');
+        expect(saved.payments).toEqual([
+          { paymentMethod: 'CASH', amount: 70000, bankEntity: null },
+          { paymentMethod: 'TRANSFER', amount: 30000, bankEntity: 'Bancolombia' },
+        ]);
+      });
+
+      it.each([
+        ['dos veces el mismo método', [
+          { paymentMethod: 'CASH', amount: 70000 },
+          { paymentMethod: 'CASH', amount: 30000 },
+        ], /métodos de pago distintos/],
+        ['una sola línea', [{ paymentMethod: 'CASH', amount: 100000 }], /métodos de pago distintos/],
+        ['crédito', [
+          { paymentMethod: 'CASH', amount: 70000 },
+          { paymentMethod: 'CREDIT', amount: 30000 },
+        ], /no admite crédito/],
+        ['una suma que no da la parte del ítem', [
+          { paymentMethod: 'CASH', amount: 70000 },
+          { paymentMethod: 'TRANSFER', amount: 20000 },
+        ], /suma \$\s?90\.000/],
+      ])('rechaza %s sin escribir nada', async (_name, payments, message) => {
+        await expect(
+          service.update('order-1', { items: [{ ...mixedItem, payments: payments as any }] }),
+        ).rejects.toThrow(message);
+        expect(repository.replaceItems).not.toHaveBeenCalled();
+        expect(repository.update).not.toHaveBeenCalled();
+      });
+
+      it('al activar el IVA sin tocar los ítems, las líneas guardadas dejan de cuadrar', async () => {
+        await expect(service.update('order-1', { applyIva: true })).rejects.toThrow(/pago mixto/);
+        expect(repository.update).not.toHaveBeenCalled();
+      });
+
+      it('al agregar un ítem con pago mixto pide hacerlo desde la edición', async () => {
+        await expect(
+          service.addItem('order-1', {
+            quantity: 1,
+            unitPrice: 50000,
+            name: 'Transporte',
+            paymentMethod: 'CASH' as any,
+            payments: mixedItem.payments,
+          }),
+        ).rejects.toThrow(/al editar la OG/);
+        expect(repository.addItem).not.toHaveBeenCalled();
+      });
+
+      // $33.333 + $33.333 con IVA: el peso de redondeo cae donde no estaba.
+      it('no deja agregar un ítem si el redondeo descuadra un pago mixto existente', async () => {
+        (repository.findById as jest.Mock).mockResolvedValue({
+          ...draftMixed,
+          applyIva: true,
+          ivaRate: 0.19,
+          items: [
+            {
+              total: 33333,
+              payments: [
+                { paymentMethod: 'CASH', amount: 20000 },
+                { paymentMethod: 'TRANSFER', amount: 19666 },
+              ],
+            },
+          ],
+        });
+
+        await expect(
+          service.addItem('order-1', {
+            quantity: 1,
+            unitPrice: 33333,
+            name: 'Transporte',
+            paymentMethod: 'CASH' as any,
+          }),
+        ).rejects.toThrow(/pago mixto/);
+        expect(repository.addItem).not.toHaveBeenCalled();
+      });
     });
 
     it('should throw NotFoundException if expense order not found', async () => {
@@ -1012,6 +1194,90 @@ describe('ExpenseOrdersService', () => {
           admin,
         ),
       ).rejects.toThrow(/no se pueden quitar ítems/);
+    });
+
+    describe('con pago mixto', () => {
+      const paidLines = [
+        { id: 'line-1', paymentMethod: 'CASH', amount: 70000, bankEntity: null, cashMovementId: 'mov-1' },
+        { id: 'line-2', paymentMethod: 'TRANSFER', amount: 30000, bankEntity: 'Nequi', cashMovementId: 'mov-2' },
+      ];
+      const mixedPaidOg = () => {
+        const og = paidOg();
+        return { ...og, items: [{ ...og.items[0], paymentMethod: 'CASH', payments: paidLines }] };
+      };
+      const incoming = () => {
+        const [item] = paidOg().items as any[];
+        return {
+          quantity: 1,
+          unitPrice: 120000,
+          paymentMethod: 'CASH' as any,
+          receiptFileId: item.receiptFileId ?? undefined,
+        };
+      };
+
+      beforeEach(() => {
+        asRole('admin');
+        (repository.findById as jest.Mock).mockImplementation(async () => mixedPaidOg());
+        ((prisma as any).cashMovement.findMany as jest.Mock).mockResolvedValue([
+          { id: 'mov-1', paymentMethod: 'CASH', cashSession: { status: 'OPEN' } },
+          { id: 'mov-2', paymentMethod: 'TRANSFER', cashSession: { status: 'OPEN' } },
+        ]);
+      });
+
+      it('conserva las líneas con su egreso aunque el total suba', async () => {
+        await service.update('og-1', { items: [incoming()] }, admin);
+
+        const [, [saved]] = (repository.replaceItems as jest.Mock).mock.calls[0];
+        expect(saved.payments).toEqual(paidLines);
+        expect((prisma as any).cashMovement.updateMany).not.toHaveBeenCalled();
+      });
+
+      it('no deja cambiar la división de lo que ya se pagó', async () => {
+        const payments = [
+          { paymentMethod: 'CASH' as any, amount: 50000 },
+          { paymentMethod: 'TRANSFER' as any, amount: 50000 },
+        ];
+
+        await expect(
+          service.update('og-1', { items: [{ ...incoming(), payments }] }, admin),
+        ).rejects.toThrow(/división de su pago/);
+        expect(repository.replaceItems).not.toHaveBeenCalled();
+      });
+
+      it('no deja dividir un ítem agregado: la diferencia va a la CP', async () => {
+        const payments = [
+          { paymentMethod: 'CASH' as any, amount: 10000 },
+          { paymentMethod: 'TRANSFER' as any, amount: 10000 },
+        ];
+
+        await expect(
+          service.update('og-1', { items: [incoming(), { ...incoming(), payments }] }, admin),
+        ).rejects.toThrow(/desde su CP/);
+      });
+
+      it('con la caja abierta tampoco ofrece corregir por posición: dos egresos, un ítem', async () => {
+        const og = await service.findOne('og-1');
+
+        expect(og.paymentCorrectableItems).toBe(0);
+      });
+
+      // Con dos ítems y dos egresos, la posición apuntaría al egreso equivocado.
+      it('no corrige el método de otro ítem de la misma OG', async () => {
+        const og = mixedPaidOg();
+        const plain = { ...og.items[0], paymentMethod: 'CASH', payments: [] };
+        (repository.findById as jest.Mock).mockImplementation(async () => ({
+          ...og,
+          items: [og.items[0], plain],
+        }));
+
+        await expect(
+          service.update(
+            'og-1',
+            { items: [incoming(), { ...incoming(), paymentMethod: 'TRANSFER' as any }] },
+            admin,
+          ),
+        ).rejects.toThrow(/pago mixto ya pagada/);
+      });
     });
 
     describe('corrección del método de pago con la caja abierta', () => {

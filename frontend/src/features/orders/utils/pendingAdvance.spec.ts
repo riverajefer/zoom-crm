@@ -21,6 +21,33 @@ describe('getPendingAdvanceInfo', () => {
     expect(info.hasPendingAdvance).toBe(false);
   });
 
+  it('una OP anulada no tiene saldo por cobrar', () => {
+    const info = getPendingAdvanceInfo(
+      buildOrder({
+        status: 'ANULADO',
+        total: '696000',
+        paidAmount: '0',
+        balance: '696000',
+      }),
+    );
+
+    expect(info.effectiveBalance).toBe(0);
+  });
+
+  it('una OP anulada conserva su saldo a favor', () => {
+    const info = getPendingAdvanceInfo(
+      buildOrder({
+        status: 'ANULADO',
+        total: '120000',
+        paidAmount: '60000',
+        reversedAmount: '120000',
+        balance: '-60000',
+      }),
+    );
+
+    expect(info.effectiveBalance).toBe(-60000);
+  });
+
   it('no cuenta como saldo a favor el excedente ya aplicado a otras órdenes', () => {
     const info = getPendingAdvanceInfo(
       buildOrder({ appliedCreditAmount: '20000', balance: '0' }),

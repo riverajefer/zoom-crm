@@ -169,6 +169,31 @@ montos_con_mas_de_dos_decimales AS (
   AS n, NULL::bigint AS n30
 ),
 
+-- ── Órdenes anuladas ────────────────────────────────────────────────────────
+
+-- Una OP anulada no se cobra: anular lleva `reversed_amount` hasta dejar el
+-- saldo en cero o a favor. Con saldo positivo aparece debiendo un trabajo que ya
+-- no existe (OP-2026-2009).
+anuladas_con_saldo_por_cobrar AS (
+  SELECT count(*) AS n,
+         count(*) FILTER (WHERE updated_at >= now() - interval '30 days') AS n30
+  FROM orders
+  WHERE status = 'ANULADO' AND balance > 0
+),
+
+-- En una OP anulada solo se puede devolver el saldo a favor, sin anular venta.
+-- Una solicitud abierta que anula venta ya no se puede aprobar ni pagar, y
+-- mientras siga abierta no deja crear la correcta (OP-2026-3290).
+devoluciones_bloqueadas_por_anulacion AS (
+  SELECT count(*) AS n,
+         count(*) FILTER (WHERE r.created_at >= now() - interval '30 days') AS n30
+  FROM refund_requests r
+  JOIN orders o ON o.id = r.order_id
+  WHERE o.status = 'ANULADO'
+    AND COALESCE(r.reversed_amount, 0) > 0
+    AND (r.status = 'PENDING' OR (r.status = 'APPROVED' AND r.executed_at IS NULL))
+),
+
 -- ── Descuento de órdenes por nómina ─────────────────────────────────────────
 
 -- Un descuento aplicado SIEMPRE generó el abono que salda la orden. Sin abono,
@@ -219,6 +244,8 @@ SELECT * FROM (
   UNION ALL SELECT 'CRITICA', 'Cajas con más de una sesión abierta', n, n30 FROM cajas_con_dos_sesiones_abiertas
   UNION ALL SELECT 'CRITICA', 'Descuentos de nómina aplicados sin el abono que salda la OP', n, n30 FROM descuentos_aplicados_sin_abono
   UNION ALL SELECT 'CRITICA', 'Descuentos por nómina con movimiento de caja', n, n30 FROM descuentos_con_movimiento_de_caja
+  UNION ALL SELECT 'ALTA', 'Órdenes anuladas con saldo por cobrar', n, n30 FROM anuladas_con_saldo_por_cobrar
+  UNION ALL SELECT 'ALTA', 'Devoluciones bloqueadas por anular la orden', n, n30 FROM devoluciones_bloqueadas_por_anulacion
   UNION ALL SELECT 'ALTA', 'Nóminas cuyo descuento no cuadra con sus órdenes', n, COALESCE(n30, n) FROM nomina_descuentos_descuadrados
   UNION ALL SELECT 'ALTA', 'Solicitudes pendientes duplicadas', n, COALESCE(n30, n) FROM solicitudes_pendientes_duplicadas
   UNION ALL SELECT 'ALTA', 'Montos guardados con más de dos decimales', n, COALESCE(n30, n) FROM montos_con_mas_de_dos_decimales

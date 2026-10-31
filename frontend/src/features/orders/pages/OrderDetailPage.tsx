@@ -576,6 +576,17 @@ export const OrderDetailPage: React.FC = () => {
   };
 
   const handleChangeStatus = async (newStatus: OrderStatus) => {
+    // El backend también lo rechaza; aquí se evita que el usuario llene el
+    // formulario de retención o la solicitud para nada.
+    if (newStatus === 'ANULADO' && (hasPendingRefund || authorizedRefund)) {
+      handleMenuClose();
+      enqueueSnackbar(
+        'Esta orden tiene una devolución en curso: debe ejecutarse o rechazarse antes de anular.',
+        { variant: 'warning' },
+      );
+      return;
+    }
+
     // Con pagos, el admin decide antes de anular cuánto retiene la empresa. Quien
     // necesita autorización lo decide en la solicitud: su intento cae en el 403
     // de abajo, o anula con el valor que ya le aprobaron.

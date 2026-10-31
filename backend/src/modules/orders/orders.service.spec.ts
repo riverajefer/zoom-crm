@@ -209,7 +209,10 @@ const mockPrisma = {
   },
   orderEditRequest: { findMany: jest.fn().mockResolvedValue([]) },
   cashMovementVoidRequest: { findMany: jest.fn().mockResolvedValue([]) },
-  refundRequest: { findMany: jest.fn().mockResolvedValue([]) },
+  refundRequest: {
+    findMany: jest.fn().mockResolvedValue([]),
+    findFirst: jest.fn().mockResolvedValue(null),
+  },
   orderStatusChangeRequest: { findMany: jest.fn().mockResolvedValue([]) },
   advisorChangeRequest: { findMany: jest.fn().mockResolvedValue([]) },
   cashSession: {
@@ -2297,6 +2300,33 @@ describe('OrdersService', () => {
       // Un caso que falla antes de releer la OP deja sin consumir el segundo
       // `findById`, y `clearAllMocks` no vacía esa cola: contaminaría el siguiente.
       afterEach(() => mockOrdersRepository.findById.mockReset());
+
+      it('no deja anular con una devolución abierta', async () => {
+        mockOrdersRepository.findById.mockResolvedValueOnce(
+          buildOrder({ status: OrderStatus.IN_PRODUCTION }),
+        );
+        mockPrisma.refundRequest.findFirst.mockResolvedValueOnce({ id: 'refund-1' });
+
+        await expect(
+          service.updateStatus('order-1', OrderStatus.ANULADO, 'admin-1'),
+        ).rejects.toThrow('devolución en curso');
+
+        expect(mockPrisma.refundRequest.findFirst).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: {
+              orderId: 'order-1',
+              OR: [
+                { status: 'PENDING' },
+                { status: 'APPROVED', executedAt: null },
+              ],
+            },
+          }),
+        );
+        expect(mockPrisma.order.update).not.toHaveBeenCalled();
+        expect(
+          mockStatusChangeRequestsService.consumeApprovedRequest,
+        ).not.toHaveBeenCalled();
+      });
 
       it('sin retención, todo lo pagado queda como saldo a favor', async () => {
         mockPrisma.order.findUnique.mockResolvedValue(paidMoney());

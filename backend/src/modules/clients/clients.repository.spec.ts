@@ -309,5 +309,28 @@ describe('ClientsRepository', () => {
 
       expect(stats.saldoAFavor).toBe(65000);
     });
+
+    it('una OP anulada no suma por cobrar, pero conserva su saldo a favor', async () => {
+      const anulada = (orderNumber: string, balance: number) => ({
+        ...op3724,
+        id: orderNumber,
+        orderNumber,
+        orderDate: new Date('2026-08-18'),
+        balance: new Prisma.Decimal(balance),
+        status: 'ANULADO',
+        createdBy: null,
+      });
+      prisma.quote.findMany.mockResolvedValue([]);
+      prisma.order.findMany.mockResolvedValue([
+        anulada('OP-2026-2009', 696000),
+        anulada('OP-2026-3290', -60000),
+      ]);
+
+      const stats = await repository.findClientStats('client-1');
+
+      expect(stats.pendingBalance).toBe(0);
+      expect(stats.pendingOrdersCount).toBe(0);
+      expect(stats.orders.map((o) => o.balance)).toEqual([0, -60000]);
+    });
   });
 });

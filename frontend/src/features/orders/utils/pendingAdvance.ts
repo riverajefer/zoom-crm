@@ -59,16 +59,19 @@ export const getPendingAdvanceInfo = (order: Order): PendingAdvanceInfo => {
   pendingAmount = Math.min(Math.max(pendingAmount, 0), Math.max(paidAmount, 0));
 
   const appliedPaidAmount = paidAmount - pendingAmount;
+  const balance =
+    total -
+    getReversedAmount(order) -
+    appliedPaidAmount +
+    getAppliedCredit(order);
 
   return {
     hasPendingAdvance: pendingAmount > 0,
     pendingAmount,
     pendingPaymentIds,
     appliedPaidAmount,
+    // Una OP anulada no se cobra, pero su saldo a favor sigue siendo del cliente.
     effectiveBalance:
-      total -
-      getReversedAmount(order) -
-      appliedPaidAmount +
-      getAppliedCredit(order),
+      order.status === 'ANULADO' ? Math.min(balance, 0) : balance,
   };
 };

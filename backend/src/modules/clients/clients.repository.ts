@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
-import { Prisma } from '../../generated/prisma';
+import { OrderStatus, Prisma } from '../../generated/prisma';
 import { LOCATION_SUMMARY_SELECT } from '../../common/constants/location-select';
 import { getRequestLocation, withoutLocationScope } from '../../common/utils/location-context';
 import {
@@ -505,9 +505,16 @@ export class ClientsRepository {
     let saldoAFavor = 0;
     let lastOrderDate: Date | null = null;
 
+    // Una OP anulada no se cobra: su saldo positivo es deuda fantasma, pero el
+    // negativo sigue siendo dinero del cliente.
+    const receivableBalance = (order: { balance: Prisma.Decimal; status: OrderStatus }) => {
+      const balance = Number(order.balance);
+      return order.status === OrderStatus.ANULADO ? Math.min(balance, 0) : balance;
+    };
+
     for (const order of orders) {
       const total = Number(order.total);
-      const balance = Number(order.balance);
+      const balance = receivableBalance(order);
 
       totalPurchased += total;
 
@@ -535,7 +542,7 @@ export class ClientsRepository {
         orderDate: o.orderDate,
         total: Number(o.total),
         paidAmount: Number(o.paidAmount),
-        balance: Number(o.balance),
+        balance: receivableBalance(o),
         status: o.status,
         advisor: o.createdBy,
         location: o.location,

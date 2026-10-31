@@ -80,6 +80,7 @@ import {
 import { applyColombianRounding, roundToWholePeso, normalizeRate } from '../../common/utils/rounding.util';
 import {
   ACTIVE_PAYMENT_WHERE,
+  assertRefundsStayCovered,
   computeNetPaidAmount,
   sumActivePayments,
   computeOrderBalance,
@@ -2902,6 +2903,7 @@ export class OrdersService implements OnModuleInit {
           reversedAmount: true,
         },
       });
+      assertRefundsStayCovered(paymentsTotal, current?.refundedAmount);
       const paidAmount = computeNetPaidAmount(
         paymentsTotal,
         current?.refundedAmount,

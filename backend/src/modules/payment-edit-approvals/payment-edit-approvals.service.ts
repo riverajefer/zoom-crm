@@ -28,6 +28,7 @@ import {
 } from '../../generated/prisma';
 import {
   ACTIVE_PAYMENT_WHERE,
+  assertRefundsStayCovered,
   computeNetPaidAmount,
   computeOrderBalance,
 } from '../../common/utils/order-balance.util';
@@ -642,6 +643,8 @@ export class PaymentEditApprovalsService
     for (const payment of payments) {
       paymentsTotal = paymentsTotal.add(payment.amount);
     }
+
+    assertRefundsStayCovered(paymentsTotal, order?.refundedAmount);
 
     // Neto de devoluciones: los pagos siguen ahí, pero ese dinero ya salió.
     const paidAmount = computeNetPaidAmount(paymentsTotal, order?.refundedAmount);

@@ -1,4 +1,5 @@
 import {
+  assertRefundsStayCovered,
   computeAvailableOverpayment,
   computeNetPaidAmount,
   computeOrderBalance,
@@ -101,6 +102,20 @@ describe('order-balance.util', () => {
 
     it('nunca devuelve un abono negativo', () => {
       expect(n(computeNetPaidAmount(10000, 50000))).toBe(0);
+    });
+  });
+
+  describe('assertRefundsStayCovered', () => {
+    it('acepta pagos que cubren lo devuelto, aunque sea justo', () => {
+      expect(() => assertRefundsStayCovered(60000, 56000)).not.toThrow();
+      expect(() => assertRefundsStayCovered(56000, 56000)).not.toThrow();
+      expect(() => assertRefundsStayCovered(0, null)).not.toThrow();
+    });
+
+    it('rechaza dejar los pagos por debajo de lo devuelto', () => {
+      expect(() => assertRefundsStayCovered(0, 56000)).toThrow(
+        /ya se le devolvieron/,
+      );
     });
   });
 

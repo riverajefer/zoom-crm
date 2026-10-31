@@ -16,6 +16,7 @@ import { CashSessionStatus, Prisma } from '../../generated/prisma';
 import { INVERSE_MOVEMENT_TYPE } from './cash-movement.helpers';
 import {
   ACTIVE_PAYMENT_WHERE,
+  assertRefundsStayCovered,
   computeNetPaidAmount,
   computeOrderBalance,
   sumActivePayments,
@@ -241,10 +242,10 @@ export class CashMovementService {
       select: { amount: true },
     });
 
-    const paidAmount = computeNetPaidAmount(
-      sumActivePayments(payments),
-      order.refundedAmount,
-    );
+    const paymentsTotal = sumActivePayments(payments);
+    assertRefundsStayCovered(paymentsTotal, order.refundedAmount);
+
+    const paidAmount = computeNetPaidAmount(paymentsTotal, order.refundedAmount);
 
     await tx.order.update({
       where: { id: payment.orderId },

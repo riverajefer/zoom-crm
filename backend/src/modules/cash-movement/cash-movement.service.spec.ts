@@ -81,6 +81,36 @@ describe('CashMovementService', () => {
     service = module.get<CashMovementService>(CashMovementService);
   });
 
+  describe('voidPaymentWithoutMovement', () => {
+    const refundedOrder = {
+      total: new Prisma.Decimal(56000),
+      appliedCreditAmount: new Prisma.Decimal(0),
+      refundedAmount: new Prisma.Decimal(56000),
+      reversedAmount: new Prisma.Decimal(56000),
+    };
+
+    it('no anula un pago cuyo dinero ya se devolvió', async () => {
+      prisma.order.findUnique.mockResolvedValue(refundedOrder);
+      prisma.payment.findMany.mockResolvedValue([]);
+
+      await expect(
+        service.voidPaymentWithoutMovement('p1', 'u1', 'anulado por error'),
+      ).rejects.toThrow(/ya se le devolvieron/);
+      expect(prisma.order.update).not.toHaveBeenCalled();
+    });
+
+    it('anula el pago si los que quedan cubren lo devuelto', async () => {
+      prisma.order.findUnique.mockResolvedValue(refundedOrder);
+      prisma.payment.findMany.mockResolvedValue([
+        { amount: new Prisma.Decimal(56000) },
+      ]);
+
+      await service.voidPaymentWithoutMovement('p1', 'u1', 'duplicado');
+
+      expect(prisma.order.update).toHaveBeenCalled();
+    });
+  });
+
   describe('voidMovement', () => {
     it('no anula efectivo de la sesión que Caja está contando', async () => {
       repository.findById.mockResolvedValue(

@@ -1,3 +1,4 @@
+import { BadRequestException } from '@nestjs/common';
 import { EditRequestStatus, Prisma } from '../../generated/prisma';
 
 type DecimalLike = Prisma.Decimal | number | string | null | undefined;
@@ -49,6 +50,30 @@ export function computeNetPaidAmount(
 ): Prisma.Decimal {
   const net = toDecimal(paymentsTotal).sub(toDecimal(refundedAmount));
   return net.lessThan(0) ? new Prisma.Decimal(0) : net;
+}
+
+/**
+ * Los pagos de una orden no pueden quedar por debajo de lo ya devuelto.
+ *
+ * El dinero que salió por una devolución salió de esos pagos. Si se anula o se
+ * rebaja uno, ese dinero vuelve a figurar disponible y se puede devolver otra
+ * vez: con un pago de saldo a favor, el saldo reaparece en la OP de origen
+ * (OP-2026-4479). Llamar dentro de la transacción, con los pagos ya cambiados.
+ */
+export function assertRefundsStayCovered(
+  paymentsTotal: DecimalLike,
+  refundedAmount: DecimalLike,
+): void {
+  const total = toDecimal(paymentsTotal);
+  const refunded = toDecimal(refundedAmount);
+
+  if (total.lessThan(refunded)) {
+    throw new BadRequestException(
+      `Este cambio no se puede aplicar: al cliente ya se le devolvieron ` +
+        `$${refunded.toNumber().toLocaleString('es-CO')} de esta orden y sus ` +
+        `pagos quedarían en $${total.toNumber().toLocaleString('es-CO')}.`,
+    );
+  }
 }
 
 /**

@@ -515,17 +515,22 @@ export const OrderDetailPage: React.FC = () => {
       'DELIVERED',
       'WARRANTY',
     ].includes(order.status);
+  // Un borrador con el anticipo rechazado no se puede confirmar: el único
+  // camino es registrar un abono nuevo para que Caja lo apruebe.
+  const redoesRejectedAdvance =
+    order.status === 'DRAFT' && order.advancePaymentStatus === 'REJECTED';
   const canAddPayment =
     !isAnulado &&
     permissions.includes('register_order_payments') &&
-    [
+    ([
       'CONFIRMED',
       'IN_PRODUCTION',
       'READY',
       'DELIVERED',
       'DELIVERED_ON_CREDIT',
       'PAID',
-    ].includes(order.status);
+    ].includes(order.status) ||
+      redoesRejectedAdvance);
   const isAdmin = user?.role?.name === 'admin';
   const canApplyDiscount =
     !isAnulado &&
@@ -1171,6 +1176,12 @@ export const OrderDetailPage: React.FC = () => {
             <Box sx={{ mt: 0.5 }}>
               <strong>Motivo del rechazo:</strong>{' '}
               {order.advancePaymentRejectedReason}
+            </Box>
+          )}
+          {redoesRejectedAdvance && (
+            <Box sx={{ mt: 0.5 }}>
+              Para confirmar la orden, registra un nuevo abono con «Registrar
+              Pago». Cuando Caja lo apruebe, podrás cambiarle el estado.
             </Box>
           )}
           {pendingAdvance.appliedPaidAmount > 0 && (

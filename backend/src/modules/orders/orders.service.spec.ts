@@ -3203,6 +3203,19 @@ describe('OrdersService', () => {
       );
     });
 
+    it('admite un abono nuevo en un borrador cuyo anticipo rechazó Caja', async () => {
+      mockOrdersRepository.findById.mockResolvedValue(
+        buildOrder({
+          status: OrderStatus.DRAFT,
+          advancePaymentStatus: EditRequestStatus.REJECTED,
+        }),
+      );
+
+      await service.addPayment('order-1', paymentDto, 'user-1');
+
+      expect(mockPrisma.payment.create).toHaveBeenCalled();
+    });
+
     it('should allow payment amount that exceeds order balance (saldo a favor via RefundRequest)', async () => {
       // Balance = 119, payment = 200 → allowed; excess becomes saldo a favor
       await service.addPayment(

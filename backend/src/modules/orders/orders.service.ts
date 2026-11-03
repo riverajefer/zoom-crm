@@ -2408,7 +2408,14 @@ export class OrdersService implements OnModuleInit {
       OrderStatus.WARRANTY,
     ];
 
-    if (!allowedStatuses.includes(order.status)) {
+    // Un borrador cuyo anticipo rechazó Caja solo se destraba con un abono
+    // nuevo: `updateStatus` no lo deja confirmar mientras siga REJECTED. Sin
+    // esta excepción la OP quedaba sin salida (OP-2026-3592).
+    const redoesRejectedAdvance =
+      order.status === OrderStatus.DRAFT &&
+      order.advancePaymentStatus === EditRequestStatus.REJECTED;
+
+    if (!allowedStatuses.includes(order.status) && !redoesRejectedAdvance) {
       throw new BadRequestException(
         'Payments can only be added to CONFIRMED or later status orders',
       );

@@ -45,6 +45,8 @@ export interface WorkOrderItem {
   id: string;
   productDescription: string;
   observations?: string | null;
+  /** Si es posterior a la creación de la OT, el ítem llegó después desde la OP. */
+  createdAt?: string;
   orderItem: {
     id: string;
     description: string;

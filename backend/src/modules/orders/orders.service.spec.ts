@@ -77,6 +77,7 @@ const mockAuditLogsService = {
   logOrderChange: jest.fn(),
   logUpdate: jest.fn().mockResolvedValue(undefined),
   logDelete: jest.fn().mockResolvedValue(undefined),
+  logCreate: jest.fn().mockResolvedValue(undefined),
 };
 
 const mockStorageService = {
@@ -186,6 +187,11 @@ const mockPrisma = {
   },
   workOrderItem: {
     findMany: jest.fn(),
+    create: jest.fn(),
+  },
+  // Sin OT activa por defecto: los ítems nuevos de la OP no tienen a dónde ir.
+  workOrder: {
+    findFirst: jest.fn().mockResolvedValue(null),
   },
   order: {
     findUnique: jest.fn(),
@@ -1374,6 +1380,7 @@ describe('OrdersService', () => {
       mockPrisma.orderItem.findMany.mockResolvedValue([existingItem]);
       // tx.orderItem.findFirst for sortOrder lookup
       mockPrisma.orderItem.findFirst.mockResolvedValue(null);
+      mockPrisma.orderItem.create.mockResolvedValue({ id: 'item-new' });
       // aggregate queries inside recalculate
       mockPrisma.orderItem.findMany.mockResolvedValue([]);
       mockPrisma.orderDiscount.findMany.mockResolvedValue([]);
@@ -1479,6 +1486,92 @@ describe('OrdersService', () => {
           data: expect.objectContaining({ description: 'New item', orderId: 'order-1' }),
         }),
       );
+    });
+
+    it('should add the new item to the active work order of the order', async () => {
+      // Caso real OP-2026-5334: la OP ya tenía OT y se le agregó una bandera; la
+      // OT seguía con dos ítems y el taller nunca la vio.
+      mockPrisma.orderItem.findMany.mockResolvedValueOnce([{ id: 'item-1' }]);
+      mockPrisma.orderItem.create.mockResolvedValueOnce({ id: 'item-new' });
+      mockPrisma.workOrder.findFirst.mockResolvedValueOnce({
+        id: 'wo-1',
+        workOrderNumber: 'OT-2026-0975',
+      });
+      // Lectura de los ítems recién creados para copiarlos a la OT.
+      mockPrisma.orderItem.findMany.mockResolvedValueOnce([
+        {
+          id: 'item-new',
+          description: 'BANDERA EN SATIN',
+          productionAreas: [{ productionAreaId: 'pa-1' }],
+        },
+      ]);
+      mockPrisma.workOrderItem.create.mockResolvedValueOnce({ id: 'woi-new' });
+
+      await service.update(
+        'order-1',
+        {
+          items: [
+            { id: 'item-1', description: 'Existing', quantity: 1, unitPrice: 10 },
+            { description: 'BANDERA EN SATIN', quantity: 1, unitPrice: 80000, productionAreaIds: ['pa-1'] },
+          ],
+        },
+        'user-1',
+      );
+
+      expect(mockPrisma.workOrder.findFirst).toHaveBeenCalledWith({
+        where: {
+          orderId: 'order-1',
+          status: { in: ['DRAFT', 'CONFIRMED', 'IN_PRODUCTION'] },
+        },
+        select: { id: true, workOrderNumber: true },
+      });
+      expect(mockPrisma.workOrderItem.create).toHaveBeenCalledWith({
+        data: {
+          workOrderId: 'wo-1',
+          orderItemId: 'item-new',
+          productDescription: 'BANDERA EN SATIN',
+          productionAreas: { create: [{ productionAreaId: 'pa-1' }] },
+        },
+        select: { id: true },
+      });
+      expect(mockAuditLogsService.logCreate).toHaveBeenCalledWith(
+        'WorkOrderItem',
+        'woi-new',
+        expect.objectContaining({ workOrderNumber: 'OT-2026-0975', orderItemId: 'item-new' }),
+        'user-1',
+      );
+    });
+
+    it('should not touch any work order when the order has none open', async () => {
+      mockPrisma.orderItem.findMany.mockResolvedValueOnce([{ id: 'item-1' }]);
+      mockPrisma.orderItem.create.mockResolvedValueOnce({ id: 'item-new' });
+
+      await service.update(
+        'order-1',
+        {
+          items: [
+            { id: 'item-1', description: 'Existing', quantity: 1, unitPrice: 10 },
+            { description: 'Nuevo', quantity: 1, unitPrice: 10 },
+          ],
+        },
+        'user-1',
+      );
+
+      expect(mockPrisma.workOrder.findFirst).toHaveBeenCalled();
+      expect(mockPrisma.workOrderItem.create).not.toHaveBeenCalled();
+      expect(mockAuditLogsService.logCreate).not.toHaveBeenCalled();
+    });
+
+    it('should not look for a work order when no item is created', async () => {
+      mockPrisma.orderItem.findMany.mockResolvedValueOnce([{ id: 'item-1' }]);
+
+      await service.update(
+        'order-1',
+        { items: [{ id: 'item-1', description: 'A', quantity: 1, unitPrice: 10 }] },
+        'user-1',
+      );
+
+      expect(mockPrisma.workOrder.findFirst).not.toHaveBeenCalled();
     });
 
     it('should update existing items when id matches a current DB item', async () => {

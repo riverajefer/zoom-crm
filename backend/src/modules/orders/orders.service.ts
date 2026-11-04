@@ -192,6 +192,29 @@ interface CascadedWorkOrderItem {
 }
 
 /**
+ * Ítem de OT creado solo porque se agregó un ítem a su OP. Se audita al
+ * confirmarse la transacción, igual que la cascada de borrado.
+ */
+interface PropagatedWorkOrderItem {
+  id: string;
+  orderItemId: string;
+  productDescription: string;
+  workOrderId: string;
+  workOrderNumber: string;
+}
+
+/**
+ * Estados de OT que reciben solos los ítems nuevos de su OP: los mismos en que
+ * la OT se puede editar. Una OT lista para entrega o completada ya terminó; ahí
+ * el ítem queda pendiente y el detalle de la OT lo avisa.
+ */
+const WORK_ORDER_STATUSES_RECEIVING_NEW_ITEMS: WorkOrderStatus[] = [
+  WorkOrderStatus.DRAFT,
+  WorkOrderStatus.CONFIRMED,
+  WorkOrderStatus.IN_PRODUCTION,
+];
+
+/**
  * Forma con la que se devuelve un pago recién registrado. Vive fuera de la clase
  * porque la usan tanto `addPayment` como la búsqueda por llave de idempotencia:
  * la petición gemela de un doble clic tiene que recibir exactamente lo mismo.
@@ -1316,6 +1339,99 @@ export class OrdersService implements OnModuleInit {
     }
   }
 
+  /**
+   * Pasa a la OT activa de la OP los ítems que se acaban de crear en la OP.
+   *
+   * Es la contraparte del borrado en cascada: si quitar un ítem de la OP lo quita
+   * de la OT, agregarlo también debe agregarlo. Antes no pasaba y el ítem nunca
+   * llegaba al taller (OP-2026-5334). El ítem de OT nace con la descripción y
+   * las áreas de producción del ítem de OP, como cuando se crea la OT.
+   *
+   * Va dentro de la transacción que crea el ítem: la OP y la OT quedan iguales o
+   * no cambia ninguna.
+   */
+  private async propagateNewItemsToWorkOrder(
+    tx: Prisma.TransactionClient,
+    orderId: string,
+    orderItemIds: string[],
+  ): Promise<PropagatedWorkOrderItem[]> {
+    if (orderItemIds.length === 0) return [];
+
+    const workOrder = await tx.workOrder.findFirst({
+      where: {
+        orderId,
+        status: { in: WORK_ORDER_STATUSES_RECEIVING_NEW_ITEMS },
+      },
+      select: { id: true, workOrderNumber: true },
+    });
+    if (!workOrder) return [];
+
+    const orderItems = await tx.orderItem.findMany({
+      where: { id: { in: orderItemIds }, orderId },
+      select: {
+        id: true,
+        description: true,
+        productionAreas: { select: { productionAreaId: true } },
+      },
+      orderBy: { sortOrder: 'asc' },
+    });
+
+    const propagated: PropagatedWorkOrderItem[] = [];
+    for (const orderItem of orderItems) {
+      const created = await tx.workOrderItem.create({
+        data: {
+          workOrderId: workOrder.id,
+          orderItemId: orderItem.id,
+          productDescription: orderItem.description,
+          productionAreas: orderItem.productionAreas.length
+            ? {
+                create: orderItem.productionAreas.map((pa) => ({
+                  productionAreaId: pa.productionAreaId,
+                })),
+              }
+            : undefined,
+        },
+        select: { id: true },
+      });
+      propagated.push({
+        id: created.id,
+        orderItemId: orderItem.id,
+        productDescription: orderItem.description,
+        workOrderId: workOrder.id,
+        workOrderNumber: workOrder.workOrderNumber,
+      });
+    }
+    return propagated;
+  }
+
+  /** Deja constancia de los ítems que llegaron solos a la OT. Después del commit. */
+  private auditWorkOrderItemsAddedFromOrder(
+    propagated: PropagatedWorkOrderItem[],
+    orderNumber: string,
+    userId?: string,
+  ): void {
+    if (propagated.length === 0) return;
+
+    this.logger.log(
+      `Editar ${orderNumber} agregó ${propagated.length} ítem(s) a la OT ${propagated[0].workOrderNumber}`,
+    );
+
+    for (const woi of propagated) {
+      this.auditLogsService.logCreate(
+        'WorkOrderItem',
+        woi.id,
+        {
+          orderItemId: woi.orderItemId,
+          productDescription: woi.productDescription,
+          workOrderId: woi.workOrderId,
+          workOrderNumber: woi.workOrderNumber,
+          reason: `Agregado a la OT al agregarse a la orden ${orderNumber}`,
+        },
+        userId,
+      );
+    }
+  }
+
   async update(id: string, updateOrderDto: UpdateOrderDto, userId: string) {
     const oldOrder = await this.findOne(id);
     this.assertNotAnulado(oldOrder, 'editar orden');
@@ -1355,6 +1471,7 @@ export class OrdersService implements OnModuleInit {
     if (updateOrderDto.items || updateOrderDto.initialPayment) {
       // Se llena dentro de la transacción y se audita al confirmarse.
       let cascadedWorkOrderItems: CascadedWorkOrderItem[] = [];
+      let propagatedWorkOrderItems: PropagatedWorkOrderItem[] = [];
 
       const updatedOrder = await this.prisma.$transaction(async (tx) => {
         // Preparar datos de actualización de fecha
@@ -1512,6 +1629,7 @@ export class OrdersService implements OnModuleInit {
 
           // Crear items nuevos
           if (itemsToCreate.length > 0) {
+            const createdItemIds: string[] = [];
             const remainingCount = currentItems.length - idsToDelete.length;
             for (let i = 0; i < itemsToCreate.length; i++) {
               const item = itemsToCreate[i];
@@ -1541,7 +1659,14 @@ export class OrdersService implements OnModuleInit {
                   })),
                 });
               }
+              createdItemIds.push(createdItem.id);
             }
+
+            propagatedWorkOrderItems = await this.propagateNewItemsToWorkOrder(
+              tx,
+              id,
+              createdItemIds,
+            );
           }
         }
 
@@ -1690,6 +1815,11 @@ export class OrdersService implements OnModuleInit {
 
       this.auditWorkOrderItemsRemovedByCascade(
         cascadedWorkOrderItems,
+        oldOrder.orderNumber,
+        userId,
+      );
+      this.auditWorkOrderItemsAddedFromOrder(
+        propagatedWorkOrderItems,
         oldOrder.orderNumber,
         userId,
       );

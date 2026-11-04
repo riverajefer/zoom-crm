@@ -472,6 +472,12 @@ export const WorkOrderDetailPage = () => {
                     const fullyAnnulled =
                       annulledQuantity > 0 &&
                       getAliveQuantity(item.orderItem) === 0;
+                    // Se creó después que la OT (la OP lo sumó luego): el taller tiene
+                    // que notarlo, porque aparece en una OT que quizá ya estaba en marcha.
+                    const addedAfterCreation =
+                      !!item.createdAt &&
+                      new Date(item.createdAt).getTime() - new Date(workOrder.createdAt).getTime() >
+                        60_000;
                     return (
                     <Box key={item.id}>
                       <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={1}>
@@ -487,6 +493,15 @@ export const WorkOrderDetailPage = () => {
                           >
                             Producto {index + 1}: {item.productDescription}
                           </Typography>
+                          {addedAfterCreation && (
+                            <Chip
+                              label={`Agregado desde la OP · ${formatDate(item.createdAt)}`}
+                              size="small"
+                              color="info"
+                              variant="outlined"
+                              sx={{ maxWidth: '100%' }}
+                            />
+                          )}
                           {annulledQuantity > 0 && (
                             <Chip
                               label={

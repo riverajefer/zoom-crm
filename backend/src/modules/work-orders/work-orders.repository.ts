@@ -348,6 +348,76 @@ export class WorkOrdersRepository {
     });
   }
 
+  /**
+   * Agrega a una OT existente un ítem de su OP que todavía no tenía (p. ej. uno
+   * que se sumó a la OP después de crear la OT).
+   */
+  async addItem(
+    workOrderId: string,
+    item: {
+      orderItemId: string;
+      productDescription: string;
+      observations?: string;
+      productionAreaIds?: string[];
+      supplies?: Array<{
+        supplyId: string;
+        quantity?: number;
+        notes?: string;
+      }>;
+    },
+  ) {
+    return this.prisma.workOrderItem.create({
+      data: {
+        workOrderId,
+        orderItemId: item.orderItemId,
+        productDescription: item.productDescription,
+        observations: item.observations,
+        productionAreas: item.productionAreaIds?.length
+          ? {
+              create: item.productionAreaIds.map((productionAreaId) => ({
+                productionAreaId,
+              })),
+            }
+          : undefined,
+        supplies: item.supplies?.length
+          ? {
+              create: item.supplies.map((supply) => ({
+                supplyId: supply.supplyId,
+                quantity: supply.quantity,
+                notes: supply.notes,
+              })),
+            }
+          : undefined,
+      },
+    });
+  }
+
+  /**
+   * Ítems de la OP que no están en la OT. Excluye los anulados por completo:
+   * esos ya no se producen.
+   */
+  async findPendingOrderItems(workOrderId: string, orderId: string) {
+    const items = await this.prisma.orderItem.findMany({
+      where: {
+        orderId,
+        workOrderItems: { none: { workOrderId } },
+      },
+      select: {
+        id: true,
+        description: true,
+        quantity: true,
+        annulledQuantity: true,
+        productionAreas: {
+          select: {
+            productionArea: { select: { id: true, name: true } },
+          },
+        },
+      },
+      orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+    });
+    return items.filter((item) => item.annulledQuantity.lessThan(item.quantity));
+  }
+
   async updateItem(
     itemId: string,
     data: {

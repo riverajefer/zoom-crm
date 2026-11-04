@@ -51,6 +51,7 @@ import type {
   CreateWorkOrderItemDto,
   UpdateWorkOrderDto,
   SupplyInputDto,
+  PendingOrderItem,
 } from '../../../types/work-order.types';
 
 const formatCurrency = (value: string | number): string => {
@@ -69,6 +70,8 @@ interface WorkOrderItemForm {
   productionAreaIds: string[];
   supplies: SupplyInputDto[];
   observations: string;
+  /** Ítem de la OP que la OT no tenía y se agrega en esta edición. */
+  isNew?: boolean;
 }
 
 // ─── Step config ──────────────────────────────────────────────────────────────
@@ -325,11 +328,38 @@ export const WorkOrderFormPage = () => {
           observations: item.observations ?? '',
         })),
       );
-      // En edición todos los pasos ya estuvieron completados
-      setActiveStep(1);
+      // En edición todos los pasos ya estuvieron completados. Si se llega desde
+      // el aviso del detalle («ítems de la OP que faltan»), se abre directo en
+      // Productos para agregarlos.
+      const focusItems = (location.state as { focusItems?: boolean } | null)?.focusItems;
+      setActiveStep(focusItems ? 2 : 1);
       setVisitedSteps(new Set([0, 1, 2, 3]));
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEdit, workOrderQuery.data]);
+
+  // Ítems de la OP que la OT no tiene y todavía no se han agregado en esta edición.
+  const pendingOrderItems = (workOrderQuery.data?.pendingOrderItems ?? []).filter(
+    (pending) => !itemsForms.some((form) => form.orderItemId === pending.id),
+  );
+
+  const addPendingItem = (pending: PendingOrderItem) => {
+    setItemsForms((prev) => [
+      ...prev,
+      {
+        orderItemId: pending.id,
+        productDescription: pending.description,
+        productionAreaIds: pending.productionAreas.map((pa) => pa.productionArea.id),
+        supplies: [],
+        observations: '',
+        isNew: true,
+      },
+    ]);
+  };
+
+  const removeNewItem = (orderItemId: string) => {
+    setItemsForms((prev) => prev.filter((form) => !(form.isNew && form.orderItemId === orderItemId)));
+  };
 
   // ─── Prefill desde detalle de OP (solo en creación) ────────────────────────
   useEffect(() => {
@@ -897,6 +927,29 @@ export const WorkOrderFormPage = () => {
         </Alert>
       )}
 
+      {isEdit && pendingOrderItems.length > 0 && (
+        <Alert severity="info" sx={{ borderRadius: 2 }}>
+          <Typography variant="body2" fontWeight={600} gutterBottom>
+            La OP tiene {pendingOrderItems.length === 1 ? '1 ítem que no está' : `${pendingOrderItems.length} ítems que no están`} en esta OT
+          </Typography>
+          <Typography variant="caption" color="text.secondary" display="block" mb={1}>
+            Se agregaron a la OP después de crear la OT. Agrégalos para que el taller los produzca.
+          </Typography>
+          <Stack spacing={1}>
+            {pendingOrderItems.map((pending) => (
+              <Stack key={pending.id} direction="row" spacing={1} alignItems="center" justifyContent="space-between">
+                <Typography variant="body2" sx={{ flex: 1 }}>
+                  {pending.description.trim()} · Cant: {Number(pending.quantity) - (Number(pending.annulledQuantity) || 0)}
+                </Typography>
+                <Button size="small" variant="outlined" startIcon={<AddIcon />} onClick={() => addPendingItem(pending)}>
+                  Agregar a la OT
+                </Button>
+              </Stack>
+            ))}
+          </Stack>
+        </Alert>
+      )}
+
       {supplyModalOpenIdx !== null && (
         <CreateSupplyModal
           open
@@ -913,7 +966,8 @@ export const WorkOrderFormPage = () => {
 
       {itemsForms.map((itemForm, i) => {
         const sourceItem = isEdit
-          ? workOrderQuery.data?.items[i]?.orderItem
+          ? workOrderQuery.data?.items.find((it) => it.orderItem.id === itemForm.orderItemId)?.orderItem ??
+            workOrderQuery.data?.pendingOrderItems?.find((it) => it.id === itemForm.orderItemId)
           : // Por id y no por posición: los ítems anulados se filtran arriba y
             // los índices dejan de coincidir con los de la OP.
             selectedOrder?.items.find((it) => it.id === itemForm.orderItemId);
@@ -924,9 +978,13 @@ export const WorkOrderFormPage = () => {
           <Card key={itemForm.orderItemId} variant="outlined" sx={{ borderRadius: 2 }}>
             <CardContent>
               <Stack direction="row" alignItems="center" justifyContent="space-between" mb={0.5}>
-                <Typography variant="subtitle2" fontWeight={700}>
-                  Producto {i + 1}
-                </Typography>
+                <Stack direction="row" alignItems="center" spacing={1}>
+                  <Typography variant="subtitle2" fontWeight={700}>
+                    Producto {i + 1}
+                  </Typography>
+                  {itemForm.isNew && <Chip label="Nuevo en la OT" size="small" color="info" />}
+                </Stack>
+                <Stack direction="row" alignItems="center" spacing={0.5}>
                 {sourceItem?.quantity != null && (
                   <Chip
                     label={
@@ -939,6 +997,17 @@ export const WorkOrderFormPage = () => {
                     color={annulledQuantity > 0 ? 'error' : 'default'}
                   />
                 )}
+                {itemForm.isNew && (
+                  <IconButton
+                    size="small"
+                    aria-label="Quitar de la OT"
+                    title="Quitar de la OT"
+                    onClick={() => removeNewItem(itemForm.orderItemId)}
+                  >
+                    <CloseIcon fontSize="small" />
+                  </IconButton>
+                )}
+                </Stack>
               </Stack>
               <Typography variant="caption" color="text.secondary" display="block" gutterBottom>
                 Original: {sourceItem?.description}

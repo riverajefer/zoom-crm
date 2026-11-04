@@ -55,6 +55,8 @@ const mockWorkOrdersRepository = {
   update: jest.fn(),
   updateStatus: jest.fn(),
   updateItem: jest.fn(),
+  addItem: jest.fn(),
+  findPendingOrderItems: jest.fn().mockResolvedValue([]),
   addSupplyToItem: jest.fn(),
   removeSupplyFromItem: jest.fn(),
   delete: jest.fn(),
@@ -306,6 +308,17 @@ describe('WorkOrdersService', () => {
       expect(result).toMatchObject({ id: 'wo-1' });
     });
 
+    it('incluye los ítems de la OP que faltan en la OT', async () => {
+      (mockWorkOrdersRepository.findById as jest.Mock).mockResolvedValue(mockWorkOrder);
+      const pending = [{ id: 'oi-3', description: 'Bandera' }];
+      (mockWorkOrdersRepository.findPendingOrderItems as jest.Mock).mockResolvedValueOnce(pending);
+
+      const result = await service.findOne('wo-1');
+
+      expect(mockWorkOrdersRepository.findPendingOrderItems).toHaveBeenCalledWith('wo-1', 'order-1');
+      expect(result.pendingOrderItems).toEqual(pending);
+    });
+
     it('should throw NotFoundException when work order not found', async () => {
       (mockWorkOrdersRepository.findById as jest.Mock).mockResolvedValue(null);
 
@@ -399,6 +412,60 @@ describe('WorkOrdersService', () => {
         'woi-1',
         expect.objectContaining({ productDescription: 'Camiseta actualizada' }),
       );
+    });
+
+    it('crea en la OT un ítem que se agregó a la OP después de crearla', async () => {
+      (prisma.order.findUnique as jest.Mock).mockResolvedValue({
+        ...mockOrder,
+        items: [
+          { id: 'oi-1', description: 'Camiseta', quantity: 10, annulledQuantity: 0 },
+          { id: 'oi-2', description: 'Camiseta L', quantity: 5, annulledQuantity: 0 },
+          { id: 'oi-3', description: 'Bandera', quantity: 1, annulledQuantity: 0 },
+        ],
+      });
+      (mockWorkOrdersRepository.findById as jest.Mock).mockResolvedValue({
+        ...mockWorkOrder,
+        status: WorkOrderStatus.IN_PRODUCTION,
+      });
+
+      await service.update('wo-1', {
+        items: [
+          { orderItemId: 'oi-1' },
+          { orderItemId: 'oi-3', productionAreaIds: ['pa-1'] },
+        ],
+      } as any);
+
+      expect(mockWorkOrdersRepository.updateItem).toHaveBeenCalledWith('woi-1', expect.anything());
+      expect(mockWorkOrdersRepository.addItem).toHaveBeenCalledTimes(1);
+      expect(mockWorkOrdersRepository.addItem).toHaveBeenCalledWith('wo-1', {
+        orderItemId: 'oi-3',
+        productDescription: 'Bandera',
+        observations: undefined,
+        productionAreaIds: ['pa-1'],
+        supplies: undefined,
+      });
+    });
+
+    it('rechaza agregar un ítem anulado por completo en la OP', async () => {
+      (prisma.order.findUnique as jest.Mock).mockResolvedValue({
+        ...mockOrder,
+        items: [{ id: 'oi-3', description: 'Bandera', quantity: 1, annulledQuantity: 1 }],
+      });
+      (mockWorkOrdersRepository.findById as jest.Mock).mockResolvedValue(mockWorkOrder);
+
+      await expect(
+        service.update('wo-1', { items: [{ orderItemId: 'oi-3' }] } as any),
+      ).rejects.toThrow(BadRequestException);
+      expect(mockWorkOrdersRepository.addItem).not.toHaveBeenCalled();
+    });
+
+    it('rechaza un ítem que no pertenece a la OP', async () => {
+      (prisma.order.findUnique as jest.Mock).mockResolvedValue(mockOrder);
+      (mockWorkOrdersRepository.findById as jest.Mock).mockResolvedValue(mockWorkOrder);
+
+      await expect(
+        service.update('wo-1', { items: [{ orderItemId: 'otro' }] } as any),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 

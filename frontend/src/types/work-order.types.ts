@@ -85,6 +85,14 @@ export interface WorkOrderTimeEntry {
   } | null;
 }
 
+export interface PendingOrderItem {
+  id: string;
+  description: string;
+  quantity: string;
+  annulledQuantity: string;
+  productionAreas: Array<{ productionArea: { id: string; name: string } }>;
+}
+
 export interface WorkOrder extends LocatedDocument {
   id: string;
   workOrderNumber: string;
@@ -148,6 +156,11 @@ export interface WorkOrder extends LocatedDocument {
   }>;
   timeEntries?: WorkOrderTimeEntry[];
   items: WorkOrderItem[];
+  /**
+   * Ítems de la OP que no están en esta OT (se agregaron a la OP después de
+   * crearla). Solo llega en el detalle (GET /work-orders/:id).
+   */
+  pendingOrderItems?: PendingOrderItem[];
   createdAt: string;
   updatedAt: string;
 }

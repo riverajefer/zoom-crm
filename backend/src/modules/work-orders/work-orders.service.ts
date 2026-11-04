@@ -184,7 +184,13 @@ export class WorkOrdersService {
     if (!workOrder) {
       throw new NotFoundException(`OT con id ${id} no encontrada`);
     }
-    return workOrder;
+    // Ítems que se sumaron a la OP después de crear la OT: el formulario de
+    // edición los ofrece para agregarlos y el detalle avisa que faltan.
+    const pendingOrderItems = await this.workOrdersRepository.findPendingOrderItems(
+      id,
+      workOrder.order.id,
+    );
+    return { ...workOrder, pendingOrderItems };
   }
 
   /** Detalle para la pantalla, con modo consulta para otra sede. Ver `OrdersService.findOneForView`. */
@@ -256,17 +262,52 @@ export class WorkOrdersService {
       // Verify orderItemIds belong to the order
       const order = await this.prisma.order.findUnique({
         where: { id: workOrder.order.id },
-        include: { items: { select: { id: true, description: true } } },
+        include: {
+          items: {
+            select: { id: true, description: true, quantity: true, annulledQuantity: true },
+          },
+        },
       });
 
       const orderItemMap = new Map(order!.items.map((i) => [i.id, i]));
+      const addedOrderItemIds = new Set<string>();
 
       for (const item of items) {
+        const orderItem = orderItemMap.get(item.orderItemId);
+        if (!orderItem) {
+          throw new BadRequestException(
+            `El item con orderItemId ${item.orderItemId} no pertenece a la orden ${workOrder.order.orderNumber}`,
+          );
+        }
+
         // Find the corresponding workOrderItem by orderItemId
         const woItem = workOrder.items.find(
           (i: (typeof workOrder.items)[number]) => i.orderItem.id === item.orderItemId,
         );
+
+        // Ítem de la OP que la OT no tenía (se agregó a la OP después de crear
+        // la OT): se crea. Antes se descartaba en silencio y no había otra forma
+        // de pasarlo a la OT, porque solo se permite una OT activa por OP.
         if (!woItem) {
+          if (addedOrderItemIds.has(item.orderItemId)) continue;
+          const annulled = new Prisma.Decimal(orderItem.annulledQuantity ?? 0);
+          if (annulled.greaterThan(0) && annulled.greaterThanOrEqualTo(orderItem.quantity)) {
+            throw new BadRequestException(
+              `El ítem «${orderItem.description.trim()}» está anulado en la orden y no puede incluirse en la OT`,
+            );
+          }
+          await this.workOrdersRepository.addItem(id, {
+            orderItemId: item.orderItemId,
+            productDescription: item.productDescription ?? orderItem.description,
+            observations: item.observations,
+            productionAreaIds: item.productionAreaIds,
+            supplies: item.supplies?.map((s) => ({
+              supplyId: s.supplyId,
+              quantity: s.quantity,
+              notes: s.notes,
+            })),
+          });
+          addedOrderItemIds.add(item.orderItemId);
           continue;
         }
 

@@ -30,22 +30,23 @@ export const formatCurrency = (
 };
 
 /**
- * Aplica redondeo comercial colombiano al total de una orden.
- * - Últimos 2 dígitos 01–40 → redondea hacia abajo al múltiplo de 100.
- * - Últimos 2 dígitos 41–99 → redondea hacia arriba al siguiente múltiplo de 100.
- * - Múltiplo exacto de 100 → sin cambios.
+ * Aplica redondeo comercial al total de una orden: múltiplo de 50 más cercano
+ * (la moneda más pequeña en circulación), así que $94.350 queda igual.
+ * - Se truncan los centavos.
+ * - Resto contra 50 entre 01–24 → baja; entre 25–49 → sube.
+ * Debe coincidir con `applyColombianRounding` del backend.
  */
 export const applyColombianRounding = (value: number): number => {
   const truncated = Math.trunc(value);
-  const lastTwo = truncated % 100;
-  if (lastTwo === 0) return truncated;
-  if (lastTwo >= 1 && lastTwo <= 40) return truncated - lastTwo;
-  return truncated + (100 - lastTwo);
+  const remainder = truncated % 50;
+  if (remainder === 0) return truncated;
+  if (remainder < 25) return truncated - remainder;
+  return truncated + (50 - remainder);
 };
 
 /**
  * Redondea el total al peso entero. Se usa cuando hay retenciones, donde el
- * redondeo comercial a múltiplos de 100 distorsionaría la base del certificado
+ * redondeo comercial a múltiplos de 50 distorsionaría la base del certificado
  * de retención, pero dejar centavos tampoco sirve: el cliente paga pesos
  * enteros y el residuo queda como saldo a favor imposible de saldar.
  * Debe coincidir con `roundToWholePeso` del backend.

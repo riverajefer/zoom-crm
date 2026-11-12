@@ -6,11 +6,10 @@ export const DTF_IVA_RATE = 0.19;
 /**
  * Total que se le cobra al cliente por un registro DTF. Es exactamente el mismo
  * número que tendrá la OP al convertirse: `valor + IVA` con el redondeo
- * comercial colombiano al múltiplo de 100.
+ * comercial al múltiplo de 50.
  *
- * Cobrar el valor sin redondear (35.000 × 1,19 = 41.650) deja la OP con un
- * saldo de $50 que el cliente ya no debe y que nadie puede saldar, porque el
- * total de la OP sí se redondea a 41.700. Debe coincidir con
+ * Cobrar un valor distinto del total de la OP deja un saldo menor a $50 que
+ * el cliente ya no debe y que nadie puede saldar. Debe coincidir con
  * `computeDtfTotalToCharge` del backend.
  */
 export const dtfTotalToCharge = (value: number, applyIva: boolean): number =>

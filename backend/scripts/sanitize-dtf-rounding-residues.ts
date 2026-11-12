@@ -4,7 +4,7 @@
  * Contexto
  * --------
  * El total de una OP se cierra con el redondeo comercial colombiano al múltiplo
- * de 100 (`applyColombianRounding`). El módulo DTF no lo aplicaba: cobraba en el
+ * de 100 (regla vigente hasta 2026-11). El módulo DTF no lo aplicaba: cobraba en el
  * mostrador el valor exacto con IVA y ese cobro viajaba como pago inicial de la
  * OP al convertir el registro.
  *
@@ -57,7 +57,20 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
 import { PrismaClient, Prisma } from '../src/generated/prisma';
 import { computeOrderBalance } from '../src/common/utils/order-balance.util';
-import { applyColombianRounding } from '../src/common/utils/rounding.util';
+
+/**
+ * Regla de redondeo vigente cuando se generaron los residuos (múltiplos de
+ * 100: 01–40 baja, 41–99 sube). Se congela aquí porque `applyColombianRounding`
+ * pasó a múltiplos de 50 en 2026-11 y la firma del residuo histórico depende
+ * de la regla vieja.
+ */
+function legacyRoundTo100(value: Prisma.Decimal): Prisma.Decimal {
+  const truncated = value.toDecimalPlaces(0, Prisma.Decimal.ROUND_DOWN);
+  const lastTwo = truncated.mod(100).toNumber();
+  if (lastTwo === 0) return truncated;
+  if (lastTwo <= 40) return truncated.sub(lastTwo);
+  return truncated.add(100 - lastTwo);
+}
 
 const APPLY = process.argv.includes('--apply');
 const ENV =
@@ -152,7 +165,7 @@ async function main() {
     if (balance.abs().gte(MAX_RESIDUE)) return false;
     const paid = new Prisma.Decimal(o.paidAmount);
     if (paid.lte(0)) return false;
-    return applyColombianRounding(paid).equals(new Prisma.Decimal(o.total));
+    return legacyRoundTo100(paid).equals(new Prisma.Decimal(o.total));
   });
 
   const descartadas = candidates.length - targets.length;

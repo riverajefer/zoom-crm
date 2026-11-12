@@ -10,19 +10,22 @@ const dec = (v: string | number) => new Prisma.Decimal(v);
 
 describe('applyColombianRounding', () => {
   it.each([
-    ['41650', '41700'], // OP-2026-2532
-    ['53550', '53600'], // OP-2026-2303
+    ['94350', '94350'], // 5,55 × 17.000: se paga exacto, no se toca
+    ['41650', '41650'], // 35.000 + 19 %
+    ['94010', '94000'], // 10 → baja
+    ['94024', '94000'], // 24 → baja
+    ['94025', '94050'], // 25 → sube
+    ['94049', '94050'], // 49 → sube
+    ['94080', '94100'], // 30 sobre 50 → sube
     ['29988', '30000'],
-    ['11880', '11900'],
-    ['41640', '41600'], // 40 → baja
-    ['41641', '41700'], // 41 → sube
     ['41600', '41600'], // múltiplo exacto
   ])('redondea %s → %s', (input, expected) => {
     expect(applyColombianRounding(dec(input)).toString()).toBe(expected);
   });
 
   it('trunca los centavos antes de aplicar la regla', () => {
-    expect(applyColombianRounding(dec('164755.50')).toString()).toBe('164800');
+    expect(applyColombianRounding(dec('164755.50')).toString()).toBe('164750');
+    expect(applyColombianRounding(dec('164774.99')).toString()).toBe('164750');
   });
 });
 
@@ -35,18 +38,20 @@ describe('roundToWholePeso', () => {
 
 describe('computeDtfTotalToCharge', () => {
   it('cobra el mismo total que tendrá la OP cuando aplica IVA', () => {
-    // 35.000 + 19% = 41.650 → la OP lo redondea a 41.700; cobrar 41.650 dejaba
-    // la orden con $50 de saldo que el cliente ya no debía.
-    expect(computeDtfTotalToCharge(dec('35000'), true).toString()).toBe('41700');
+    // 35.000 + 19% = 41.650, que ya es múltiplo de 50.
+    expect(computeDtfTotalToCharge(dec('35000'), true).toString()).toBe('41650');
+    // 12.345 + 19% = 14.690,55 → 14.700
+    expect(computeDtfTotalToCharge(dec('12345'), true).toString()).toBe('14700');
   });
 
   it('redondea también cuando no aplica IVA', () => {
     expect(computeDtfTotalToCharge(dec('11880'), false).toString()).toBe('11900');
+    expect(computeDtfTotalToCharge(dec('11860'), false).toString()).toBe('11850');
   });
 
   it('acepta el valor como número o string', () => {
-    expect(computeDtfTotalToCharge(45000, true).toString()).toBe('53600');
-    expect(computeDtfTotalToCharge('45000', true).toString()).toBe('53600');
+    expect(computeDtfTotalToCharge(45000, true).toString()).toBe('53550');
+    expect(computeDtfTotalToCharge('45000', true).toString()).toBe('53550');
   });
 });
 

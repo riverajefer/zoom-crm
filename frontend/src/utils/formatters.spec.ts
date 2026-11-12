@@ -37,25 +37,26 @@ describe('formatters', () => {
   });
 
   describe('applyColombianRounding', () => {
-    it('deja intacto un múltiplo exacto de 100', () => {
+    it('deja intacto un múltiplo exacto de 50', () => {
       expect(applyColombianRounding(1000)).toBe(1000);
+      expect(applyColombianRounding(94350)).toBe(94350);
     });
 
-    it('redondea hacia abajo cuando los últimos dos dígitos son 01–40', () => {
+    it('redondea hacia abajo cuando el resto contra 50 es 01–24', () => {
       expect(applyColombianRounding(1001)).toBe(1000);
-      expect(applyColombianRounding(1025)).toBe(1000);
-      expect(applyColombianRounding(1040)).toBe(1000);
+      expect(applyColombianRounding(1024)).toBe(1000);
+      expect(applyColombianRounding(1060)).toBe(1050);
     });
 
-    it('redondea hacia arriba cuando los últimos dos dígitos son 41–99', () => {
-      expect(applyColombianRounding(1041)).toBe(1100);
-      expect(applyColombianRounding(1050)).toBe(1100);
-      expect(applyColombianRounding(1099)).toBe(1100);
+    it('redondea hacia arriba cuando el resto contra 50 es 25–49', () => {
+      expect(applyColombianRounding(1025)).toBe(1050);
+      expect(applyColombianRounding(1049)).toBe(1050);
+      expect(applyColombianRounding(1080)).toBe(1100);
     });
 
     it('trunca los decimales antes de redondear', () => {
-      expect(applyColombianRounding(1025.9)).toBe(1000);
-      expect(applyColombianRounding(1041.1)).toBe(1100);
+      expect(applyColombianRounding(1024.9)).toBe(1000);
+      expect(applyColombianRounding(1025.1)).toBe(1050);
     });
   });
 

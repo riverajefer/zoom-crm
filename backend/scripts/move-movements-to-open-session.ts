@@ -40,6 +40,7 @@ import * as path from 'path';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
 import { Prisma, PrismaClient } from '../src/generated/prisma';
+import { assertZoomDatabase } from '../prisma/assert-zoom-database';
 import { CASH_IN_DRAWER_WHERE } from '../src/modules/cash-movement/cash-movement.helpers';
 
 const arg = (name: string) =>
@@ -84,7 +85,9 @@ function resolveDatabaseUrl(): string {
   return url;
 }
 
-const pool = new Pool({ connectionString: resolveDatabaseUrl(), max: 2 });
+// Solo Zoom: `assertZoomDatabase` lee la URL de `process.env.DATABASE_URL`.
+process.env.DATABASE_URL = resolveDatabaseUrl();
+const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 2 });
 const prisma = new PrismaClient({ adapter: new PrismaPg(pool) });
 
 const money = (v: unknown) =>
@@ -119,6 +122,8 @@ async function computeSystemBalance(
 
 async function main() {
   console.log(`Ambiente: ${ENV}`);
+  // Solo Zoom: se niega si la base no es de Zoom y pide CONFIRM_DB_HOST fuera de localhost.
+  await assertZoomDatabase(prisma);
   console.log(APPLY ? '=== MODO APLICAR ===\n' : '=== DRY-RUN (sin cambios) ===\n');
 
   if (RECEIPTS.length === 0) fail('Falta --receipts=RC-…,RC-…');

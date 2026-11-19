@@ -25,6 +25,9 @@ export const LOCATION_SCOPED_MODELS = new Set<string>([
  */
 export const RELATION_SCOPED_MODELS: Readonly<Record<string, string>> = {
   CashSession: 'cashRegister',
+  // Temporizador de producción: un registro es de la sede de su OT. Así «Planta
+  // hoy», el reporte de productividad y las tareas en curso ven solo esa sede.
+  WorkOrderTimeEntry: 'workOrder',
 };
 
 /**

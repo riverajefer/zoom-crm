@@ -6,6 +6,8 @@ import {
   TIME_ENTRY_SELECT,
   TIME_ENTRY_WITH_WORK_ORDER_SELECT,
 } from './work-order-time.select';
+import { getLocationScope } from '../../common/utils/location-context';
+import { usersWorkingInLocationWhere } from '../../common/utils/location-support.util';
 
 /** Usuarios activos cuyo rol usa el temporizador. */
 const OPERATOR_WHERE = {
@@ -14,6 +16,18 @@ const OPERATOR_WHERE = {
     permissions: { some: { permission: { name: 'track_work_order_time' } } },
   },
 } satisfies Prisma.UserWhereInput;
+
+/**
+ * Solo Zoom: los operarios de la sede activa, los que la tienen fija y los que
+ * están hoy de apoyo en ella (docs/PLAN_SEDES.md §16). En "Todas" o sin request
+ * (crons) no filtra. Los registros de tiempo ya se filtran solos por la sede de
+ * su OT (`RELATION_SCOPED_MODELS`); esto cubre las listas de operarios.
+ */
+function operatorsInScopeWhere(): Prisma.UserWhereInput {
+  const scope = getLocationScope();
+  if (!scope) return {};
+  return { OR: scope.locationIds.flatMap((id) => usersWorkingInLocationWhere(id)) };
+}
 
 const PRODUCTION_SETTINGS_ID = 'default';
 
@@ -133,7 +147,7 @@ export class WorkOrderTimeRepository {
   /** Usuarios que pueden usar el temporizador (para el registro olvidado). */
   findOperators() {
     return this.prisma.user.findMany({
-      where: OPERATOR_WHERE,
+      where: { AND: [OPERATOR_WHERE, operatorsInScopeWhere()] },
       select: { id: true, firstName: true, lastName: true, email: true },
       orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }],
     });
@@ -145,7 +159,7 @@ export class WorkOrderTimeRepository {
    */
   findPlantOperators() {
     return this.prisma.user.findMany({
-      where: OPERATOR_WHERE,
+      where: { AND: [OPERATOR_WHERE, operatorsInScopeWhere()] },
       select: {
         id: true,
         firstName: true,
@@ -200,6 +214,7 @@ export class WorkOrderTimeRepository {
     return this.prisma.user.findMany({
       where: {
         OR: [OPERATOR_WHERE, { workOrderTimeEntries: { some: { startAt: { gte: filters.from, lte: filters.to } } } }],
+        AND: [operatorsInScopeWhere()],
         ...(filters.userId && { id: filters.userId }),
         ...(filters.areaId && { cargo: { productionAreaId: filters.areaId } }),
       },

@@ -93,4 +93,16 @@ describe('location-scope extension', () => {
       AND: [{ cashRegister: { locationId: { in: ['l-125'] } } }],
     });
   });
+
+  it('los registros del temporizador se filtran por la sede de su OT', async () => {
+    const args = await asUser(SEDE_125, () =>
+      run('WorkOrderTimeEntry', 'findMany', { where: { userId: 'u-1', endAt: null } }),
+    );
+
+    expect(args.where).toEqual({
+      userId: 'u-1',
+      endAt: null,
+      workOrder: { locationId: { in: ['l-125'] } },
+    });
+  });
 });

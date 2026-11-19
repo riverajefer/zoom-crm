@@ -25,6 +25,7 @@
     "prisma:seed:exports": "ts-node prisma/seed-export-permissions.ts",
     "prisma:seed:prospects": "ts-node prisma/seed-prospect-permissions.ts",
     "prisma:import:high": "ts-node prisma/import-high-catalog.ts",
+    "prisma:import:historical-sales": "NODE_OPTIONS=--max-old-space-size=6144 ts-node --transpile-only prisma/import-historical-sales.ts",
     "prisma:sync:permissions": "ts-node prisma/sync-permissions.ts",
     "prisma:backfill:credit-balance": "ts-node prisma/backfill-credit-balance-applications.ts",
     "prisma:backfill:refunded-amount": "ts-node --transpile-only prisma/backfill-refunded-amount.ts",
@@ -152,7 +153,8 @@
     "ts-jest": "^29.4.6",
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "xlsx": "^0.18.5"
   },
   "overrides": {
     "ws": "8.21.3",

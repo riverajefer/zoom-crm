@@ -65,6 +65,7 @@ export const PATHS = {
   ORDERS_EDIT: '/orders/:id/edit',
   ORDERS_DETAIL: '/orders/:id',
   PENDING_PAYMENT_ORDERS: '/orders/pending-payment',
+  HISTORICAL_SALES: '/historico-ventas',
   STATUS_CHANGE_REQUESTS: '/orders/status-change-requests',
   ORDERS_PROFITABILITY: '/orders/profitability',
   // Order Timeline

@@ -23,6 +23,7 @@ import VerifiedUserIcon from '@mui/icons-material/VerifiedUser';
 import EventAvailableIcon from '@mui/icons-material/EventAvailable';
 import FactCheckIcon from '@mui/icons-material/FactCheck';
 import HistoryIcon from '@mui/icons-material/History';
+import ManageHistoryIcon from '@mui/icons-material/ManageHistory';
 import LoginIcon from '@mui/icons-material/Login';
 import WorkIcon from '@mui/icons-material/Work';
 import BadgeIcon from '@mui/icons-material/Badge';
@@ -241,6 +242,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose, collapsed = fal
           permission: PERMISSIONS.READ_ORDERS,
         },
         {
+          label: 'Histórico de Ventas',
+          icon: <ManageHistoryIcon />,
+          path: ROUTES.HISTORICAL_SALES,
+          permission: PERMISSIONS.READ_HISTORICAL_SALES,
+        },
+        {
           label: 'Solicitudes Pendientes',
           storesOnly: true,
           icon: <PendingActionsIcon />,
@@ -306,6 +313,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose, collapsed = fal
         PERMISSIONS.APPROVE_EXPENSE_ORDERS,
         PERMISSIONS.READ_DTF,
         PERMISSIONS.READ_SALES_BY_ADVISOR,
+        PERMISSIONS.READ_HISTORICAL_SALES,
       ],
     },
     {

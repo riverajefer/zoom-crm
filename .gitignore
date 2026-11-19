@@ -11,3 +11,6 @@ backups/
 # Catálogos exportados de High (scripts/export-high-catalog.sh). Traen datos de
 # proveedores reales; se importan con `npm run prisma:import:high` y no se versionan.
 backend/prisma/data/high-catalog/*.json
+# Planillas de Excel del cliente (histórico de ventas y similares): traen datos
+# de clientes y no van al repo.
+*.xlsx

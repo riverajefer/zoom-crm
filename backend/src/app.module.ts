@@ -40,6 +40,7 @@ import { ExpenseOrderAuthRequestsModule } from './modules/expense-order-auth-req
 import { ExpenseOrderEditRequestsModule } from './modules/expense-order-edit-requests/expense-order-edit-requests.module';
 import { AdvancePaymentApprovalsModule } from './modules/advance-payment-approvals/advance-payment-approvals.module';
 import { PaymentVerificationsModule } from './modules/payment-verifications/payment-verifications.module';
+import { HistoricalSalesModule } from './modules/historical-sales/historical-sales.module';
 import { GeneralClosingsModule } from './modules/general-closings/general-closings.module';
 import { PaymentEditApprovalsModule } from './modules/payment-edit-approvals/payment-edit-approvals.module';
 import { DiscountApprovalsModule } from './modules/discount-approvals/discount-approvals.module';
@@ -168,6 +169,7 @@ import { ClientErrorsModule } from './modules/client-errors/client-errors.module
     // Módulo de Aprobación de Anticipos
     AdvancePaymentApprovalsModule,
     PaymentVerificationsModule,
+    HistoricalSalesModule,
     GeneralClosingsModule,
     PaymentEditApprovalsModule,
     // Módulo de Aprobación de Descuentos

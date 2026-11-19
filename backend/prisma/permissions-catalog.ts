@@ -138,6 +138,19 @@ export const permissionGroups: PermissionGroup[] = [
     ],
   },
   {
+    label: '🗂️ Histórico de ventas',
+    permissions: [
+      {
+        name: 'read_historical_sales',
+        description: 'Consultar las OP históricas cargadas de las planillas de Excel (2023-2025)',
+      },
+      {
+        name: 'export_historical_sales',
+        description: 'Exportar el histórico de ventas a Excel',
+      },
+    ],
+  },
+  {
     label: '📊 Órdenes de pedido',
     permissions: [
       {

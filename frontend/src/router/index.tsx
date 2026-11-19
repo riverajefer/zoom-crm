@@ -131,6 +131,7 @@ const CloseSessionPage = lazyWithRetry(() => import('../features/cash-register/p
 const SessionHistoryPage = lazyWithRetry(() => import('../features/cash-register/pages/SessionHistoryPage'));
 const SessionDetailPage = lazyWithRetry(() => import('../features/cash-register/pages/SessionDetailPage'));
 const PaymentVerificationsPage = lazyWithRetry(() => import('../features/payment-verifications/pages/PaymentVerificationsPage'));
+const HistoricalSalesPage = lazyWithRetry(() => import('../features/historical-sales/pages/HistoricalSalesPage'));
 const GeneralClosingPage = lazyWithRetry(() => import('../features/general-closing/pages/GeneralClosingPage'));
 
 const AccountsPayableListPage = lazyWithRetry(() => import('../features/accounts-payable/pages/AccountsPayableListPage'));
@@ -1628,6 +1629,18 @@ const RoutesConfig: FC = () => {
               <MainLayout>
                 <PermissionGuard permission={PERMISSIONS.CLOSE_CASH_SESSION}>
                   <CloseSessionPage />
+                </PermissionGuard>
+              </MainLayout>
+            </AuthGuard>
+          }
+        />
+        <Route
+          path={PATHS.HISTORICAL_SALES}
+          element={
+            <AuthGuard>
+              <MainLayout>
+                <PermissionGuard permission={PERMISSIONS.READ_HISTORICAL_SALES}>
+                  <HistoricalSalesPage />
                 </PermissionGuard>
               </MainLayout>
             </AuthGuard>

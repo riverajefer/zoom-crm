@@ -236,6 +236,9 @@ export const PERMISSIONS = {
   AUTHORIZE_LOCATION_SUPPORT: 'authorize_location_support',
   // Verificación contable de pagos (solo Zoom)
   VERIFY_PAYMENTS: 'verify_payments',
+  // Histórico de ventas de las planillas de Excel (solo Zoom)
+  READ_HISTORICAL_SALES: 'read_historical_sales',
+  EXPORT_HISTORICAL_SALES: 'export_historical_sales',
   MANAGE_LOCATIONS: 'manage_locations',
 };
 
@@ -305,6 +308,7 @@ export const ROUTES = {
   ORDERS_EDIT: '/orders/:id/edit',
   ORDERS_DETAIL: '/orders/:id',
   PENDING_PAYMENT_ORDERS: '/orders/pending-payment',
+  HISTORICAL_SALES: '/historico-ventas',
   STATUS_CHANGE_REQUESTS: '/orders/status-change-requests',
   ORDERS_PROFITABILITY: '/orders/profitability',
   // Order Timeline

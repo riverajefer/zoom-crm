@@ -197,6 +197,7 @@ model Location {
   attendanceRecords  AttendanceRecord[]
   inventoryMovements InventoryMovement[]
   locationSupports   LocationSupport[]
+  historicalSales    HistoricalSale[]
 
   @@map("locations")
 }
@@ -3450,4 +3451,79 @@ model ProspectContact {
   @@index([contactDate])
   @@index([medium])
   @@map("prospect_contacts")
+}
+
+// ============================================
+// HISTÓRICO DE VENTAS (solo Zoom)
+// ============================================
+
+/// Estado de una OP histórica, tal como lo registraban las planillas de Excel.
+enum HistoricalSaleStatus {
+  PAID // Pagada (sin saldo)
+  WITH_BALANCE // Quedó con saldo en la planilla
+  ANNULLED // Anulada
+  QUOTE // Era una cotización, no una venta
+  RETURNED // Devolución
+}
+
+/// Una orden de producción de las planillas de Excel que Zoom llevaba antes del
+/// CRM (2023-2025). Es solo de consulta: no es una `Order`, así que no entra en
+/// cartera, caja, comisiones, verificación de pagos ni tableros. La carga
+/// `prisma/import-historical-sales.ts`, que reemplaza el año completo cada vez.
+/// El número es el de la planilla: cada local llevaba su propio consecutivo, por
+/// eso la llave incluye la sede.
+model HistoricalSale {
+  id                      String               @id @default(uuid())
+  locationId              String               @map("location_id")
+  year                    Int // Año de la planilla de origen
+  originalNumber          Int                  @map("original_number") // Número de OP en la planilla
+  saleDate                DateTime?            @map("sale_date") @db.Date // Las anuladas a veces no tienen fecha
+  clientName              String               @map("client_name")
+  clientNit               String?              @map("client_nit")
+  clientPhone             String?              @map("client_phone")
+  sellerName              String?              @map("seller_name") // Texto libre de la planilla, no un usuario
+  status                  HistoricalSaleStatus
+  tax                     Decimal              @default(0)
+  total                   Decimal
+  receivedAmount          Decimal              @map("received_amount")
+  balance                 Decimal // Saldo según la planilla (puede estar desactualizado)
+  /// Recibido por medio de pago, con los nombres de columna de la planilla
+  /// ({ "NEQUI OSCAR": 50000, "EFECTIVO": 20000 }). En 2023 casi siempre falta.
+  paymentsByMethod        Json?                @map("payments_by_method")
+  invoiceStatus           String?              @map("invoice_status") // "OK FACTURA", "PENDIENTE FACTURAR"…
+  electronicInvoiceNumber String?              @map("electronic_invoice_number")
+  notes                   String?
+  sourceFile              String               @map("source_file")
+  sourceSheet             String               @map("source_sheet")
+  sourceRows              String               @map("source_rows") // Filas de Excel, para rastrear el dato ("12-14")
+  importedAt              DateTime             @default(now()) @map("imported_at")
+
+  location Location             @relation(fields: [locationId], references: [id])
+  items    HistoricalSaleItem[]
+
+  @@unique([locationId, year, originalNumber])
+  @@index([saleDate])
+  @@index([status])
+  @@index([year])
+  @@index([clientName])
+  @@index([clientNit])
+  @@index([sellerName])
+  @@map("historical_sales")
+}
+
+/// Una línea de producto de una OP histórica (una fila de la planilla).
+model HistoricalSaleItem {
+  id          String  @id @default(uuid())
+  saleId      String  @map("sale_id")
+  description String
+  quantity    Decimal
+  unitPrice   Decimal @map("unit_price")
+  tax         Decimal @default(0)
+  total       Decimal
+  sortOrder   Int     @default(0) @map("sort_order")
+
+  sale HistoricalSale @relation(fields: [saleId], references: [id], onDelete: Cascade)
+
+  @@index([saleId])
+  @@map("historical_sale_items")
 }

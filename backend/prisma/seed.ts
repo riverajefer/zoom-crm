@@ -647,6 +647,9 @@ async function main() {
     'perform_general_closing',
     // Segunda revisión de los pagos que cada sede registra y aprueba en su caja
     'verify_payments',
+    // Ventas de las planillas de Excel de 2023-2025, solo consulta
+    'read_historical_sales',
+    'export_historical_sales',
     'read_orders',
     'read_files',
     'read_users',

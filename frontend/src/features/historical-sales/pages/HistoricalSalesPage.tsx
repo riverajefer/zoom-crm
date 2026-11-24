@@ -11,10 +11,10 @@ import {
   InputLabel,
   MenuItem,
   Select,
-  TextField,
   Typography,
 } from '@mui/material';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
+import { DatePicker } from '@mui/x-date-pickers';
 import { useSnackbar } from 'notistack';
 import { historicalSalesApi } from '../../../api/historical-sales.api';
 import { DataTable } from '../../../components/common/DataTable';
@@ -30,6 +30,7 @@ import {
   type HistoricalSaleStatus,
 } from '../../../types/historical-sale.types';
 import { PERMISSIONS } from '../../../utils/constants';
+import { parseDateFilter, toDateFilterOrUndefined } from '../../../utils/dateFilters';
 import { useActiveSedes } from '../../sedes/hooks/useSedes';
 import { HistoricalSaleDetailDialog } from '../components/HistoricalSaleDetailDialog';
 import {
@@ -261,21 +262,26 @@ const HistoricalSalesPage: React.FC = () => {
             ))}
           </Select>
         </FormControl>
-        <TextField
+        <DatePicker
           label="Desde"
-          type="date"
-          size="small"
-          InputLabelProps={{ shrink: true }}
-          value={filters.dateFrom ?? ''}
-          onChange={(e) => updateFilters({ dateFrom: e.target.value || undefined })}
+          value={parseDateFilter(filters.dateFrom) ?? null}
+          maxDate={parseDateFilter(filters.dateTo)}
+          onChange={(date) => {
+            // Mientras se escribe a mano la fecha queda inválida: se espera a que esté completa.
+            if (date && Number.isNaN(date.getTime())) return;
+            updateFilters({ dateFrom: toDateFilterOrUndefined(date) });
+          }}
+          slotProps={{ textField: { size: 'small', sx: { width: 190 } }, field: { clearable: true } }}
         />
-        <TextField
+        <DatePicker
           label="Hasta"
-          type="date"
-          size="small"
-          InputLabelProps={{ shrink: true }}
-          value={filters.dateTo ?? ''}
-          onChange={(e) => updateFilters({ dateTo: e.target.value || undefined })}
+          value={parseDateFilter(filters.dateTo) ?? null}
+          minDate={parseDateFilter(filters.dateFrom)}
+          onChange={(date) => {
+            if (date && Number.isNaN(date.getTime())) return;
+            updateFilters({ dateTo: toDateFilterOrUndefined(date) });
+          }}
+          slotProps={{ textField: { size: 'small', sx: { width: 190 } }, field: { clearable: true } }}
         />
         <FormControl sx={{ minWidth: 130 }} size="small">
           <InputLabel>Sede</InputLabel>

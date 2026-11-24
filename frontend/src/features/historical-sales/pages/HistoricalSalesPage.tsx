@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Alert,
   Box,
@@ -9,30 +9,24 @@ import {
   FormControl,
   Grid,
   InputLabel,
-  LinearProgress,
   MenuItem,
-  Paper,
   Select,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TablePagination,
-  TableRow,
   TextField,
   Typography,
 } from '@mui/material';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import { useSnackbar } from 'notistack';
 import { historicalSalesApi } from '../../../api/historical-sales.api';
+import { DataTable } from '../../../components/common/DataTable';
 import { PageHeader } from '../../../components/common/PageHeader';
 import { SedeDot } from '../../../components/layout/LocationSelector';
+import { useResponsiveColumns, type ResponsiveGridColDef } from '../../../hooks';
 import { useAuthStore } from '../../../store/authStore';
 import {
   HISTORICAL_STATUS_COLORS,
   HISTORICAL_STATUS_LABELS,
   type FilterHistoricalSalesDto,
+  type HistoricalSaleListItem,
   type HistoricalSaleStatus,
 } from '../../../types/historical-sale.types';
 import { PERMISSIONS } from '../../../utils/constants';
@@ -87,7 +81,6 @@ const HistoricalSalesPage: React.FC = () => {
   const canExport = hasPermission(PERMISSIONS.EXPORT_HISTORICAL_SALES);
 
   const [filters, setFilters] = useState<FilterHistoricalSalesDto>({ page: 1, limit: 25 });
-  const [searchInput, setSearchInput] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
 
@@ -102,20 +95,97 @@ const HistoricalSalesPage: React.FC = () => {
   const meta = salesQuery.data?.meta;
   const summary = summaryQuery.data;
 
-  // La búsqueda espera a que se deje de escribir.
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setFilters((f) =>
-        (f.search ?? '') === searchInput.trim()
-          ? f
-          : { ...f, search: searchInput.trim() || undefined, page: 1 },
-      );
-    }, 400);
-    return () => clearTimeout(timer);
-  }, [searchInput]);
-
   const updateFilters = (patch: Partial<FilterHistoricalSalesDto>) =>
     setFilters((f) => ({ ...f, ...patch, page: 1 }));
+
+  const rawColumns: ResponsiveGridColDef<HistoricalSaleListItem>[] = useMemo(
+    () => [
+      {
+        field: 'originalNumber',
+        headerName: 'OP',
+        width: 120,
+        sortable: false,
+        renderCell: ({ row }) => (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, height: '100%' }}>
+            <SedeDot color={row.location.color} />
+            <span>
+              {row.location.code} · {row.originalNumber}
+            </span>
+          </Box>
+        ),
+      },
+      {
+        field: 'saleDate',
+        headerName: 'Fecha',
+        width: 105,
+        sortable: false,
+        valueFormatter: (value: string | null) => formatSaleDate(value),
+      },
+      { field: 'clientName', headerName: 'Cliente', flex: 1, minWidth: 180, sortable: false },
+      {
+        field: 'clientNit',
+        headerName: 'NIT',
+        width: 120,
+        sortable: false,
+        responsive: 'md',
+        valueFormatter: (value: string | null) => value ?? '—',
+      },
+      {
+        field: 'sellerName',
+        headerName: 'Vendedor',
+        width: 140,
+        sortable: false,
+        responsive: 'sm',
+        valueFormatter: (value: string | null) => value ?? '—',
+      },
+      {
+        field: 'status',
+        headerName: 'Estado',
+        width: 120,
+        sortable: false,
+        renderCell: ({ row }) => (
+          <Chip
+            size="small"
+            label={HISTORICAL_STATUS_LABELS[row.status]}
+            color={HISTORICAL_STATUS_COLORS[row.status]}
+            variant="outlined"
+          />
+        ),
+      },
+      {
+        field: 'total',
+        headerName: 'Total',
+        width: 125,
+        align: 'right',
+        headerAlign: 'right',
+        sortable: false,
+        valueFormatter: (value: string) => formatCurrency(value),
+      },
+      {
+        field: 'receivedAmount',
+        headerName: 'Recibido',
+        width: 125,
+        align: 'right',
+        headerAlign: 'right',
+        sortable: false,
+        responsive: 'md',
+        valueFormatter: (value: string) => formatCurrency(value),
+      },
+      {
+        field: 'balance',
+        headerName: 'Saldo',
+        width: 120,
+        align: 'right',
+        headerAlign: 'right',
+        sortable: false,
+        // Solo el de las OP que la planilla dejó con saldo; en las demás es ruido.
+        valueGetter: (_, row) => (row.status === 'WITH_BALANCE' ? row.balance : null),
+        valueFormatter: (value: string | null) => (value === null ? '—' : formatCurrency(value)),
+      },
+    ],
+    [],
+  );
+  const columns = useResponsiveColumns(rawColumns);
 
   const handleExport = async () => {
     setExporting(true);
@@ -176,14 +246,6 @@ const HistoricalSalesPage: React.FC = () => {
       </Grid>
 
       <Box sx={{ display: 'flex', gap: 2, mb: 2, flexWrap: 'wrap' }}>
-        <TextField
-          label="Buscar"
-          placeholder="OP, cliente, NIT o producto"
-          size="small"
-          value={searchInput}
-          onChange={(e) => setSearchInput(e.target.value)}
-          sx={{ minWidth: 240 }}
-        />
         <FormControl sx={{ minWidth: 110 }} size="small">
           <InputLabel>Año</InputLabel>
           <Select
@@ -270,85 +332,25 @@ const HistoricalSalesPage: React.FC = () => {
         </Alert>
       )}
 
-      <Paper variant="outlined">
-        {salesQuery.isFetching && <LinearProgress />}
-        <TableContainer>
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>OP</TableCell>
-                <TableCell>Fecha</TableCell>
-                <TableCell>Cliente</TableCell>
-                <TableCell>Vendedor</TableCell>
-                <TableCell>Estado</TableCell>
-                <TableCell align="right">Total</TableCell>
-                <TableCell align="right">Recibido</TableCell>
-                <TableCell align="right">Saldo</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {sales.map((sale) => (
-                <TableRow
-                  key={sale.id}
-                  hover
-                  onClick={() => setSelectedId(sale.id)}
-                  sx={{ cursor: 'pointer' }}
-                >
-                  <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <SedeDot color={sale.location.color} />
-                      <span>
-                        {sale.location.code} · {sale.originalNumber}
-                      </span>
-                    </Box>
-                  </TableCell>
-                  <TableCell sx={{ whiteSpace: 'nowrap' }}>{formatSaleDate(sale.saleDate)}</TableCell>
-                  <TableCell>
-                    <Typography variant="body2">{sale.clientName}</Typography>
-                    {sale.clientNit && (
-                      <Typography variant="caption" color="text.secondary">
-                        NIT {sale.clientNit}
-                      </Typography>
-                    )}
-                  </TableCell>
-                  <TableCell>{sale.sellerName ?? '—'}</TableCell>
-                  <TableCell>
-                    <Chip
-                      size="small"
-                      label={HISTORICAL_STATUS_LABELS[sale.status]}
-                      color={HISTORICAL_STATUS_COLORS[sale.status]}
-                      variant="outlined"
-                    />
-                  </TableCell>
-                  <TableCell align="right">{formatCurrency(sale.total)}</TableCell>
-                  <TableCell align="right">{formatCurrency(sale.receivedAmount)}</TableCell>
-                  <TableCell align="right">
-                    {sale.status === 'WITH_BALANCE' ? formatCurrency(sale.balance) : '—'}
-                  </TableCell>
-                </TableRow>
-              ))}
-              {!salesQuery.isLoading && sales.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={8} align="center" sx={{ py: 4, color: 'text.secondary' }}>
-                    No hay ventas históricas con estos filtros
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </TableContainer>
-        <TablePagination
-          component="div"
-          count={meta?.total ?? 0}
-          page={(filters.page ?? 1) - 1}
-          rowsPerPage={filters.limit ?? 25}
-          rowsPerPageOptions={[25, 50, 100]}
-          onPageChange={(_, page) => setFilters((f) => ({ ...f, page: page + 1 }))}
-          onRowsPerPageChange={(e) => updateFilters({ limit: Number(e.target.value) })}
-          labelRowsPerPage="Por página"
-          labelDisplayedRows={({ from, to, count }) => `${from}-${to} de ${count}`}
-        />
-      </Paper>
+      <DataTable
+        density="compact"
+        rows={sales}
+        columns={columns}
+        loading={salesQuery.isLoading || salesQuery.isFetching}
+        rowCount={meta?.total ?? 0}
+        currentPage={(filters.page ?? 1) - 1}
+        pageSize={filters.limit ?? 25}
+        pageSizeOptions={[25, 50, 100]}
+        onPaginationModelChange={(model) =>
+          setFilters((f) => ({ ...f, page: model.page + 1, limit: model.pageSize }))
+        }
+        searchValue={filters.search ?? ''}
+        onSearchChange={(value) => updateFilters({ search: value.trim() || undefined })}
+        serverSideSearch
+        searchPlaceholder="Buscar por OP, cliente, NIT o producto..."
+        emptyMessage="No hay ventas históricas con estos filtros"
+        onRowClick={(row) => setSelectedId(row.id)}
+      />
 
       <HistoricalSaleDetailDialog saleId={selectedId} onClose={() => setSelectedId(null)} />
     </Box>

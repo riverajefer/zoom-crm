@@ -32,6 +32,11 @@ pagos_huerfanos AS (
     AND p.payment_method NOT IN ('CREDIT_BALANCE', 'CREDIT', 'PAYROLL_DEDUCTION')
     AND p.cash_movement_id IS NULL
     AND NOT COALESCE(p.pending_cash_entry, false)
+    -- Solo Zoom: los pagos del histórico de ventas son dinero de antes del
+    -- sistema; no pasan por caja (prisma/integrate-historical-sales.ts).
+    AND NOT EXISTS (
+      SELECT 1 FROM orders o WHERE o.id = p.order_id AND o.historical_sale_key IS NOT NULL
+    )
 ),
 
 -- El saldo pagado de la orden es la suma de sus pagos vivos menos lo devuelto.

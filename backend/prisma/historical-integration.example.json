@@ -1,0 +1,22 @@
+{
+  "$comment": "Copia este archivo a prisma/data/historical-integration.json (ignorado por git) y llena las decisiones del cliente. Ver prisma/integrate-historical-sales.ts.",
+
+  "balancePolicy": "carry",
+  "overpaymentPolicy": "cap",
+  "ownershipPolicy": "activeSellers",
+  "includeLoansToHigh": false,
+
+  "defaultDepartment": "Cundinamarca",
+  "defaultCity": "Bogotá",
+  "genericClientName": "CLIENTE MOSTRADOR (HISTÓRICO)",
+
+  "fallbackSeller": { "username": "historico", "firstName": "Histórico", "lastName": "Planillas" },
+
+  "sellers": {
+    "CAROLINA": { "username": "carolina.104" },
+    "CAROL OVALLE": { "create": { "firstName": "Carol", "lastName": "Ovalle" } },
+    "DANNA": { "sameAs": "DANA MARTINEZ" },
+    "DANA MARTINEZ": { "create": { "firstName": "Dana", "lastName": "Martínez" } },
+    "MOSTRADOR": { "fallback": true }
+  }
+}

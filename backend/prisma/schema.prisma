@@ -382,6 +382,10 @@ model Client {
   /// Habilita el método de pago `PAYROLL_DEDUCTION`. Es `@unique` para que dos
   /// fichas de cliente no puedan descontarle a la misma persona.
   employeeId       String?    @unique @map("employee_id")
+  /// Solo Zoom: cliente creado por la integración del histórico de ventas
+  /// ("NIT:900123456" o "NOMBRE:LAURA TABARES"). Nulo en los demás; los que ya
+  /// existían y la integración solo reutilizó tampoco lo llevan.
+  historicalKey    String?    @unique @map("historical_key")
   isActive         Boolean    @default(true) @map("is_active")
   createdAt        DateTime   @default(now()) @map("created_at")
   updatedAt        DateTime   @updatedAt @map("updated_at")
@@ -737,6 +741,12 @@ model Order {
   // dos veces y la segunda petición devuelve la OP ya creada en lugar de gastar
   // otro consecutivo. Nula en las OPs anteriores a esta columna.
   idempotencyKey String? @unique @map("idempotency_key")
+
+  // Solo Zoom: OP traída de las planillas de Excel por
+  // `prisma/integrate-historical-sales.ts` ("2024-104-625": año, sede y número
+  // de la planilla). Nula en las OP creadas en el sistema. Sirve para repetir o
+  // deshacer la integración sin tocar nada más.
+  historicalSaleKey String? @unique @map("historical_sale_key")
 
   workOrders WorkOrder[]
   dtfRecords DtfRecord[]
